@@ -31,6 +31,9 @@ export const shiftMonth = (key: string, delta: number) => {
 };
 
 /** «1 250,50», «450+120», «500-50» → число; null — пусто; NaN — мусор */
+/** Оставляет только символы, допустимые в сумме: цифры, разделители, + и − для выражений */
+export const amountChars = (raw: string) => raw.replace(/[^\d.,+\-\s]/g, "");
+
 export function parseAmount(raw: string): number | null {
   const s = raw.replace(/\s|\u00a0/g, "").replace(/,/g, ".");
   if (!s) return null;

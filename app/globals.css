@@ -61,7 +61,7 @@
 }
 
 /* Повторяющиеся примитивы — чтобы не копировать длинные строки классов */
-@utility panel { @apply bg-paper border border-line rounded-2xl p-5 shadow-card sm:p-7; }
+@utility panel { @apply bg-paper border border-line rounded-2xl p-4 shadow-card sm:p-7; }
 @utility input { @apply border border-line bg-bg rounded-xl px-3 py-2.5 transition-colors placeholder:text-muted/70 hover:border-muted/50 focus:border-accent focus:bg-paper focus:outline-none; }
 @utility btn { @apply rounded-xl px-5 py-2.5 font-semibold transition active:scale-[.98] disabled:opacity-50 disabled:cursor-default disabled:active:scale-100 bg-accent text-accent-ink hover:brightness-110; }
 @utility btn-ghost { @apply rounded-xl px-5 py-2.5 font-semibold transition active:scale-[.98] disabled:opacity-50 disabled:cursor-default disabled:active:scale-100 border border-line bg-transparent text-ink hover:bg-bg; }

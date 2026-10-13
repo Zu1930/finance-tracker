@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useTracker } from "./TrackerProvider";
 import type { Goal } from "@/lib/types";
-import { fmt, parseAmount, todayStr, uid } from "@/lib/utils";
+import { amountChars, fmt, parseAmount, todayStr, uid } from "@/lib/utils";
 
 const saved = (g: Goal) => g.ops.reduce((a, o) => a + o.amount, 0);
 
@@ -47,11 +47,11 @@ function GoalCard({ g }: { g: Goal }) {
         {left > 0 ? `осталось ${fmt(left)} из ${fmt(g.target)}` : `цель ${fmt(g.target)} собрана`}
         {last && ` · ${last.amount > 0 ? "+" : "−"}${fmt(Math.abs(last.amount))} ${last.date.slice(8)}.${last.date.slice(5, 7)}`}
       </div>
-      <div className="mt-5 flex gap-2">
-        <input className="input min-w-0 flex-1 bg-paper" inputMode="decimal" placeholder="Сумма" aria-label={`Сумма для ${g.name}`}
-          value={val} onChange={(e) => setVal(e.target.value)} onKeyDown={(e) => e.key === "Enter" && move(1)} />
-        <button className="btn px-3" onClick={() => move(1)}>Положить</button>
-        <button className="btn-ghost bg-paper px-3" onClick={() => move(-1)}>Взять</button>
+      <div className="mt-5 flex flex-wrap gap-2">
+        <input className="input min-w-0 basis-full bg-paper" inputMode="decimal" placeholder="Сумма" aria-label={`Сумма для ${g.name}`}
+          value={val} onChange={(e) => setVal(amountChars(e.target.value))} onKeyDown={(e) => e.key === "Enter" && move(1)} />
+        <button className="btn flex-1 px-3" onClick={() => move(1)}>Положить</button>
+        <button className="btn-ghost flex-1 bg-paper px-3" onClick={() => move(-1)}>Взять</button>
       </div>
     </article>
   );
@@ -89,7 +89,7 @@ export function GoalsView() {
         <input className="input min-w-[160px] flex-1" placeholder="На что копим, например «Отпуск»" value={name}
           onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
         <input className="input min-w-0 flex-[0_1_180px]" inputMode="decimal" placeholder={`Цель, ${base}`}
-          value={target} onChange={(e) => setTarget(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
+          value={target} onChange={(e) => setTarget(amountChars(e.target.value))} onKeyDown={(e) => e.key === "Enter" && add()} />
         <button className="btn" onClick={add}>Создать копилку</button>
       </div>
     </>

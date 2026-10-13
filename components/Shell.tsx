@@ -35,13 +35,13 @@ export function Shell({ children }: { children: ReactNode }) {
   else body = children;
 
   return (
-    <div className="mx-auto max-w-[1120px] px-4 pt-4 pb-12 sm:px-7 sm:pt-6 sm:pb-16">
-      <header className="mb-6 flex flex-wrap items-center gap-x-6 gap-y-3 sm:mb-10">
-        <div className="flex items-center gap-2 text-lg font-bold tracking-tight"><img src="/icon.svg" alt="" className="size-7" />Траты</div>
+    <div className="mx-auto max-w-[1120px] px-3 pt-3 pb-10 sm:px-7 sm:pt-6 sm:pb-16">
+      <header className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 sm:mb-10">
+        <div className="flex items-center gap-2 text-base font-bold tracking-tight sm:text-lg"><img src="/icon.svg" alt="" className="size-6 sm:size-7" />Траты</div>
         <nav className="order-last flex w-full gap-1 rounded-xl border border-line bg-paper p-1 shadow-card sm:order-none sm:w-auto">
           {TABS.map((t) => (
             <Link key={t.href} href={t.href} aria-current={pathname === t.href ? "page" : undefined}
-              className="flex-1 rounded-lg px-3 py-2 text-center font-medium sm:flex-none sm:px-4 sm:py-1.5 text-muted transition-colors hover:text-ink aria-[current=page]:bg-ink aria-[current=page]:text-paper">
+              className="flex-1 rounded-lg px-2 py-1.5 text-center text-[15px] font-medium sm:text-base sm:flex-none sm:px-4 sm:py-1.5 text-muted transition-colors hover:text-ink aria-[current=page]:bg-ink aria-[current=page]:text-paper">
               {t.label}
             </Link>
           ))}

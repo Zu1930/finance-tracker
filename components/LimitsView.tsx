@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useTracker } from "./TrackerProvider";
 import { CommitInput } from "./CommitInput";
 import { ExportButton, ImportButton } from "./ImportExport";
-import { activeCats, curMonthKey, fmt, monthTitle, parseAmount, shiftMonth, spentByCat, uid } from "@/lib/utils";
+import { activeCats, amountChars, curMonthKey, fmt, monthTitle, parseAmount, shiftMonth, spentByCat, uid } from "@/lib/utils";
 
 export function LimitsView() {
   const { data, month, setMonth, setSettings, toast } = useTracker();
@@ -69,14 +69,14 @@ export function LimitsView() {
 
       <details className="group mt-12 rounded-2xl border border-line bg-paper shadow-card">
         <summary className="flex cursor-pointer list-none items-center justify-between px-6 py-5 font-semibold [&::-webkit-details-marker]:hidden">Категории, лимиты и валюты<span className="text-muted transition-transform group-open:rotate-180">▾</span></summary>
-        <div className="grid gap-10 border-t border-line px-6 pt-6 pb-7 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-10 border-t border-line px-6 pt-6 pb-7 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
           <div>
             <h4 className="mb-4 text-[15px] font-semibold">Месячные лимиты, {st.base}</h4>
             {cats.map((c) => (
               <div className="mb-3 grid grid-cols-[minmax(0,1fr)_130px_32px] items-center gap-3" key={c.id}>
                 <CommitInput className="input w-full" aria-label="Название категории" value={c.name}
                   onCommit={(v) => { const n = v.trim(); if (!n) return false; patchCat(c.id, { name: n.slice(0, 40) }); }} />
-                <CommitInput className="input w-full" aria-label="Лимит" inputMode="decimal" value={String(c.limit)}
+                <CommitInput className="input w-full" aria-label="Лимит" inputMode="decimal" sanitize={amountChars} value={String(c.limit)}
                   onCommit={(v) => {
                     const n = parseAmount(v);
                     if (n === null || !(n >= 0)) { toast("Лимит должен быть числом."); return false; }
