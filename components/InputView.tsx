@@ -114,15 +114,15 @@ export function InputView() {
   let side: React.ReactNode;
   if (sel) {
     const s = spent[sel.id] ?? 0, left = sel.limit - s, p = sel.limit ? Math.min(100, (s / sel.limit) * 100) : 100;
-    const col = left < 0 ? "var(--bad)" : p >= 80 ? "var(--warn)" : "var(--ok)";
+    const col = left < 0 ? "bg-bad" : p >= 80 ? "bg-warn" : "bg-ok";
     side = (
       <>
-        <h3>{sel.name}</h3>
-        <div className="big" style={{ color: left < 0 ? "var(--bad)" : undefined }}>
-          {left < 0 ? "−" : ""}{fmt(Math.abs(left))} <small>{st.base}</small>
+        <h3 className="mb-1 text-[15px] font-semibold">{sel.name}</h3>
+        <div className={`text-[28px] font-semibold tracking-tight ${left < 0 ? "text-bad" : ""}`}>
+          {left < 0 ? "−" : ""}{fmt(Math.abs(left))} <small className="text-[15px] font-normal text-muted">{st.base}</small>
         </div>
-        <div className="hint" style={{ margin: 0 }}>{left < 0 ? "перерасход" : "осталось"} в {monthName}е</div>
-        <div className="meter"><i style={{ width: `${p}%`, background: col }} /></div>
+        <div className="hint">{left < 0 ? "перерасход" : "осталось"} в {monthName}е</div>
+        <div className="mt-3 mb-2 h-2 overflow-hidden rounded-full bg-bg"><i className={`block h-full rounded-full transition-[width] duration-500 ${col}`} style={{ width: `${p}%` }} /></div>
         <div className="hint">Потрачено {fmt(s)} из {fmt(sel.limit)}</div>
       </>
     );
@@ -131,10 +131,10 @@ export function InputView() {
     const totalS = cats.reduce((acc, c) => acc + (spent[c.id] ?? 0), 0);
     side = (
       <>
-        <h3>{MONTHS[new Date().getMonth()]}</h3>
-        <div className="big">{fmt(totalL - totalS)} <small>{st.base}</small></div>
-        <div className="hint" style={{ margin: 0 }}>осталось по всем лимитам</div>
-        <div className="meter"><i style={{ width: `${totalL ? Math.min(100, (totalS / totalL) * 100) : 0}%`, background: "var(--ok)" }} /></div>
+        <h3 className="mb-1 text-[15px] font-semibold">{MONTHS[new Date().getMonth()]}</h3>
+        <div className="text-[28px] font-semibold tracking-tight">{fmt(totalL - totalS)} <small className="text-[15px] font-normal text-muted">{st.base}</small></div>
+        <div className="hint">осталось по всем лимитам</div>
+        <div className="mt-3 mb-2 h-2 overflow-hidden rounded-full bg-bg"><i className="block h-full rounded-full bg-ok transition-[width] duration-500" style={{ width: `${totalL ? Math.min(100, (totalS / totalL) * 100) : 0}%` }} /></div>
         <div className="hint">Выберите категорию, чтобы увидеть её остаток.</div>
       </>
     );
@@ -142,12 +142,12 @@ export function InputView() {
 
   return (
     <>
-      <div className="entry">
+      <div className="grid items-start gap-5 sm:gap-7 md:grid-cols-[minmax(0,1fr)_300px]">
         <section className="panel">
-          <div className="amount-row">
+          <div className="flex items-stretch gap-3">
             <input
               ref={amountRef}
-              className="amount"
+              className="min-w-0 flex-1 rounded-none border-0 border-b-2 border-line bg-transparent pt-1 pb-1.5 text-4xl font-semibold tracking-tight transition-colors placeholder:text-line focus:border-accent focus:outline-none md:text-[44px]"
               inputMode="decimal"
               autoComplete="off"
               placeholder="0"
@@ -163,54 +163,55 @@ export function InputView() {
             </div>
           </div>
           {isForeign && (
-            <div className="rate-row">
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-[15px] text-muted">
               <label htmlFor="rate">Курс: 1 {currency} =</label>
-              <input id="rate" className="input" inputMode="decimal" autoComplete="off" placeholder="курс"
+              <input id="rate" className="input w-[120px] text-ink" inputMode="decimal" autoComplete="off" placeholder="курс"
                 value={rate} onChange={(e) => setRate(e.target.value)} onKeyDown={onEnter} />
               <span>{st.base}</span>
-              <output>{conv}</output>
+              <output className="ml-1.5 font-medium text-ink">{conv}</output>
             </div>
           )}
-          <div className="hint">Можно складывать: 450+120. Enter — записать.</div>
+          <div className="hint mt-2">Можно складывать: 450+120.<span className="pointer-coarse:hidden"> Enter — записать.</span></div>
 
-          <span className="field-label">Категория · Alt + цифра</span>
-          <div className="cats">
+          <span className="mt-6 mb-2 block text-sm text-muted">Категория<span className="pointer-coarse:hidden"> · Alt + цифра</span></span>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(130px,1fr))] gap-2">
             {cats.map((c, i) => (
-              <button key={c.id} className="cat" aria-pressed={c.id === catId}
+              <button key={c.id} aria-pressed={c.id === catId}
+                className="group flex items-center gap-2.5 rounded-xl border border-line bg-bg px-3 py-2.5 text-left transition pointer-coarse:py-3 hover:border-muted/50 active:scale-[.98] aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-paper"
                 onClick={() => { setCatId(catId === c.id ? null : c.id); setError(""); amountRef.current?.focus(); }}>
-                {i < 9 && <kbd>{i + 1}</kbd>}
-                <span>{c.name}</span>
+                {i < 9 && <kbd className="min-w-5 pointer-coarse:hidden rounded-md border border-line px-1 text-center text-xs text-muted group-aria-pressed:border-paper/40 group-aria-pressed:text-paper">{i + 1}</kbd>}
+                <span className="truncate">{c.name}</span>
               </button>
             ))}
           </div>
 
-          <div className="row">
-            <input className="input note" placeholder="Комментарий, необязательно" autoComplete="off"
+          <div className="mt-6 flex flex-wrap gap-3">
+            <input className="input min-w-0 basis-full sm:basis-auto sm:min-w-[180px] sm:flex-1" placeholder="Комментарий, необязательно" autoComplete="off"
               value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={onEnter} />
-            <input className="input" type="date" aria-label="Дата" value={date}
+            <input className="input min-w-0 flex-1 sm:flex-none" type="date" aria-label="Дата" value={date}
               onChange={(e) => setDate(e.target.value)} onKeyDown={onEnter} />
-            <button className="btn" onClick={submit}>Записать</button>
+            <button className="btn flex-1 sm:flex-none" onClick={submit}>Записать</button>
           </div>
-          <div className="error" role="alert">{error}</div>
+          <div className="mt-3 min-h-5 text-sm text-bad" role="alert">{error}</div>
         </section>
-        <aside className="panel side" aria-live="polite">{side}</aside>
+        <aside className="panel md:sticky md:top-6" aria-live="polite">{side}</aside>
       </div>
 
-      <section className="recent">
-        <h2>Траты за {monthName}</h2>
-        <div className="list">
+      <section className="mt-12">
+        <h2 className="mb-4 text-base font-semibold">Траты за {monthName}</h2>
+        <div className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-paper shadow-card">
           {recent.length === 0 && (
-            <div className="empty">В этом месяце трат пока нет. Введите сумму сверху и выберите категорию.</div>
+            <div className="px-4 py-5 text-muted sm:px-5">В этом месяце трат пока нет. Введите сумму сверху и выберите категорию.</div>
           )}
           {recent.map((e) => (
-            <div className="item" key={e.id}>
-              <span className="d">{e.date.slice(8)}.{e.date.slice(5, 7)}</span>
-              <span className="n">{catName(e.catId)}{e.note && <small>{e.note}</small>}</span>
-              <span className="a">
+            <div className="grid grid-cols-[44px_minmax(0,1fr)_auto_auto] items-center gap-2 px-4 py-3 sm:grid-cols-[70px_minmax(0,1fr)_auto_auto] sm:gap-3 sm:px-5 transition-colors hover:bg-bg/60" key={e.id}>
+              <span className="text-sm text-muted">{e.date.slice(8)}.{e.date.slice(5, 7)}</span>
+              <span className="min-w-0"><span className="block truncate sm:inline">{catName(e.catId)}</span>{e.note && <small className="block truncate text-sm text-muted sm:ml-2 sm:inline">{e.note}</small>}</span>
+              <span className="text-right font-semibold">
                 {fmt(e.amount)} {e.currency}
-                {e.currency !== st.base && <small>{fmt(e.base)} {st.base}</small>}
+                {e.currency !== st.base && <small className="block text-xs font-normal text-muted">{fmt(e.base)} {st.base}</small>}
               </span>
-              <button className="x" aria-label="Удалить трату" onClick={() => remove(monthKeyOf(e.date), e.id)}>×</button>
+              <button className="x-btn" aria-label="Удалить трату" onClick={() => remove(monthKeyOf(e.date), e.id)}>×</button>
             </div>
           ))}
         </div>

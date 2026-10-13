@@ -32,7 +32,7 @@ export function ImportButton() {
 
   return (
     <>
-      <button className="btn ghost" onClick={() => input.current?.click()}>Импорт из JSON</button>
+      <button className="btn-ghost" onClick={() => input.current?.click()}>Импорт из JSON</button>
       <input
         ref={input}
         type="file"
@@ -58,5 +58,5 @@ export function ExportButton() {
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
-  return <button className="btn ghost" onClick={run}>Экспорт в JSON</button>;
+  return <button className="btn-ghost" onClick={run}>Экспорт в JSON</button>;
 }

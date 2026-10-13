@@ -39,16 +39,16 @@ export function ChartView() {
 
   return (
     <>
-      <div className="limits-head">
-        <h1 className="page-title">Траты по месяцам</h1>
-        <div className="seg" role="group" aria-label="Период" style={{ marginLeft: "auto" }}>
+      <div className="mb-8 flex flex-wrap items-center gap-x-6 gap-y-4">
+        <h1 className="m-0 text-3xl font-bold tracking-tight">Траты по месяцам</h1>
+        <div className="seg ml-auto" role="group" aria-label="Период">
           {[6, 12].map((r) => (
             <button key={r} aria-pressed={range === r} onClick={() => setRange(r)}>{r} мес.</button>
           ))}
         </div>
       </div>
-      <div className="chart-wrap">
-        <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Траты по месяцам с разбивкой по категориям">
+      <div className="panel overflow-x-auto p-5">
+        <svg viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full min-w-[560px]" role="img" aria-label="Траты по месяцам с разбивкой по категориям">
           {ticks.map((v) => (
             <g key={v}>
               <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke="var(--line)" />
@@ -60,11 +60,11 @@ export function ChartView() {
             let acc = 0;
             const [yy, mm] = k.slice(2).split("-");
             return (
-              <g key={k} className="bar" role="button" tabIndex={0}
+              <g key={k} className="cursor-pointer outline-none [&:focus-visible>rect:first-child]:fill-acct [&:hover>rect:first-child]:fill-acct" role="button" tabIndex={0}
                 aria-label={`${monthTitle(k)}: ${fmt(totals[i])} ${st.base}`}
                 onClick={() => open(k)}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(k); } }}>
-                <rect x={L + i * slot} y={T} width={slot} height={ch} fill="transparent" />
+                <rect x={L + i * slot} y={T} width={slot} height={ch} rx={8} fill="transparent" />
                 {used.filter((c) => perMonth[i][c.id]).map((c) => {
                   const v = perMonth[i][c.id];
                   const y1 = y(acc + v), h = y(acc) - y1;
@@ -94,13 +94,13 @@ export function ChartView() {
             </>
           )}
         </svg>
-        <div className="legend">
+        <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm">
           {used.map((c) => (
-            <span key={c.id}><i style={{ background: color[c.id] }} />{c.name} <b>{fmt(periodTotal[c.id] ?? 0)}</b></span>
+            <span key={c.id} className="inline-flex items-center gap-2"><i className="inline-block size-3 rounded" style={{ background: color[c.id] }} />{c.name} <b className="font-semibold">{fmt(periodTotal[c.id] ?? 0)}</b></span>
           ))}
         </div>
       </div>
-      <p className="hint">Суммы в {st.base}. Нажмите на столбец, чтобы открыть лимиты этого месяца.</p>
+      <p className="hint mt-2">Суммы в {st.base}. Нажмите на столбец, чтобы открыть лимиты этого месяца.</p>
     </>
   );
 }

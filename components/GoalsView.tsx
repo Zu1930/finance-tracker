@@ -37,21 +37,21 @@ function GoalCard({ g }: { g: Goal }) {
   };
 
   return (
-    <article className={`card goal ${p >= 100 ? "done" : ""}`}>
-      <div className="fill" style={{ height: `${Math.max(0, Math.min(100, p))}%` }} />
-      <button className="x del" aria-label="Удалить копилку" onClick={remove}>×</button>
-      <h3>{g.name}</h3>
-      <span className="pct">{Math.round(p)}%</span>
-      <div className="left">{fmt(s)} <small>{base}</small></div>
-      <div className="of">
+    <article className="card min-h-[240px]">
+      <div className={`fill -z-10 ${p >= 100 ? "bg-okt border-ok" : "bg-acct border-accent"}`} style={{ height: `${Math.max(0, Math.min(100, p))}%` }} />
+      <button className="x-btn absolute top-4 right-4" aria-label="Удалить копилку" onClick={remove}>×</button>
+      <h3 className="pr-20 text-[17px] font-semibold">{g.name}</h3>
+      <span className="absolute top-6 right-14 text-sm font-medium text-muted">{Math.round(p)}%</span>
+      <div className="mt-auto text-3xl leading-tight font-bold tracking-tight">{fmt(s)} <small className="text-sm font-medium tracking-normal text-muted">{base}</small></div>
+      <div className="mt-2 text-sm text-muted">
         {left > 0 ? `осталось ${fmt(left)} из ${fmt(g.target)}` : `цель ${fmt(g.target)} собрана`}
         {last && ` · ${last.amount > 0 ? "+" : "−"}${fmt(Math.abs(last.amount))} ${last.date.slice(8)}.${last.date.slice(5, 7)}`}
       </div>
-      <div className="goal-act">
-        <input className="input" inputMode="decimal" placeholder="Сумма" aria-label={`Сумма для ${g.name}`}
+      <div className="mt-5 flex gap-2">
+        <input className="input min-w-0 flex-1 bg-paper" inputMode="decimal" placeholder="Сумма" aria-label={`Сумма для ${g.name}`}
           value={val} onChange={(e) => setVal(e.target.value)} onKeyDown={(e) => e.key === "Enter" && move(1)} />
-        <button className="btn" onClick={() => move(1)}>Положить</button>
-        <button className="btn ghost" onClick={() => move(-1)}>Взять</button>
+        <button className="btn px-3" onClick={() => move(1)}>Положить</button>
+        <button className="btn-ghost bg-paper px-3" onClick={() => move(-1)}>Взять</button>
       </div>
     </article>
   );
@@ -76,19 +76,19 @@ export function GoalsView() {
 
   return (
     <>
-      <div className="limits-head">
-        <h1 className="page-title">Копилки</h1>
-        <div className="total">Отложено всего <b>{fmt(total)} {base}</b></div>
+      <div className="mb-8 flex flex-wrap items-center gap-x-6 gap-y-4">
+        <h1 className="m-0 text-3xl font-bold tracking-tight">Копилки</h1>
+        <div className="ml-auto text-muted">Отложено всего <b className="font-semibold text-ink">{fmt(total)} {base}</b></div>
       </div>
       {data.goals.length > 0 ? (
-        <div className="grid">{data.goals.map((g) => <GoalCard key={g.id} g={g} />)}</div>
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-5">{data.goals.map((g) => <GoalCard key={g.id} g={g} />)}</div>
       ) : (
-        <div className="panel empty">Копилок пока нет. Назовите цель и сумму, которую хотите собрать.</div>
+        <div className="panel text-muted">Копилок пока нет. Назовите цель и сумму, которую хотите собрать.</div>
       )}
-      <div className="newgoal">
-        <input className="input" placeholder="На что копим, например «Отпуск»" value={name}
+      <div className="mt-8 flex flex-wrap gap-3">
+        <input className="input min-w-[160px] flex-1" placeholder="На что копим, например «Отпуск»" value={name}
           onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
-        <input className="input" inputMode="decimal" placeholder={`Цель, ${base}`} style={{ flex: "0 1 180px" }}
+        <input className="input min-w-0 flex-[0_1_180px]" inputMode="decimal" placeholder={`Цель, ${base}`}
           value={target} onChange={(e) => setTarget(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
         <button className="btn" onClick={add}>Создать копилку</button>
       </div>
