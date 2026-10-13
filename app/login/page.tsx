@@ -27,13 +27,15 @@ export default function LoginPage() {
 
   return (
     <div className="px-4">
-      <form className="panel mx-auto mt-[12vh] max-w-[380px]" onSubmit={submit}>
-        <h1 className="mb-5 flex items-center gap-2 text-2xl font-bold tracking-tight"><img src="/icon.svg" alt="" className="size-8" />Траты</h1>
-        <label className="mb-2 block text-sm text-muted" htmlFor="pw">Пароль</label>
-        <input id="pw" className="input w-full" type="password" autoFocus autoComplete="current-password"
-          value={password} onChange={(e) => setPassword(e.target.value)} />
-        <button className="btn mt-3 w-full" disabled={busy || !password}>{busy ? "Вхожу…" : "Войти"}</button>
-        <div className="mt-3 min-h-5 text-sm text-bad" role="alert">{error}</div>
+      <form className="mx-auto mt-[12vh] max-w-sm" onSubmit={submit}>
+        <h1 className="sec">Auth</h1>
+        <div className="mt-6 flex items-center gap-3">
+          <label htmlFor="pw" className="lbl">Password</label>
+          <input id="pw" className="tfield flex-1" type="password" autoFocus autoComplete="current-password"
+            value={password} onChange={(e) => setPassword(e.target.value)} />
+        </div>
+        <button className="tb mt-6 w-full font-bold" disabled={busy || !password}>{busy ? "Вхожу…" : "Войти"}</button>
+        <p className="mt-3 min-h-5 text-bad uppercase" role="alert">{error && `!! ${error.replace(/\.$/, "")}`}</p>
       </form>
     </div>
   );

@@ -47,6 +47,9 @@ export function parseAmount(raw: string): number | null {
   return Math.round(sum * 100) / 100;
 }
 
+/** «Кафе и рестораны» → «КАФЕ_И_РЕСТОРАНЫ». Только для отображения */
+export const termName = (name: string) => name.trim().toUpperCase().replace(/\s+/g, "_");
+
 export const activeCats = (s: Settings | null): Category[] => (s?.categories ?? []).filter((c) => !c.archived);
 
 export function spentByCat(expenses: Expense[]): Record<string, number> {

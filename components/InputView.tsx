@@ -2,7 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTracker } from "./TrackerProvider";
-import { MONTHS, activeCats, curMonthKey, fmt, monthKeyOf, amountChars, parseAmount, spentByCat, todayStr, uid } from "@/lib/utils";
+import { AsciiBar } from "./AsciiBar";
+import { MONTHS, activeCats, curMonthKey, fmt, monthKeyOf, amountChars, parseAmount, spentByCat, termName, todayStr, uid } from "@/lib/utils";
+
+const pad = (n: number) => String(n).padStart(2, "0");
+const timeOf = (ts: number) => { const d = new Date(ts); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 
 const CUR_KEY = "ft:cur";
 
@@ -68,11 +72,11 @@ export function InputView() {
     () => [...expenses].sort((a, b) => b.date.localeCompare(a.date) || b.ts - a.ts).slice(0, 20),
     [expenses],
   );
-  const catName = (id: string) => st.categories.find((c) => c.id === id)?.name ?? "Удалённая категория";
+  const catName = (id: string) => termName(st.categories.find((c) => c.id === id)?.name ?? "Удалённая категория");
 
   const a = parseAmount(amount);
   const r = parseAmount(rate);
-  const conv = isForeign && a && a > 0 && r && r > 0 ? `≈ ${fmt(a * r)} ${st.base}` : "";
+  const conv = isForeign && a && a > 0 && r && r > 0 ? `// ≈ ${fmt(a * r)} ${st.base}` : "";
 
   const submit = () => {
     if (a === null) return setError("Введите сумму.");
@@ -95,7 +99,7 @@ export function InputView() {
     setCatId(null);
     setError("");
     amountRef.current?.focus();
-    toast(`Записано: ${fmt(a)} ${currency} в «${cat.name}»`, "Отменить", () => removeExpense(monthKeyOf(e.date), e.id));
+    toast(`Записано: ${fmt(a)} ${currency} → ${termName(cat.name)}`, "Отменить", () => removeExpense(monthKeyOf(e.date), e.id));
   };
 
   const onEnter = (e: React.KeyboardEvent) => {
@@ -111,110 +115,104 @@ export function InputView() {
   };
 
   const sel = cats.find((c) => c.id === catId);
-  let side: React.ReactNode;
-  if (sel) {
-    const s = spent[sel.id] ?? 0, left = sel.limit - s, p = sel.limit ? Math.min(100, (s / sel.limit) * 100) : 100;
-    const col = left < 0 ? "bg-bad" : p >= 80 ? "bg-warn" : "bg-ok";
-    side = (
-      <>
-        <h3 className="text-sm font-semibold sm:mb-1 sm:text-[15px]">{sel.name}</h3>
-        <div className={`text-2xl font-semibold tracking-tight sm:text-[28px] ${left < 0 ? "text-bad" : ""}`}>
-          {left < 0 ? "−" : ""}{fmt(Math.abs(left))} <small className="text-[15px] font-normal text-muted">{st.base}</small>
-        </div>
-        <div className="hint">{left < 0 ? "перерасход" : "осталось"} в {monthName}е</div>
-        <div className="mt-2 mb-1.5 h-2 overflow-hidden sm:mt-3 sm:mb-2 rounded-full bg-bg"><i className={`block h-full rounded-full transition-[width] duration-500 ${col}`} style={{ width: `${p}%` }} /></div>
-        <div className="hint">Потрачено {fmt(s)} из {fmt(sel.limit)}</div>
-      </>
-    );
-  } else {
-    const totalL = cats.reduce((acc, c) => acc + c.limit, 0);
-    const totalS = cats.reduce((acc, c) => acc + (spent[c.id] ?? 0), 0);
-    side = (
-      <>
-        <h3 className="text-sm font-semibold sm:mb-1 sm:text-[15px]">{MONTHS[new Date().getMonth()]}</h3>
-        <div className="text-2xl font-semibold tracking-tight sm:text-[28px]">{fmt(totalL - totalS)} <small className="text-[15px] font-normal text-muted">{st.base}</small></div>
-        <div className="hint">осталось по всем лимитам</div>
-        <div className="mt-2 mb-1.5 h-2 overflow-hidden sm:mt-3 sm:mb-2 rounded-full bg-bg"><i className="block h-full rounded-full bg-ok transition-[width] duration-500" style={{ width: `${totalL ? Math.min(100, (totalS / totalL) * 100) : 0}%` }} /></div>
-        <div className="hint max-sm:hidden">Выберите категорию, чтобы увидеть её остаток.</div>
-      </>
-    );
-  }
+  const limit = sel ? sel.limit : cats.reduce((acc, c) => acc + c.limit, 0);
+  const used = sel ? spent[sel.id] ?? 0 : cats.reduce((acc, c) => acc + (spent[c.id] ?? 0), 0);
+  const left = limit - used;
 
   return (
     <>
-      <div className="grid grid-cols-1 items-start gap-3 sm:gap-7 md:grid-cols-[minmax(0,1fr)_300px]">
-        <section className="panel">
-          <div className="flex items-stretch gap-3">
-            <input
-              ref={amountRef}
-              className="min-w-0 flex-1 rounded-none border-0 border-b-2 border-line bg-transparent pt-1 pb-1.5 text-[34px] font-semibold tracking-tight transition-colors placeholder:text-line focus:border-accent focus:outline-none md:text-[44px]"
-              inputMode="decimal"
-              autoComplete="off"
-              placeholder="0"
-              aria-label="Сумма"
-              value={amount}
-              onChange={(e) => setAmount(amountChars(e.target.value))}
-              onKeyDown={onEnter}
-            />
-            <div className="seg" role="group" aria-label="Валюта">
-              {st.currencies.map((c) => (
-                <button key={c} aria-pressed={c === currency} onClick={() => setCur(c)}>{c}</button>
-              ))}
-            </div>
-          </div>
-          {isForeign && (
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-[15px] text-muted">
-              <label htmlFor="rate">Курс: 1 {currency} =</label>
-              <input id="rate" className="input w-[120px] text-ink" inputMode="decimal" autoComplete="off" placeholder="курс"
-                value={rate} onChange={(e) => setRate(amountChars(e.target.value))} onKeyDown={onEnter} />
-              <span>{st.base}</span>
-              <output className="ml-1.5 font-medium text-ink">{conv}</output>
-            </div>
-          )}
-          <div className="hint mt-2 pointer-coarse:hidden">Можно складывать: 450+120. Enter — записать.</div>
-
-          <span className="mt-4 mb-2 block text-sm text-muted sm:mt-6">Категория<span className="pointer-coarse:hidden"> · Alt + цифра</span></span>
-          <div className="flex flex-wrap gap-1.5 sm:grid sm:grid-cols-[repeat(auto-fill,minmax(150px,1fr))] sm:gap-2">
-            {cats.map((c, i) => (
-              <button key={c.id} aria-pressed={c.id === catId}
-                className="group flex max-w-full items-center gap-2.5 rounded-full border border-line bg-bg px-3.5 py-2 text-left text-[15px] transition sm:rounded-xl sm:px-3 sm:py-2.5 sm:text-base hover:border-muted/50 active:scale-[.98] aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-paper"
-                onClick={() => { setCatId(catId === c.id ? null : c.id); setError(""); amountRef.current?.focus(); }}>
-                {i < 9 && <kbd className="min-w-5 pointer-coarse:hidden rounded-md border border-line px-1 text-center text-xs text-muted group-aria-pressed:border-paper/40 group-aria-pressed:text-paper">{i + 1}</kbd>}
-                <span className="truncate">{c.name}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-2 sm:mt-6 sm:gap-3">
-            <input className="input min-w-0 basis-full sm:basis-auto sm:min-w-[180px] sm:flex-1" placeholder="Комментарий, необязательно" autoComplete="off"
-              value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={onEnter} />
-            <input className="input min-w-0 flex-1 sm:flex-none" type="date" aria-label="Дата" value={date}
-              onChange={(e) => setDate(e.target.value)} onKeyDown={onEnter} />
-            <button className="btn flex-1 sm:flex-none" onClick={submit}>Записать</button>
-          </div>
-          <div className="mt-2 text-sm text-bad empty:mt-0 sm:mt-3 sm:min-h-5" role="alert">{error}</div>
-        </section>
-        <aside className="panel md:sticky md:top-6" aria-live="polite">{side}</aside>
-      </div>
-
-      <section className="mt-6 sm:mt-12">
-        <h2 className="mb-2 text-base font-semibold sm:mb-4">Траты за {monthName}</h2>
-        <div className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-paper shadow-card">
-          {recent.length === 0 && (
-            <div className="px-4 py-5 text-muted sm:px-5">В этом месяце трат пока нет. Введите сумму сверху и выберите категорию.</div>
-          )}
-          {recent.map((e) => (
-            <div className="grid grid-cols-[44px_minmax(0,1fr)_auto_auto] items-center gap-2 px-3 py-2.5 sm:grid-cols-[70px_minmax(0,1fr)_auto_auto] sm:gap-3 sm:px-5 transition-colors hover:bg-bg/60" key={e.id}>
-              <span className="text-sm text-muted">{e.date.slice(8)}.{e.date.slice(5, 7)}</span>
-              <span className="min-w-0"><span className="block truncate sm:inline">{catName(e.catId)}</span>{e.note && <small className="block truncate text-sm text-muted sm:ml-2 sm:inline">{e.note}</small>}</span>
-              <span className="text-right font-semibold">
-                {fmt(e.amount)} {e.currency}
-                {e.currency !== st.base && <small className="block text-xs font-normal text-muted">{fmt(e.base)} {st.base}</small>}
-              </span>
-              <button className="x-btn" aria-label="Удалить трату" onClick={() => remove(monthKeyOf(e.date), e.id)}>×</button>
-            </div>
+      <h1 className="sec">New entry</h1>
+      <div className="mt-6 flex flex-wrap items-end gap-x-6 gap-y-3">
+        <div className="flex min-w-0 flex-[1_1_280px] items-baseline gap-4">
+        <label htmlFor="amount" className="lbl shrink-0 text-xl font-bold text-ink sm:text-[28px]">Amount</label>
+        <input
+          id="amount"
+          ref={amountRef}
+          className="tfield min-h-0 w-0 flex-1 border-b-2 border-ink pt-0 pb-1 text-[34px] leading-none font-bold sm:text-[44px]"
+          inputMode="decimal"
+          autoComplete="off"
+          placeholder="0"
+          value={amount}
+          onChange={(e) => setAmount(amountChars(e.target.value))}
+          onKeyDown={onEnter}
+        />
+        </div>
+        <div className="flex gap-2" role="group" aria-label="Валюта">
+          {st.currencies.map((c) => (
+            <button key={c} className="tb tb-tight" aria-pressed={c === currency} onClick={() => setCur(c)}>{c}</button>
           ))}
         </div>
+      </div>
+      {isForeign && (
+        <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <label htmlFor="rate" className="lbl">Rate: 1 {currency} =</label>
+          <input id="rate" className="tfield w-[12ch]" inputMode="decimal" autoComplete="off" placeholder="курс"
+            value={rate} onChange={(e) => setRate(amountChars(e.target.value))} onKeyDown={onEnter} />
+          <span className="text-muted">{st.base}</span>
+          <output className="text-ink">{conv}</output>
+        </div>
+      )}
+      <p className="mt-2 text-muted2 pointer-coarse:hidden">// МОЖНО СКЛАДЫВАТЬ: 450+120</p>
+
+      <h2 className="sec mt-8">Category <span className="font-normal text-muted2">(Alt + 1..9)</span></h2>
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {cats.map((c, i) => (
+          <button key={c.id} aria-pressed={c.id === catId}
+            className="tbox min-h-11 gap-2 px-2 py-2 text-left sm:px-3"
+            onClick={() => { setCatId(catId === c.id ? null : c.id); setError(""); amountRef.current?.focus(); }}>
+            {i < 9 && <span aria-hidden="true" className="shrink-0">[{i + 1}]</span>}<span className="min-w-0 [overflow-wrap:anywhere]">{termName(c.name)}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-8 flex flex-wrap items-end gap-x-6 gap-y-4">
+        <div className="flex min-w-[240px] flex-[2_1_240px] items-center gap-3">
+          <label htmlFor="note" className="lbl">Note</label>
+          <input id="note" className="tfield flex-1" placeholder="необязательно" autoComplete="off"
+            value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={onEnter} />
+        </div>
+        <div className="flex flex-[1_1_200px] items-center gap-3">
+          <label htmlFor="date" className="lbl">Date</label>
+          <input id="date" className="tfield flex-1" type="date" value={date}
+            onChange={(e) => setDate(e.target.value)} onKeyDown={onEnter} />
+        </div>
+        <button className="tb w-full font-bold sm:w-auto" onClick={submit}>Enter ↵ Записать</button>
+      </div>
+      <p className="mt-3 min-h-5 text-bad uppercase" role="alert">{error && `!! ${error.replace(/\.$/, "")}`}</p>
+
+      <section className="mt-6 border-t border-dashed border-line pt-6" aria-live="polite">
+        <h2 className="sec">{sel ? termName(sel.name) : "Все лимиты"}</h2>
+        <div className="mt-3"><AsciiBar value={used} max={limit} label={sel ? sel.name : "Все лимиты"} /></div>
+        <p className={`mt-2 uppercase ${left < 0 ? "text-bad" : "text-muted"}`}>
+          {left < 0 ? `Перерасход ${fmt(-left)} ${st.base}` : `Осталось ${fmt(left)} из ${fmt(limit)} ${st.base}`}
+        </p>
+      </section>
+
+      <section className="mt-10">
+        <h2 className="sec">Recent logs</h2>
+        {recent.length === 0 ? (
+          <p className="mt-3 text-muted uppercase">// За {monthName} записей пока нет</p>
+        ) : (
+          <div className="mt-3 overflow-x-auto">
+            <ul className="grid min-w-max grid-cols-[repeat(4,auto)_minmax(16ch,1fr)_auto_auto] gap-x-4">
+              {recent.map((e) => (
+                <li key={e.id} className="col-span-7 grid grid-cols-subgrid items-center border-b border-dashed border-line2 py-1 whitespace-nowrap">
+                  <span className="text-muted">{e.date}</span>
+                  <span className="text-muted">{timeOf(e.ts)}</span>
+                  <span className="text-muted">[EXP]</span>
+                  <span className="text-right font-bold">
+                    -{fmt(e.amount)}
+                    {e.currency !== st.base && <span className="ml-2 font-normal text-muted">(≈ {fmt(e.base)} {st.base})</span>}
+                  </span>
+                  <span className="min-w-0 truncate">// {catName(e.catId)}{e.note && <span className="ml-2 text-muted">{e.note}</span>}</span>
+                  <span className="text-muted">[{e.currency}]</span>
+                  <button className="xb" aria-label="Удалить трату"
+                    onClick={() => remove(monthKeyOf(e.date), e.id)}>×</button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
     </>
   );

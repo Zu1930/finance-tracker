@@ -3,15 +3,19 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTracker } from "./TrackerProvider";
-import { MONTHS_SHORT, activeCats, curMonthKey, fmt, monthTitle, shiftMonth, spentByCat } from "@/lib/utils";
+import { useNarrow } from "./AsciiBar";
+import { MONTHS_SHORT, activeCats, curMonthKey, fmt, monthTitle, shiftMonth, spentByCat, termName } from "@/lib/utils";
 
-const PALETTE = ["#3B6EA8", "#2C8A7E", "#D19A2A", "#B8463F", "#7B5CA8", "#5E8C3A", "#C2607E", "#4596B0", "#8F6B48", "#7A8394", "#A8A23B", "#3E4F8C"];
-const W = 900, H = 360, L = 70, R = 16, T = 16, B = 40;
+/** Цвет категории — токен cat-1…cat-8 по её индексу в списке категорий */
+const catColor = (i: number) => `var(--cat-${(i % 8) + 1})`;
+const H = 360, L = 70, R = 16, T = 16, B = 40;
 
 export function ChartView() {
   const { data, setMonth } = useTracker();
   const router = useRouter();
   const [range, setRange] = useState(6);
+  // На узком экране рисуем в меньшей системе координат, чтобы график влез без горизонтального скролла
+  const W = useNarrow() ? 420 : 900;
   const st = data.settings!;
 
   const keys: string[] = [];
@@ -19,7 +23,7 @@ export function ChartView() {
   const perMonth = keys.map((k) => spentByCat(data.months[k]?.expenses ?? []));
   const used = st.categories.filter((c) => !c.archived || perMonth.some((d) => d[c.id]));
   const color: Record<string, string> = {};
-  used.forEach((c, i) => (color[c.id] = PALETTE[i % PALETTE.length]));
+  st.categories.forEach((c, i) => (color[c.id] = catColor(i)));
   const totals = perMonth.map((d) => Object.values(d).reduce((a, b) => a + b, 0));
   const limitSum = activeCats(st).reduce((a, c) => a + c.limit, 0);
 
@@ -39,19 +43,19 @@ export function ChartView() {
 
   return (
     <>
-      <div className="mb-8 flex flex-wrap items-center gap-x-6 gap-y-4">
-        <h1 className="m-0 text-3xl font-bold tracking-tight">Траты по месяцам</h1>
-        <div className="seg ml-auto" role="group" aria-label="Период">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+        <h1 className="sec">Monthly spending</h1>
+        <div className="flex gap-2 sm:ml-auto" role="group" aria-label="Период">
           {[6, 12].map((r) => (
-            <button key={r} aria-pressed={range === r} onClick={() => setRange(r)}>{r} мес.</button>
+            <button key={r} className="tb tb-tight" aria-pressed={range === r} onClick={() => setRange(r)}>{r} мес.</button>
           ))}
         </div>
       </div>
-      <div className="panel overflow-x-auto p-5">
-        <svg viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full min-w-[560px]" role="img" aria-label="Траты по месяцам с разбивкой по категориям">
+      <div className="mt-6 overflow-x-auto">
+        <svg viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full" role="img" aria-label="Траты по месяцам с разбивкой по категориям">
           {ticks.map((v) => (
             <g key={v}>
-              <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke="var(--line)" />
+              <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke="var(--line2)" strokeDasharray="3 4" />
               <text x={L - 10} y={y(v) + 4} textAnchor="end" fontSize="12" fill="var(--muted)">{fmt(v)}</text>
             </g>
           ))}
@@ -60,11 +64,11 @@ export function ChartView() {
             let acc = 0;
             const [yy, mm] = k.slice(2).split("-");
             return (
-              <g key={k} className="cursor-pointer outline-none [&:focus-visible>rect:first-child]:fill-acct [&:hover>rect:first-child]:fill-acct" role="button" tabIndex={0}
+              <g key={k} className="cursor-pointer outline-none [&:focus-visible>rect:first-child]:fill-hover [&:focus-visible>rect:first-child]:stroke-ink [&:hover>rect:first-child]:fill-hover" role="button" tabIndex={0}
                 aria-label={`${monthTitle(k)}: ${fmt(totals[i])} ${st.base}`}
                 onClick={() => open(k)}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(k); } }}>
-                <rect x={L + i * slot} y={T} width={slot} height={ch} rx={8} fill="transparent" />
+                <rect x={L + i * slot} y={T} width={slot} height={ch} fill="transparent" />
                 {used.filter((c) => perMonth[i][c.id]).map((c) => {
                   const v = perMonth[i][c.id];
                   const y1 = y(acc + v), h = y(acc) - y1;
@@ -76,7 +80,7 @@ export function ChartView() {
                   );
                 })}
                 {totals[i] > 0 && (
-                  <text x={x + bw / 2} y={y(totals[i]) - 6} textAnchor="middle" fontSize="12" fontWeight="600" fill="var(--ink)">
+                  <text x={x + bw / 2} y={y(totals[i]) - 6} textAnchor="middle" fontSize="12" fontWeight="700" fill="var(--ink)">
                     {fmt(totals[i])}
                   </text>
                 )}
@@ -90,17 +94,22 @@ export function ChartView() {
           {limitSum > 0 && (
             <>
               <line x1={L} x2={W - R} y1={y(limitSum)} y2={y(limitSum)} stroke="var(--ink)" strokeDasharray="5 4" strokeWidth={1.5} />
-              <text x={W - R} y={y(limitSum) - 6} textAnchor="end" fontSize="12" fill="var(--ink)">сумма лимитов {fmt(limitSum)}</text>
+              <text x={W - R} y={y(limitSum) - 6} textAnchor="end" fontSize="12" fill="var(--ink)">СУММА ЛИМИТОВ {fmt(limitSum)}</text>
             </>
           )}
         </svg>
-        <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm">
-          {used.map((c) => (
-            <span key={c.id} className="inline-flex items-center gap-2"><i className="inline-block size-3 rounded" style={{ background: color[c.id] }} />{c.name} <b className="font-semibold">{fmt(periodTotal[c.id] ?? 0)}</b></span>
-          ))}
-        </div>
       </div>
-      <p className="hint mt-2">Суммы в {st.base}. Нажмите на столбец, чтобы открыть лимиты этого месяца.</p>
+      <ul className="mt-6 grid grid-cols-1 gap-x-12 border-t border-dashed border-line pt-4 sm:grid-cols-2">
+        {used.map((c) => (
+          <li key={c.id} className="flex items-baseline gap-2 py-0.5">
+            <span aria-hidden="true" style={{ color: color[c.id] }}>■</span>
+            <span className="shrink-0">{termName(c.name)}</span>
+            <span aria-hidden="true" className="min-w-4 flex-1 overflow-hidden whitespace-nowrap text-dim">{".".repeat(80)}</span>
+            <b className="shrink-0">{fmt(periodTotal[c.id] ?? 0)}</b>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-4 text-muted2 uppercase">// Суммы в {st.base}. Нажмите на столбец, чтобы открыть лимиты этого месяца</p>
     </>
   );
 }
