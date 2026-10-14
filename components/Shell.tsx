@@ -36,7 +36,7 @@ function MetricsBar({ data }: { data: TrackerData }) {
 	const pace = expenses.reduce((a, e) => a + e.base, 0) / day
 
 	return (
-		<div className="flex flex-wrap gap-x-6 gap-y-1 border-y border-dashed border-line py-3 text-muted uppercase">
+		<div className="flex flex-wrap justify-between gap-x-6 gap-y-1 border-y border-dashed border-line py-3 text-muted uppercase">
 			<span>
 				[ ОСТАТОК ПО ЛИМИТАМ:{' '}
 				<b className={left < 0 ? 'text-bad' : 'text-ink'}>
