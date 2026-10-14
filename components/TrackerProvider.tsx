@@ -1,8 +1,8 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { Expense, Goal, Settings, TrackerData } from "@/lib/types";
-import { curMonthKey, monthKeyOf } from "@/lib/utils";
+import type { Expense, Goal, Income, Settings, TrackerData } from "@/lib/types";
+import { curMonthKey, incomeKeyOf, monthKeyOf } from "@/lib/utils";
 
 type ToastState = { id: number; msg: string; actionLabel?: string; action?: () => void } | null;
 
@@ -13,6 +13,8 @@ type Ctx = {
   setSettings: (fn: (s: Settings | null) => Settings) => void;
   addExpense: (e: Expense) => void;
   removeExpense: (monthKey: string, id: string) => Expense | undefined;
+  addIncome: (i: Income) => void;
+  removeIncome: (monthKey: string, id: string) => Income | undefined;
   setGoals: (fn: (g: Goal[]) => Goal[]) => void;
   month: string;
   setMonth: (m: string) => void;
@@ -29,7 +31,7 @@ export function useTracker() {
   return ctx;
 }
 
-const EMPTY: TrackerData = { settings: null, goals: [], months: {} };
+const EMPTY: TrackerData = { settings: null, goals: [], months: {}, incomes: {} };
 
 export function TrackerProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<TrackerData>(EMPTY);
@@ -117,6 +119,21 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
       const expenses = prev.filter((x) => x.id !== id);
       commit({ ...ref.current, months: { ...ref.current.months, [key]: { expenses } } });
       write(key, { expenses });
+      return gone;
+    },
+    addIncome: (i) => {
+      const key = incomeKeyOf(i.date);
+      const items = [...(ref.current.incomes[key]?.items ?? []), i];
+      commit({ ...ref.current, incomes: { ...ref.current.incomes, [key]: { items } } });
+      write(key, { items });
+    },
+    removeIncome: (key, id) => {
+      const prev = ref.current.incomes[key]?.items ?? [];
+      const gone = prev.find((x) => x.id === id);
+      if (!gone) return undefined;
+      const items = prev.filter((x) => x.id !== id);
+      commit({ ...ref.current, incomes: { ...ref.current.incomes, [key]: { items } } });
+      write(key, { items });
       return gone;
     },
     setGoals: (fn) => {

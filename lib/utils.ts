@@ -1,4 +1,4 @@
-import type { Category, Expense, MonthDoc, Settings } from "./types";
+import type { Category, Expense, IncomeSource, MonthDoc, Settings } from "./types";
 
 export const uid = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -15,6 +15,8 @@ export const todayStr = () => {
 };
 export const monthKeyOf = (date: string) => "m-" + date.slice(0, 7);
 export const curMonthKey = () => monthKeyOf(todayStr());
+/** Ключ документа поступлений: i-2026-10 */
+export const incomeKeyOf = (date: string) => "i-" + date.slice(0, 7);
 
 export const MONTHS = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
 export const MONTHS_SHORT = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
@@ -49,6 +51,15 @@ export function parseAmount(raw: string): number | null {
 
 /** «Кафе и рестораны» → «КАФЕ_И_РЕСТОРАНЫ». Только для отображения */
 export const termName = (name: string) => name.trim().toUpperCase().replace(/\s+/g, "_");
+
+export const DEFAULT_INCOME_SOURCES: IncomeSource[] = [
+  { id: "salary", name: "Зарплата" },
+  { id: "freelance", name: "Фриланс" },
+  { id: "gift", name: "Подарок" },
+  { id: "refund", name: "Возврат" },
+  { id: "other", name: "Прочее" },
+];
+export const incomeSources = (s: Settings | null): IncomeSource[] => s?.incomeSources ?? DEFAULT_INCOME_SOURCES;
 
 export const activeCats = (s: Settings | null): Category[] => (s?.categories ?? []).filter((c) => !c.archived);
 

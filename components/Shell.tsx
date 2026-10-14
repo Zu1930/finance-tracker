@@ -16,6 +16,7 @@ import type { TrackerData } from '@/lib/types'
 
 const TABS = [
 	{ href: '/', label: 'Ввод' },
+	{ href: '/income', label: 'Зарплата' },
 	{ href: '/limits', label: 'Лимиты' },
 	{ href: '/goals', label: 'Копилки' },
 	{ href: '/chart', label: 'График' }

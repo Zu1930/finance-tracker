@@ -23,6 +23,8 @@ type Props = {
 	width?: number
 	/** limit: STABLE / WARNING / OVERLOAD; goal: COLLECTING / COMPLETE */
 	variant?: 'limit' | 'goal'
+	/** Только шкала, без процента и статуса */
+	bare?: boolean
 	label: string
 }
 
@@ -32,6 +34,7 @@ export function AsciiBar({
 	max,
 	width = 32,
 	variant = 'limit',
+	bare = false,
 	label
 }: Props) {
 	const narrow = useNarrow()
@@ -54,19 +57,21 @@ export function AsciiBar({
 			aria-valuemin={0}
 			aria-valuemax={Math.max(100, shown)}
 			aria-valuenow={shown}
-			aria-valuetext={`${shown}% ${status}`}
+			aria-valuetext={bare ? `${shown}%` : `${shown}% ${status}`}
 			className="flex flex-wrap items-baseline gap-x-2 whitespace-pre"
 		>
 			<span aria-hidden="true">
 				<span className="text-ink">{'█'.repeat(filled)}</span>
 				<span className="text-dim">{'░'.repeat(w - filled)}</span>
 			</span>
-			<span
-				aria-hidden="true"
-				className={tone}
-			>
-				{shown}% - {status}
-			</span>
+			{!bare && (
+				<span
+					aria-hidden="true"
+					className={tone}
+				>
+					{shown}% - {status}
+				</span>
+			)}
 		</div>
 	)
 }
