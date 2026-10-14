@@ -1,4 +1,4 @@
-import type { Category, Expense, Settings } from "./types";
+import type { Category, Expense, MonthDoc, Settings } from "./types";
 
 export const uid = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -51,6 +51,13 @@ export function parseAmount(raw: string): number | null {
 export const termName = (name: string) => name.trim().toUpperCase().replace(/\s+/g, "_");
 
 export const activeCats = (s: Settings | null): Category[] => (s?.categories ?? []).filter((c) => !c.archived);
+
+/** Недавно использованные категории первыми; неиспользованные — в исходном порядке после них */
+export function byRecentUse(cats: Category[], months: Record<string, MonthDoc>): Category[] {
+  const last: Record<string, number> = {};
+  for (const m of Object.values(months)) for (const e of m.expenses) last[e.catId] = Math.max(last[e.catId] ?? 0, e.ts);
+  return [...cats].sort((a, b) => (last[b.id] ?? 0) - (last[a.id] ?? 0));
+}
 
 export function spentByCat(expenses: Expense[]): Record<string, number> {
   const m: Record<string, number> = {};
