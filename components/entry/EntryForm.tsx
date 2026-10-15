@@ -1,10 +1,31 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { useTracker } from './TrackerProvider'
+import { useTracker } from '../TrackerProvider'
 import { amountChars, fmt, parseAmount, termName, todayStr } from '@/lib/utils'
 
 type Option = { id: string; name: string }
+
+export type EntryMode = 'expense' | 'income'
+
+/** Что в форме зависит от режима */
+const MODE_UI: Record<
+	EntryMode,
+	{ amountLabel: string; optionsTitle: string; grid: string; notePlaceholder: string }
+> = {
+	expense: {
+		amountLabel: 'Amount −',
+		optionsTitle: 'Category',
+		grid: 'grid-cols-2 sm:grid-cols-4',
+		notePlaceholder: 'необязательно'
+	},
+	income: {
+		amountLabel: 'Amount +',
+		optionsTitle: 'Source',
+		grid: 'grid-cols-2 sm:grid-cols-5',
+		notePlaceholder: 'например: аванс, проект, возврат'
+	}
+}
 
 /** Общее состояние форм трат и поступлений. Последняя валюта помнится в localStorage под curKey */
 export function useEntryForm(curKey: string) {
@@ -127,34 +148,30 @@ export function useAltPick(options: Option[], pick: (id: string) => void) {
 	}, [options, pick])
 }
 
-type FieldsProps = {
+type FormProps = {
+	mode: EntryMode
 	form: EntryForm
-	/** Текст метки суммы после «> » */
-	amountLabel: string
-	/** Заголовок сетки вариантов: Category, Source */
-	optionsTitle: string
+	/** Категории или источники — в зависимости от режима */
 	options: Option[]
 	selectedId: string | null
 	onPick: (id: string) => void
-	/** Колонки сетки вариантов */
-	gridClassName: string
-	notePlaceholder: string
+	/** Сумма начата с «+» — переключиться на доход */
+	onPlus: () => void
 	onSubmit: () => void
 }
 
 /** Поля формы: сумма и валюты, курс, сетка вариантов, заметка, дата, кнопка записи, ошибка */
-export function EntryFields({
+export function EntryForm({
+	mode,
 	form,
-	amountLabel,
-	optionsTitle,
 	options,
 	selectedId,
 	onPick,
-	gridClassName,
-	notePlaceholder,
+	onPlus,
 	onSubmit
-}: FieldsProps) {
+}: FormProps) {
 	const { st, currency, isForeign, amountRef } = form
+	const ui = MODE_UI[mode]
 
 	const onEnter = (e: React.KeyboardEvent) => {
 		if (e.key === 'Enter') {
@@ -171,7 +188,7 @@ export function EntryFields({
 						htmlFor="amount"
 						className="lbl shrink-0 text-xl font-bold text-ink sm:text-[28px]"
 					>
-						{amountLabel}
+						{ui.amountLabel}
 					</label>
 					<input
 						id="amount"
@@ -181,7 +198,11 @@ export function EntryFields({
 						autoComplete="off"
 						placeholder="0"
 						value={form.amount}
-						onChange={(e) => form.setAmount(amountChars(e.target.value))}
+						onChange={(e) => {
+							const v = amountChars(e.target.value)
+							if (v.startsWith('+')) onPlus()
+							form.setAmount(v.replace(/^\+/, ''))
+						}}
 						onKeyDown={onEnter}
 					/>
 				</div>
@@ -229,12 +250,12 @@ export function EntryFields({
 			</p>
 
 			<h2 className="sec mt-8">
-				{optionsTitle}{' '}
+				{ui.optionsTitle}{' '}
 				<span className="font-normal text-muted2">
 					(Alt + 1..{Math.min(9, options.length)})
 				</span>
 			</h2>
-			<div className={`mt-3 grid gap-2 ${gridClassName}`}>
+			<div className={`mt-3 grid gap-2 ${ui.grid}`}>
 				{options.map((o, i) => (
 					<button
 						key={o.id}
@@ -272,7 +293,7 @@ export function EntryFields({
 					<input
 						id="note"
 						className="tfield flex-1"
-						placeholder={notePlaceholder}
+						placeholder={ui.notePlaceholder}
 						autoComplete="off"
 						value={form.note}
 						onChange={(e) => form.setNote(e.target.value)}
