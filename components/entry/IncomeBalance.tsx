@@ -2,6 +2,7 @@
 
 import { useTracker } from '../TrackerProvider'
 import { AsciiBar } from '../AsciiBar'
+import { Comparison } from './Comparison'
 import { curMonthKey, fmt, incomeKeyOf, monthTitle, todayStr } from '@/lib/utils'
 
 /** Баланс текущего месяца: получено против потрачено */
@@ -67,6 +68,7 @@ export function IncomeBalance() {
 					Поступлений в этом месяце нет
 				</p>
 			)}
+			<Comparison />
 		</section>
 	)
 }

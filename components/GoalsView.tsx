@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useTracker } from "./TrackerProvider";
 import { AsciiBar } from "./AsciiBar";
+import { runwayMonths } from "@/lib/metrics";
 import type { Goal } from "@/lib/types";
 import { amountChars, fmt, parseAmount, termName, todayStr, uid } from "@/lib/utils";
 
@@ -66,6 +67,7 @@ export function GoalsView() {
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
   const total = data.goals.reduce((a, g) => a + saved(g), 0);
+  const runway = runwayMonths(data, todayStr());
 
   const add = () => {
     const n = name.trim();
@@ -81,7 +83,14 @@ export function GoalsView() {
     <>
       <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
         <h1 className="sec">Goals</h1>
-        <p className="text-muted uppercase sm:ml-auto">Отложено всего <b className="text-ink">{fmt(total)} {base}</b></p>
+        <p className="flex flex-wrap gap-x-4 text-muted uppercase sm:ml-auto">
+          <span>Отложено всего <b className="text-ink">{fmt(total)} {base}</b></span>
+          {/* Запас прочности: на сколько месяцев среднего расхода хватит накоплений */}
+          <span>
+            [ Запас:{" "}
+            {runway === null ? "—" : <b className={runway < 1 ? "text-warn" : "text-ink"}>{fmt(runway)} мес расходов</b>} ]
+          </span>
+        </p>
       </div>
       {data.goals.length > 0 ? (
         <div className="mt-6 grid grid-cols-1 gap-x-12 sm:grid-cols-2">{data.goals.map((g) => <GoalCard key={g.id} g={g} />)}</div>
