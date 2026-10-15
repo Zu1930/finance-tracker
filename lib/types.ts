@@ -8,6 +8,10 @@ export type Settings = {
   categories: Category[];
   /** Источники поступлений. Нет поля — используются DEFAULT_INCOME_SOURCES */
   incomeSources?: IncomeSource[];
+  /** Дата последнего автообновления rates из ExchangeRate-API, YYYY-MM-DD */
+  ratesUpdatedAt?: string;
+  /** Смены базовой валюты: rate — сколько from стоило 1 to на момент смены */
+  baseHistory?: { from: string; to: string; rate: number; at: string }[];
 };
 
 export type Expense = {

@@ -5,7 +5,8 @@ import { useTracker } from "./TrackerProvider";
 import { CommitInput } from "./CommitInput";
 import { ExportButton, ImportButton } from "./ImportExport";
 import { AsciiBar } from "./AsciiBar";
-import { activeCats, amountChars, curMonthKey, fmt, monthTitle, parseAmount, shiftMonth, spentByCat, termName, uid } from "@/lib/utils";
+import { BaseCurrency } from "./BaseCurrency";
+import { activeCats, amountChars, curMonthKey, fmt, monthTitle, parseAmount, shiftMonth, spentByCat, termName, uid, fmtRate } from "@/lib/utils";
 
 export function LimitsView() {
   const { data, month, setMonth, setSettings, toast } = useTracker();
@@ -105,7 +106,7 @@ export function LimitsView() {
               <div className="flex min-h-11 items-center gap-3" key={c}>
                 <b>{c}</b>
                 <span className="text-muted2 uppercase">
-                  // {st.rates[c] ? `последний курс ${fmt(st.rates[c]!)}` : "курс ещё не вводился"}
+                  // {st.rates[c] ? `курс ${fmtRate(st.rates[c]!)} ${st.base}` : "курс ещё не известен"}
                 </span>
                 <button className="xb ml-auto" aria-label={`Убрать валюту ${c}`} onClick={() =>
                   setSettings((s) => {
@@ -120,11 +121,19 @@ export function LimitsView() {
                 onChange={(e) => setNewCur(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addCur()} />
               <button className="tb" onClick={addCur}>Добавить</button>
             </div>
-            <p className="mt-3 text-muted2">// Курс указывается при вводе траты и сохраняется вместе с ней, поэтому прошлые суммы не меняются.</p>
+            <p className="mt-3 text-muted2">
+              // Курсы обновляются раз в день{st.ratesUpdatedAt ? `, последнее обновление ${st.ratesUpdatedAt}` : ""}.{" "}
+              <a className="underline underline-offset-4 hover:text-link-hover" href="https://www.exchangerate-api.com" target="_blank" rel="noopener noreferrer">
+                Rates By Exchange Rate API
+              </a>
+            </p>
+            <p className="mt-2 text-muted2">// Курс можно поправить при вводе траты. Он сохраняется вместе с ней, поэтому прошлые суммы не меняются.</p>
 
             <h3 className="lbl mt-8">Data</h3>
             <div className="mt-3 flex flex-wrap gap-2"><ExportButton /><ImportButton /></div>
           </div>
+
+          <BaseCurrency />
         </div>
       </details>
     </>

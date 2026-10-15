@@ -2,6 +2,8 @@
 
 import { useRef } from "react";
 import { useTracker } from "./TrackerProvider";
+import type { TrackerData } from "@/lib/types";
+import { todayStr } from "@/lib/utils";
 
 export function ImportButton() {
   const { reload, toast, data } = useTracker();
@@ -48,15 +50,17 @@ export function ImportButton() {
   );
 }
 
+/** Скачивает весь учёт JSON-файлом — тот же формат, что принимает импорт */
+export function downloadExport(data: TrackerData, filename = `traty-${todayStr()}.json`) {
+  const blob = new Blob([JSON.stringify({ version: 1, ...data }, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
 export function ExportButton() {
   const { data } = useTracker();
-  const run = () => {
-    const blob = new Blob([JSON.stringify({ version: 1, ...data }, null, 2)], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `traty-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  };
-  return <button className="tb" onClick={run}>Экспорт JSON</button>;
+  return <button className="tb" onClick={() => downloadExport(data)}>Экспорт JSON</button>;
 }

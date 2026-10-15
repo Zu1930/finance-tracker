@@ -44,3 +44,13 @@ export async function writeDocs(docs: Record<string, unknown>): Promise<void> {
   p.sadd(INDEX, ids[0], ...ids.slice(1));
   await p.exec();
 }
+
+/** Запись одной транзакцией (MULTI/EXEC): либо применяются все документы, либо ни один */
+export async function writeDocsAtomic(docs: Record<string, unknown>): Promise<void> {
+  const ids = Object.keys(docs);
+  if (ids.length === 0) return;
+  const tx = getRedis().multi();
+  for (const id of ids) tx.set(key(id), docs[id]);
+  tx.sadd(INDEX, ids[0], ...ids.slice(1));
+  await tx.exec();
+}

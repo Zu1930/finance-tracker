@@ -7,6 +7,9 @@ export const uid = () =>
 
 const nf = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
 export const fmt = (n: number) => nf.format(Math.round(n * 100) / 100);
+/** Курс: значимые цифры вместо копеек, чтобы 1 RSD = 0,00853 EUR не превращался в 0,01 */
+const rf = new Intl.NumberFormat("ru-RU", { maximumSignificantDigits: 6 });
+export const fmtRate = (n: number) => rf.format(n);
 
 const pad = (n: number) => String(n).padStart(2, "0");
 export const todayStr = () => {

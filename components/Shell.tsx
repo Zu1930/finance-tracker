@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTracker } from './TrackerProvider'
 import { Setup } from './Setup'
+import { useDailyRates } from './useDailyRates'
 import {
 	activeCats,
 	curMonthKey,
@@ -46,7 +47,7 @@ function MetricsBar({ data }: { data: TrackerData }) {
 			<span>
 				[ ТЕМП:{' '}
 				<b className="text-ink">
-					−{fmt(Math.round(pace))} {st.base}/ДЕНЬ
+					−{fmt(Math.abs(pace) >= 100 ? Math.round(pace) : pace)} {st.base}/ДЕНЬ
 				</b>{' '}
 				]
 			</span>
@@ -157,6 +158,7 @@ function HoldLogout({ onDone }: { onDone: () => void }) {
 export function Shell({ children }: { children: ReactNode }) {
 	const pathname = usePathname()
 	const { status, data, reload, toastState, dismissToast } = useTracker()
+	useDailyRates()
 
 	const logout = async () => {
 		await fetch('/api/logout', { method: 'POST' })
