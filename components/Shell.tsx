@@ -1,8 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
+import { useEffect, type ReactNode } from 'react'
 import { useTracker } from './TrackerProvider'
 import { Setup } from './Setup'
 import { useDailyRates } from './useDailyRates'
@@ -58,112 +58,24 @@ function MetricsBar({ data }: { data: TrackerData }) {
 	)
 }
 
-const THEME_KEY = 'ft:theme'
-const THEMES = ['auto', 'light', 'dark'] as const
-type Theme = (typeof THEMES)[number]
-
-/** AUTO → LIGHT → DARK. AUTO — по системе: атрибута data-theme нет */
-function ThemeToggle() {
-	const [theme, setTheme] = useState<Theme>('auto')
-	useEffect(() => {
-		const t = document.documentElement.dataset.theme
-		if (t === 'light' || t === 'dark') setTheme(t)
-	}, [])
-
-	const next = () => {
-		const t = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]
-		setTheme(t)
-		const root = document.documentElement
-		try {
-			if (t === 'auto') {
-				delete root.dataset.theme
-				localStorage.removeItem(THEME_KEY)
-			} else {
-				root.dataset.theme = t
-				localStorage.setItem(THEME_KEY, t)
-			}
-		} catch {}
-	}
-
-	return (
-		<button
-			className="tb"
-			onClick={next}
-			aria-label={`Тема: ${{ auto: 'как в системе', light: 'светлая', dark: 'тёмная' }[theme]}. Переключить`}
-		>
-			Theme: {theme}
-		</button>
-	)
-}
-
-const HOLD_MS = 1200
-
-/** Выход по удержанию: кнопка заливается красным, отпустил раньше — отмена */
-function HoldLogout({ onDone }: { onDone: () => void }) {
-	const [holding, setHolding] = useState(false)
-	const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-	const keyHold = useRef(false)
-
-	const start = () => {
-		clearTimeout(timer.current)
-		setHolding(true)
-		timer.current = setTimeout(onDone, HOLD_MS)
-	}
-	const cancel = () => {
-		clearTimeout(timer.current)
-		setHolding(false)
-	}
-
-	return (
-		<button
-			className="tb relative overflow-hidden select-none [-webkit-touch-callout:none]"
-			aria-label="Выход, удерживайте"
-			onPointerDown={(e) => {
-				if (e.button === 0) start()
-			}}
-			onPointerUp={cancel}
-			onPointerLeave={cancel}
-			onPointerCancel={cancel}
-			onContextMenu={(e) => e.preventDefault()}
-			onKeyDown={(e) => {
-				if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) {
-					e.preventDefault()
-					keyHold.current = true
-					start()
-				}
-			}}
-			onKeyUp={(e) => {
-				if (e.key === ' ' || e.key === 'Enter') {
-					cancel()
-					setTimeout(() => (keyHold.current = false))
-				}
-			}}
-			// Скринридер активирует кнопку кликом без нажатия — удерживать там нечем, выходим сразу
-			onClick={(e) => {
-				if (e.detail === 0 && !keyHold.current) onDone()
-			}}
-		>
-			Выход
-			<span
-				aria-hidden="true"
-				className={`absolute inset-0 flex items-center justify-center bg-bad font-bold text-panel transition-[clip-path] ${holding ? 'ease-linear [clip-path:inset(0_0_0_0)]' : '[clip-path:inset(0_100%_0_0)]'}`}
-				style={{ transitionDuration: holding ? `${HOLD_MS}ms` : '200ms' }}
-			>
-				[&nbsp;ВЫХОД&nbsp;]
-			</span>
-		</button>
-	)
-}
-
 export function Shell({ children }: { children: ReactNode }) {
 	const pathname = usePathname()
 	const { status, data, reload, toastState, dismissToast } = useTracker()
 	useDailyRates()
+	const router = useRouter()
 
-	const logout = async () => {
-		await fetch('/api/logout', { method: 'POST' })
-		window.location.href = '/login'
-	}
+	// Ctrl + , (⌘ + , на macOS) — настройки. В полях ввода не перехватываем
+	useEffect(() => {
+		const onKey = (e: KeyboardEvent) => {
+			if (!(e.ctrlKey || e.metaKey) || e.key !== ',') return
+			const el = e.target as HTMLElement | null
+			if (el?.closest('input, textarea, select, [contenteditable="true"]')) return
+			e.preventDefault()
+			router.push('/settings')
+		}
+		document.addEventListener('keydown', onKey)
+		return () => document.removeEventListener('keydown', onKey)
+	}, [router])
 
 	let body: ReactNode
 	if (status === 'loading')
@@ -189,16 +101,14 @@ export function Shell({ children }: { children: ReactNode }) {
 	return (
 		<div className="mx-auto max-w-280">
 			<div className="px-4 pt-3 pb-6 sm:px-12 sm:pt-5 sm:pb-10">
-				<header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 pb-4">
-					<div className="flex items-center gap-4">
-						<div className="lbl">
-							SPEND.LOG // BASE:{' '}
-							<b className="text-ink">{data.settings?.base ?? '—'}</b>
-						</div>
-						<ThemeToggle />
+				<header className="flex flex-wrap items-center gap-x-6 gap-y-3 pb-4">
+					<div className="lbl mr-auto">
+						SPEND.LOG // BASE:{' '}
+						<b className="text-ink">{data.settings?.base ?? '—'}</b>
 					</div>
+					{/* На мобильном вкладки уходят на вторую строку, а ⚙ остаётся в первой */}
 					<nav
-						className="flex flex-wrap gap-2"
+						className="flex flex-wrap gap-2 max-sm:order-last max-sm:w-full"
 						aria-label="Разделы"
 					>
 						{TABS.map((t) => (
@@ -211,8 +121,16 @@ export function Shell({ children }: { children: ReactNode }) {
 								{t.label}
 							</Link>
 						))}
-						<HoldLogout onDone={logout} />
 					</nav>
+					<Link
+						href="/settings"
+						className="tb text-muted"
+						aria-label="Настройки"
+						title="Настройки (Ctrl + ,)"
+						aria-current={pathname === '/settings' ? 'page' : undefined}
+					>
+						⚙
+					</Link>
 				</header>
 				{status === 'ready' && data.settings ? (
 					<MetricsBar data={data} />

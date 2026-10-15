@@ -16,7 +16,7 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-/** Применяет сохранённую тему до первой отрисовки, чтобы не мигала тема по умолчанию. Ключ — как в ThemeToggle */
+/** Применяет сохранённую тему до первой отрисовки, чтобы не мигала тема по умолчанию. Ключ — как в components/settings/ThemeSwitch.tsx */
 const themeScript = `try{var t=localStorage.getItem("ft:theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

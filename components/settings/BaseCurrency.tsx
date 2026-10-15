@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useTracker } from "./TrackerProvider";
-import { downloadExport } from "./ImportExport";
+import { useTracker } from "../TrackerProvider";
+import { downloadExport } from "../ImportExport";
 import { rebaseData, type LimitRounding } from "@/lib/rebase";
 import type { TrackerData } from "@/lib/types";
 import { activeCats, amountChars, curMonthKey, fmt, fmtRate, parseAmount, termName, todayStr } from "@/lib/utils";
@@ -80,9 +80,8 @@ export function BaseCurrency() {
   };
 
   return (
-    <div className="md:col-span-2">
-      <h3 className="lbl">Base currency</h3>
-      <p className="mt-2 uppercase">
+    <div>
+      <p className="uppercase">
         Текущая: <b>{st.base}</b>
       </p>
 
