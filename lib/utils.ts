@@ -1,4 +1,4 @@
-import type { Category, Expense, IncomeSource, MonthDoc, Settings } from "./types";
+import type { Category, Expense, IncomeSource, Settings } from "./types";
 
 export const uid = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -16,23 +16,22 @@ export const todayStr = () => {
   const d = new Date();
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
-export const monthKeyOf = (date: string) => "m-" + date.slice(0, 7);
+/** Месяц YYYY-MM — ключ во всех данных */
+export const monthKeyOf = (date: string) => date.slice(0, 7);
 export const curMonthKey = () => monthKeyOf(todayStr());
-/** Ключ документа поступлений: i-2026-10 */
-export const incomeKeyOf = (date: string) => "i-" + date.slice(0, 7);
 
 export const MONTHS = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
 export const MONTHS_SHORT = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
 export const monthTitle = (key: string) => {
-  const [y, m] = key.slice(2).split("-");
+  const [y, m] = key.split("-");
   return `${MONTHS[+m - 1]} ${y}`;
 };
 export const shiftMonth = (key: string, delta: number) => {
-  let [y, m] = key.slice(2).split("-").map(Number);
+  let [y, m] = key.split("-").map(Number);
   m += delta;
   while (m < 1) { m += 12; y--; }
   while (m > 12) { m -= 12; y++; }
-  return `m-${y}-${pad(m)}`;
+  return `${y}-${pad(m)}`;
 };
 
 /** «1 250,50», «450+120», «500-50» → число; null — пусто; NaN — мусор */
@@ -64,12 +63,15 @@ export const DEFAULT_INCOME_SOURCES: IncomeSource[] = [
 ];
 export const incomeSources = (s: Settings | null): IncomeSource[] => s?.incomeSources ?? DEFAULT_INCOME_SOURCES;
 
-export const activeCats = (s: Settings | null): Category[] => (s?.categories ?? []).filter((c) => !c.archived);
+/** Действующие (не удалённые) категории из списка */
+export const liveCats = (cats: Category[] | undefined): Category[] => (cats ?? []).filter((c) => !c.archived);
+/** Семейные категории */
+export const activeCats = (s: Settings | null): Category[] => liveCats(s?.familyCategories);
 
 /** Недавно использованные категории первыми; неиспользованные — в исходном порядке после них */
-export function byRecentUse(cats: Category[], months: Record<string, MonthDoc>): Category[] {
+export function byRecentUse(cats: Category[], months: Record<string, Expense[]>): Category[] {
   const last: Record<string, number> = {};
-  for (const m of Object.values(months)) for (const e of m.expenses) last[e.catId] = Math.max(last[e.catId] ?? 0, e.ts);
+  for (const list of Object.values(months)) for (const e of list) last[e.catId] = Math.max(last[e.catId] ?? 0, e.ts);
   return [...cats].sort((a, b) => (last[b.id] ?? 0) - (last[a.id] ?? 0));
 }
 
@@ -79,7 +81,8 @@ export function spentByCat(expenses: Expense[]): Record<string, number> {
   return m;
 }
 
-export function defaultSettings(base: string): Settings {
+/** Первая настройка: семейные категории с лимитами по умолчанию */
+export function defaultSettings(base: string): Omit<Settings, "version"> {
   const table: Record<string, Record<string, number>> = {
     RSD: { EUR: 117.2, USD: 100.5 },
     EUR: { RSD: 0.0085, USD: 0.86 },
@@ -95,5 +98,5 @@ export function defaultSettings(base: string): Settings {
     ["Продукты", 40000], ["Кафе и рестораны", 15000], ["Транспорт", 6000], ["Дом и связь", 20000],
     ["Здоровье", 8000], ["Развлечения", 10000], ["Одежда", 10000], ["Прочее", 8000],
   ];
-  return { base, currencies, rates, categories: names.map(([name, l]) => ({ id: uid(), name, limit: lim(l) })) };
+  return { base, currencies, rates, familyCategories: names.map(([name, l]) => ({ id: uid(), name, limit: lim(l) })), schemaVersion: 2 };
 }

@@ -1,18 +1,29 @@
 export type Category = { id: string; name: string; limit: number; archived?: boolean };
 
+/** Семейная трата — общие лимиты, видят оба; личная — свои категории, видит только автор */
+export type Scope = "family" | "personal";
+
+/** Семейные настройки: ft:settings */
 export type Settings = {
   base: string;
   currencies: string[];
-  /** Последний введённый курс: 1 единица валюты = rate базовой валюты */
+  /** Последний известный курс: 1 единица валюты = rate базовой валюты */
   rates: Record<string, number | null>;
-  categories: Category[];
+  familyCategories: Category[];
   /** Источники поступлений. Нет поля — используются DEFAULT_INCOME_SOURCES */
   incomeSources?: IncomeSource[];
   /** Дата последнего автообновления rates из ExchangeRate-API, YYYY-MM-DD */
   ratesUpdatedAt?: string;
   /** Смены базовой валюты: rate — сколько from стоило 1 to на момент смены */
   baseHistory?: { from: string; to: string; rate: number; at: string }[];
+  /** 2 — данные в семейном формате (после /api/migrate-v2 или новой установки) */
+  schemaVersion?: number;
+  /** Версия для записи с проверкой (CAS): растёт на 1 при каждом сохранении */
+  version: number;
 };
+
+/** Личные настройки пользователя: ft:u:<id>:settings */
+export type UserSettings = { personalCategories: Category[]; version: number };
 
 export type Expense = {
   id: string;
@@ -25,9 +36,10 @@ export type Expense = {
   note: string;
   date: string; // YYYY-MM-DD
   ts: number;
+  scope: Scope;
+  /** Выставляет сервер из сессии */
+  authorId: string;
 };
-
-export type MonthDoc = { expenses: Expense[] };
 
 export type Income = {
   id: string;
@@ -39,18 +51,41 @@ export type Income = {
   note: string;
   date: string; // YYYY-MM-DD
   ts: number;
+  /** Выставляет сервер из сессии */
+  authorId: string;
 };
-export type IncomeMonthDoc = { items: Income[] };
 export type IncomeSource = { id: string; name: string };
 
 export type GoalOp = { id: string; amount: number; date: string; ts: number };
 export type Goal = { id: string; name: string; target: number; ops: GoalOp[] };
-export type GoalsDoc = { items: Goal[] };
+/** ft:goals — общие копилки, запись с проверкой версии */
+export type GoalsDoc = { items: Goal[]; version: number };
 
+export type User = { id: string; name: string };
+
+/** Месяц YYYY-MM */
+export type MonthKey = string;
+
+/** Ответ GET /api/data: только то, что видно текущему пользователю */
 export type TrackerData = {
+  me: User;
+  partner: User;
   settings: Settings | null;
+  mySettings: UserSettings;
   goals: Goal[];
-  months: Record<string, MonthDoc>;
-  /** Поступления по месяцам: i-2026-10 */
-  incomes: Record<string, IncomeMonthDoc>;
+  goalsVersion: number;
+  familyExpenses: Record<MonthKey, Expense[]>;
+  myExpenses: Record<MonthKey, Expense[]>;
+  incomes: Record<MonthKey, Income[]>;
+  /** Личные траты партнёра — ТОЛЬКО суммы base за месяц */
+  partnerPersonalTotals: Record<MonthKey, number>;
+  /** То же по дням месяца ("1".."31") — для честного сравнения периодов; без записей и категорий */
+  partnerPersonalDaily: Record<MonthKey, Record<string, number>>;
+  /** Есть данные старого формата, ещё не перенесённые в семейный; owner — кто запускает перенос */
+  migration?: { pending: true; owner: User };
 };
+
+// ---------- Формат до семейного бюджета: читается только миграцией ----------
+export type LegacyExpense = Omit<Expense, "scope" | "authorId">;
+export type LegacyIncome = Omit<Income, "authorId">;
+export type LegacySettings = Omit<Settings, "familyCategories" | "version" | "schemaVersion"> & { categories: Category[] };

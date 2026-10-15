@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTracker } from '../TrackerProvider'
 import { amountChars, fmt, parseAmount, termName, todayStr } from '@/lib/utils'
 
@@ -29,7 +29,7 @@ const MODE_UI: Record<
 
 /** Общее состояние форм трат и поступлений. Последняя валюта помнится в localStorage под curKey */
 export function useEntryForm(curKey: string) {
-	const { data, setSettings } = useTracker()
+	const { data, updateRates } = useTracker()
 	const st = data.settings!
 	const [cur, setCurState] = useState(st.base)
 	const [amount, setAmount] = useState('')
@@ -84,10 +84,7 @@ export function useEntryForm(curKey: string) {
 			return void setError(`Укажите курс ${currency} к ${st.base}.`)
 
 		if (isForeign && st.rates[currency] !== usedRate) {
-			setSettings((s) => ({
-				...s!,
-				rates: { ...s!.rates, [currency]: usedRate }
-			}))
+			updateRates({ [currency]: usedRate! })
 		}
 		return {
 			amount: a,
@@ -157,6 +154,8 @@ type FormProps = {
 	onPick: (id: string) => void
 	/** Сумма начата с «+» — переключиться на доход */
 	onPlus: () => void
+	/** Что показать вместо пустой сетки (нет личных категорий) */
+	empty?: ReactNode
 	onSubmit: () => void
 }
 
@@ -168,6 +167,7 @@ export function EntryForm({
 	selectedId,
 	onPick,
 	onPlus,
+	empty,
 	onSubmit
 }: FormProps) {
 	const { st, currency, isForeign, amountRef } = form
@@ -249,12 +249,10 @@ export function EntryForm({
 				// МОЖНО СКЛАДЫВАТЬ: 450+120
 			</p>
 
-			<h2 className="sec mt-8">
-				{ui.optionsTitle}{' '}
-				<span className="font-normal text-muted2">
-					(Alt + 1..{Math.min(9, options.length)})
-				</span>
-			</h2>
+			<h2 className="sec mt-8">{ui.optionsTitle}</h2>
+			{options.length === 0 && empty ? (
+				<div className="mt-3">{empty}</div>
+			) : (
 			<div className={`mt-3 grid gap-2 ${ui.grid}`}>
 				{options.map((o, i) => (
 					<button
@@ -281,6 +279,7 @@ export function EntryForm({
 					</button>
 				))}
 			</div>
+			)}
 
 			<div className="mt-8 flex flex-wrap items-end gap-x-6 gap-y-4">
 				<div className="flex min-w-[240px] flex-[2_1_240px] items-center gap-3">

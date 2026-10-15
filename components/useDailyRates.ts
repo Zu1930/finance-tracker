@@ -10,7 +10,7 @@ import { todayStr } from '@/lib/utils'
  * Ошибка сервиса не мешает работе: остаются прежние курсы.
  */
 export function useDailyRates() {
-	const { status, data, setSettings } = useTracker()
+	const { status, data, updateRates } = useTracker()
 	const st = data.settings
 	// Одна попытка на набор «день + база + валюты» за сессию, чтобы не долбить API при ошибке
 	const tried = useRef('')
@@ -31,17 +31,9 @@ export function useDailyRates() {
 			.then((r) => (r.ok ? r.json() : null))
 			.then((json: { rates: Record<string, number> } | null) => {
 				if (!json) return
-				setSettings((s) =>
-					// Пока ждали ответ, базу могли сменить — тогда курсы уже не к той валюте
-					s!.base !== base
-						? s!
-						: {
-								...s!,
-								rates: { ...s!.rates, ...json.rates },
-								ratesUpdatedAt: today
-							}
-				)
+				// Пока ждали ответ, базу могли сменить — тогда курсы уже не к той валюте
+				updateRates(json.rates, today, base)
 			})
 			.catch(() => {})
-	}, [status, st, setSettings])
+	}, [status, st, updateRates])
 }

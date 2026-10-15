@@ -2,16 +2,17 @@
 
 import { useState } from "react";
 import { useTracker } from "../TrackerProvider";
-import { downloadExport } from "../ImportExport";
+import { downloadJson } from "../ImportExport";
 import { rebaseData, type LimitRounding } from "@/lib/rebase";
+import { monthExpense } from "@/lib/metrics";
 import type { TrackerData } from "@/lib/types";
-import { activeCats, amountChars, curMonthKey, fmt, fmtRate, parseAmount, termName, todayStr } from "@/lib/utils";
+import { activeCats, liveCats, amountChars, curMonthKey, fmt, fmtRate, parseAmount, termName, todayStr } from "@/lib/utils";
 
 const ROUNDINGS: LimitRounding[] = [0, 1, 10, 100];
 const defaultRounding = (cur: string): LimitRounding => (cur === "EUR" || cur === "USD" ? 10 : 100);
 
 const goalsTotal = (d: TrackerData) => d.goals.reduce((a, g) => a + g.ops.reduce((b, o) => b + o.amount, 0), 0);
-const monthSpent = (d: TrackerData) => (d.months[curMonthKey()]?.expenses ?? []).reduce((a, e) => a + e.base, 0);
+const monthSpent = (d: TrackerData) => monthExpense(d, curMonthKey());
 
 /** Смена базовой валюты: выбор валюты и курса, превью пересчёта, применение через /api/rebase */
 export function BaseCurrency() {
@@ -46,7 +47,7 @@ export function BaseCurrency() {
 
   const apply = async () => {
     if (!ready || busy) return;
-    downloadExport(data, `traty-backup-before-${to}-${todayStr()}.json`);
+    downloadJson({ version: 2, ...data }, `traty-backup-before-${to}-${todayStr()}.json`);
     const ok = window.confirm(
       `Все суммы будут пересчитаны по курсу 1 ${to} = ${fmtRate(params.rate)} ${st.base}. Резервная копия скачана. Продолжить?`,
     );
@@ -137,11 +138,15 @@ export function BaseCurrency() {
 
           {preview && (
             <ul className="mt-4 border-t border-dashed border-line2 pt-3" aria-label="Превью пересчёта">
-              {activeCats(preview.settings).map((c) => (
+              {[
+                ...activeCats(preview.settings).map((c) => ({ c, was: st.familyCategories, prefix: "" })),
+                // Свои личные лимиты тоже пересчитываются; личные партнёра сервер пересчитает так же, но здесь их не видно
+                ...liveCats(preview.mySettings.personalCategories).map((c) => ({ c, was: data.mySettings.personalCategories, prefix: "ЛИЧНОЕ · " })),
+              ].map(({ c, was, prefix }) => (
                 <li key={c.id} className="flex justify-between gap-4 py-0.5">
-                  <span className="min-w-0 truncate">{termName(c.name)}</span>
+                  <span className="min-w-0 truncate">{prefix}{termName(c.name)}</span>
                   <span className="shrink-0 text-muted">
-                    {fmt(st.categories.find((o) => o.id === c.id)?.limit ?? 0)} {st.base} → <b className="text-ink">{fmt(c.limit)} {to}</b>
+                    {fmt(was.find((o) => o.id === c.id)?.limit ?? 0)} {st.base} → <b className="text-ink">{fmt(c.limit)} {to}</b>
                   </span>
                 </li>
               ))}

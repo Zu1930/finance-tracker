@@ -44,11 +44,23 @@ export function ChartView() {
 
   const keys: string[] = [];
   for (let i = 0, k = curMonthKey(); i < range; i++, k = shiftMonth(k, -1)) keys.unshift(k);
-  const perMonth = keys.map((k) => spentByCat(data.months[k]?.expenses ?? []));
-  const series = monthlySeries(data, keys.map((k) => k.slice(2)));
-  const used = st.categories.filter((c) => !c.archived || perMonth.some((d) => d[c.id]));
+  // Личное — двумя сегментами по людям: у меня из моих записей, у партнёра — только сумма за месяц
+  const people = [data.me, data.partner].sort((a, b) => a.id.localeCompare(b.id));
+  const personalId = (userId: string) => `personal:${userId}`;
+  const perMonth = keys.map((k) => ({
+    ...spentByCat(data.familyExpenses[k] ?? []),
+    [personalId(data.me.id)]: (data.myExpenses[k] ?? []).reduce((a, e) => a + e.base, 0),
+    [personalId(data.partner.id)]: data.partnerPersonalTotals[k] ?? 0,
+  }));
+  const series = monthlySeries(data, keys);
+  const personal = people
+    .map((u) => ({ id: personalId(u.id), name: `Личное · ${u.name}`, limit: 0 }))
+    .filter((c) => perMonth.some((d) => d[c.id]));
+  const used = [...st.familyCategories.filter((c) => !c.archived || perMonth.some((d) => d[c.id])), ...personal];
   const color: Record<string, string> = {};
-  st.categories.forEach((c, i) => (color[c.id] = catColor(i)));
+  st.familyCategories.forEach((c, i) => (color[c.id] = catColor(i)));
+  // Цветов категорий 8 и они у семейных; личное — нейтральными токенами, порядок по id одинаков у обоих
+  people.forEach((u, i) => (color[personalId(u.id)] = i === 0 ? "var(--muted)" : "var(--dim)"));
   const limitSum = activeCats(st).reduce((a, c) => a + c.limit, 0);
 
   // Левая ось: расходы, лимиты и доходы включённых слоёв
@@ -120,7 +132,7 @@ export function ChartView() {
             const p = series[i];
             const x = L + i * slot + (slot - bw) / 2;
             let acc = 0;
-            const [yy, mm] = k.slice(2).split("-");
+            const [yy, mm] = k.split("-");
             // Подписи расхода и дохода рядом — меньшая уходит под свою отметку, чтобы не наложиться
             const yE = y(p.expense), yI = y(p.income);
             const clash = on.expense && on.income && p.expense > 0 && p.income > 0 && Math.abs(yE - yI) < 16;
@@ -202,7 +214,8 @@ export function ChartView() {
         {used.map((c) => (
           <li key={c.id} className="flex items-baseline gap-2 py-0.5">
             <span aria-hidden="true" style={{ color: color[c.id] }}>■</span>
-            <span className="shrink-0">{termName(c.name)}</span>
+            {/* Личные сегменты — не категории: имя человека без замены пробелов на _ */}
+            <span className="shrink-0 uppercase">{c.id.startsWith("personal:") ? c.name : termName(c.name)}</span>
             <span aria-hidden="true" className="min-w-4 flex-1 overflow-hidden whitespace-nowrap text-dim">{".".repeat(80)}</span>
             <b className="shrink-0">{fmt(periodTotal[c.id] ?? 0)}</b>
           </li>

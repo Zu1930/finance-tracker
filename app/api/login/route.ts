@@ -1,21 +1,16 @@
 import { NextResponse } from "next/server";
-import { SESSION_COOKIE, safeEqual, sessionToken } from "@/lib/auth";
+import { SESSION_COOKIE, envCredentials, safeEqual, signSession } from "@/lib/session";
 
+/** Вход: { userId, password } → cookie сессии этого пользователя */
 export async function POST(req: Request) {
-  const expected = await sessionToken();
-  if (!expected) {
-    return NextResponse.json(
-      { error: "На сервере не заданы APP_PASSWORD и SESSION_SECRET." },
-      { status: 500 },
-    );
-  }
-  const { password } = (await req.json().catch(() => ({}))) as { password?: unknown };
-  if (typeof password !== "string" || !safeEqual(password, process.env.APP_PASSWORD!)) {
+  const { userId, password } = (await req.json().catch(() => ({}))) as { userId?: unknown; password?: unknown };
+  const creds = typeof userId === "string" ? envCredentials(userId) : null;
+  if (!creds || typeof password !== "string" || !safeEqual(password, creds.password)) {
     await new Promise((r) => setTimeout(r, 600)); // притормозить перебор
     return NextResponse.json({ error: "Неверный пароль." }, { status: 401 });
   }
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(SESSION_COOKIE, expected, {
+  res.cookies.set(SESSION_COOKIE, await signSession(userId as string, creds), {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",

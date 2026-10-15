@@ -5,15 +5,19 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, type ReactNode } from 'react'
 import { useTracker } from './TrackerProvider'
 import { Setup } from './Setup'
+import { Migration } from './Migration'
 import { useDailyRates } from './useDailyRates'
+import { ThemeToggle } from './settings/ThemeSwitch'
 import {
 	activeCats,
+	liveCats,
 	curMonthKey,
 	fmt,
 	monthTitle,
 	spentByCat
 } from '@/lib/utils'
-import type { TrackerData } from '@/lib/types'
+import type { Category, Expense, TrackerData } from '@/lib/types'
+import { monthExpense } from '@/lib/metrics'
 
 const TABS = [
 	{ href: '/', label: 'Ввод' },
@@ -22,27 +26,31 @@ const TABS = [
 	{ href: '/chart', label: 'График' }
 ]
 
-/** Остаток по лимитам, средний расход в день и номер дня — для полосы метрик */
+/** Остаток по лимитам (семья и мои личные), средний расход семьи в день и номер дня — для полосы метрик */
 function MetricsBar({ data }: { data: TrackerData }) {
 	const st = data.settings!
 	const key = curMonthKey()
-	const expenses = data.months[key]?.expenses ?? []
-	const spent = spentByCat(expenses)
-	const cats = activeCats(st)
-	const left = cats.reduce((a, c) => a + c.limit - (spent[c.id] ?? 0), 0)
+	const left = (cats: Category[], list: Expense[]) => {
+		const spent = spentByCat(list)
+		return cats.reduce((a, c) => a + c.limit - (spent[c.id] ?? 0), 0)
+	}
+	const family = left(activeCats(st), data.familyExpenses[key] ?? [])
+	const mine = left(liveCats(data.mySettings.personalCategories), data.myExpenses[key] ?? [])
 	const now = new Date()
 	const day = now.getDate()
 	const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-	const pace = expenses.reduce((a, e) => a + e.base, 0) / day
+	// Темп — по всей семье: семейные, мои личные и личные суммы партнёра
+	const pace = monthExpense(data, key) / day
+	const val = (n: number) => (
+		<b className={n < 0 ? 'text-bad' : 'text-ink'}>
+			{fmt(n)} {st.base}
+		</b>
+	)
 
 	return (
 		<div className="flex flex-wrap justify-between gap-x-6 gap-y-1 border-y border-dashed border-line py-3 text-muted uppercase">
 			<span>
-				[ ОСТАТОК ПО ЛИМИТАМ:{' '}
-				<b className={left < 0 ? 'text-bad' : 'text-ink'}>
-					{fmt(left)} {st.base}
-				</b>{' '}
-				]
+				[ Остаток: семья {val(family)} // моё {val(mine)} ]
 			</span>
 			<span>
 				[ ТЕМП:{' '}
@@ -95,16 +103,19 @@ export function Shell({ children }: { children: ReactNode }) {
 				</button>
 			</div>
 		)
-	else if (!data.settings) body = <Setup />
+	else if (!data.settings) body = data.migration ? <Migration /> : <Setup />
 	else body = children
 
 	return (
 		<div className="mx-auto max-w-280">
 			<div className="px-4 pt-3 pb-6 sm:px-12 sm:pt-5 sm:pb-10">
 				<header className="flex flex-wrap items-center gap-x-6 gap-y-3 pb-4">
-					<div className="lbl mr-auto">
-						SPEND.LOG // BASE:{' '}
-						<b className="text-ink">{data.settings?.base ?? '—'}</b>
+					<div className="mr-auto flex items-center gap-4">
+						<div className="lbl">
+							SPEND.LOG // BASE:{' '}
+							<b className="text-ink">{data.settings?.base ?? '—'}</b>
+						</div>
+						<ThemeToggle />
 					</div>
 					{/* На мобильном вкладки уходят на вторую строку, а ⚙ остаётся в первой */}
 					<nav
@@ -129,7 +140,7 @@ export function Shell({ children }: { children: ReactNode }) {
 						title="Настройки (Ctrl + ,)"
 						aria-current={pathname === '/settings' ? 'page' : undefined}
 					>
-						⚙
+						CFG
 					</Link>
 				</header>
 				{status === 'ready' && data.settings ? (

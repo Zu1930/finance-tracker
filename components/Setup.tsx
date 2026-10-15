@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useTracker } from "./TrackerProvider";
 import { defaultSettings } from "@/lib/utils";
-import { ImportButton } from "./ImportExport";
 
 export function Setup() {
   const { setSettings } = useTracker();
@@ -25,8 +24,6 @@ export function Setup() {
         </select>
         <button className="tb font-bold" onClick={() => setSettings(() => defaultSettings(base))}>Создать категории</button>
       </div>
-      <p className="mt-8 mb-3 text-muted2">// Уже вели трекер в Claude? Загрузите экспорт оттуда:</p>
-      <ImportButton />
     </section>
   );
 }

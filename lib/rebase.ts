@@ -3,7 +3,8 @@
  * и сервер (/api/rebase), и превью на клиенте, и тесты (lib/rebase.test.mjs).
  * Здесь только type-импорты: файл запускается напрямую через node --test.
  */
-import type { Goal, Settings, TrackerData } from "./types";
+import type { Category, Goal, Settings, TrackerData, UserSettings } from "./types.ts";
+import type { RawStore } from "./store.ts";
 
 export type LimitRounding = 0 | 1 | 10 | 100;
 
@@ -32,6 +33,15 @@ export function rebaseEntry<T extends Entry>(e: T, p: RebaseParams): T {
   return { ...e, rate, base: round2(e.amount * rate) };
 }
 
+const rebaseCategories = (cats: Category[], p: RebaseParams) =>
+  cats.map((c) => ({ ...c, limit: roundLimit(c.limit / p.rate, p.limitRounding) }));
+
+/** Личные лимиты пересчитываются с тем же шагом округления, что и семейные */
+export const rebaseUserSettings = (u: UserSettings, p: RebaseParams): UserSettings => ({
+  ...u,
+  personalCategories: rebaseCategories(u.personalCategories, p),
+});
+
 export function rebaseSettings(s: Settings, p: RebaseParams, at: string): Settings {
   const rates: Settings["rates"] = {};
   for (const [c, r] of Object.entries(s.rates)) {
@@ -43,7 +53,7 @@ export function rebaseSettings(s: Settings, p: RebaseParams, at: string): Settin
     base: p.to,
     currencies: [p.to, ...s.currencies.filter((c) => c !== p.to)],
     rates,
-    categories: s.categories.map((c) => ({ ...c, limit: roundLimit(c.limit / p.rate, p.limitRounding) })),
+    familyCategories: rebaseCategories(s.familyCategories, p),
     baseHistory: [...(s.baseHistory ?? []), { from: p.from, to: p.to, rate: p.rate, at }],
   };
 }
@@ -55,17 +65,49 @@ export const rebaseGoals = (goals: Goal[], p: RebaseParams): Goal[] =>
     ops: g.ops.map((o) => ({ ...o, amount: round2(o.amount / p.rate) })),
   }));
 
-/** Весь учёт в новой базе. at — дата смены YYYY-MM-DD для baseHistory */
+/**
+ * Всё хранилище в новой базе: семейное и личные данные ОБОИХ пользователей (сервер, /api/rebase).
+ * Версии не трогает — их поднимает запись
+ */
+export function rebaseStore(raw: RawStore, p: RebaseParams, at: string): RawStore {
+  if (!raw.settings) throw new Error("Нет настроек для пересчёта");
+  const hashes: RawStore["hashes"] = {};
+  for (const [key, hash] of Object.entries(raw.hashes)) {
+    hashes[key] = Object.fromEntries(Object.entries(hash).map(([id, e]) => [id, rebaseEntry(e, p)]));
+  }
+  const userSettings: RawStore["userSettings"] = {};
+  for (const [id, u] of Object.entries(raw.userSettings)) userSettings[id] = u && rebaseUserSettings(u, p);
+  return {
+    settings: rebaseSettings(raw.settings, p, at),
+    goals: raw.goals && { ...raw.goals, items: rebaseGoals(raw.goals.items, p) },
+    userSettings,
+    hashes,
+  };
+}
+
+const mapMonths = <T extends { amount: number; currency: string; rate: number; base: number }>(
+  m: Record<string, T[]>,
+  p: RebaseParams,
+) => Object.fromEntries(Object.entries(m).map(([k, list]) => [k, list.map((e) => rebaseEntry(e, p))]));
+
+/**
+ * Превью на клиенте — то, что видно текущему пользователю. Личные суммы партнёра делятся на курс:
+ * его записи в новой валюте сервер сохранит точными, поэтому здесь возможна разница в копейках
+ */
 export function rebaseData(data: TrackerData, p: RebaseParams, at: string): TrackerData {
   if (!data.settings) throw new Error("Нет настроек для пересчёта");
-  const months: TrackerData["months"] = {};
-  for (const [k, m] of Object.entries(data.months)) months[k] = { expenses: m.expenses.map((e) => rebaseEntry(e, p)) };
-  const incomes: TrackerData["incomes"] = {};
-  for (const [k, m] of Object.entries(data.incomes)) incomes[k] = { items: m.items.map((i) => rebaseEntry(i, p)) };
+  const div = (v: number) => round2(v / p.rate);
   return {
+    ...data,
     settings: rebaseSettings(data.settings, p, at),
+    mySettings: rebaseUserSettings(data.mySettings, p),
     goals: rebaseGoals(data.goals, p),
-    months,
-    incomes,
+    familyExpenses: mapMonths(data.familyExpenses, p),
+    myExpenses: mapMonths(data.myExpenses, p),
+    incomes: mapMonths(data.incomes, p),
+    partnerPersonalTotals: Object.fromEntries(Object.entries(data.partnerPersonalTotals).map(([k, v]) => [k, div(v)])),
+    partnerPersonalDaily: Object.fromEntries(
+      Object.entries(data.partnerPersonalDaily).map(([k, d]) => [k, Object.fromEntries(Object.entries(d).map(([day, v]) => [day, div(v)]))]),
+    ),
   };
 }

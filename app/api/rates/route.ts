@@ -1,3 +1,4 @@
+import { requireUser, unauthorized } from "@/lib/session";
 import { NextResponse } from "next/server";
 import { invertRates } from "@/lib/fx";
 
@@ -7,6 +8,7 @@ const REVALIDATE_S = 6 * 60 * 60;
 
 /** Курсы на сегодня: GET /api/rates?base=RSD&symbols=EUR,USD → { rates: { EUR: 117.44 }, updated: "2026-10-15" } */
 export async function GET(req: Request) {
+  if (!(await requireUser(req))) return unauthorized();
   const params = new URL(req.url).searchParams;
   const base = params.get("base") ?? "";
   const symbols = (params.get("symbols") ?? "").split(",").filter(Boolean);

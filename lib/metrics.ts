@@ -2,8 +2,9 @@
  * Сравнительные показатели доходов и расходов. Чистые функции: на вход TrackerData и «сегодня»
  * строкой YYYY-MM-DD, чтобы тесты не зависели от часов. Все суммы — в базовой валюте (поле base).
  * Месяцы — ключи YYYY-MM. Только type-импорты: файл запускается напрямую через node --test.
+ * Считается по семье: семейные траты + мои личные + личные суммы партнёра + доходы обоих.
  */
-import type { TrackerData } from "./types";
+import type { TrackerData } from "./types.ts";
 
 /** Короткие названия месяцев для таблиц: СЕНТ, а не СЕН, чтобы не путать с «сен» на графике */
 export const MONTHS_ABBR = ["ЯНВ", "ФЕВ", "МАР", "АПР", "МАЙ", "ИЮН", "ИЮЛ", "АВГ", "СЕНТ", "ОКТ", "НОЯ", "ДЕК"];
@@ -25,11 +26,17 @@ export const abbr = (key: string) => MONTHS_ABBR[Number(key.slice(5, 7)) - 1];
 const sumBase = (items: { base: number; date: string }[], untilDay?: number) =>
   items.reduce((a, x) => (untilDay === undefined || dayOf(x.date) <= untilDay ? a + x.base : a), 0);
 
-/** Расходы за месяц; untilDay — только записи с 1-го по этот день включительно */
+/** Личные траты партнёра: известны только суммы по дням */
+function partnerSpent(data: TrackerData, key: string, untilDay?: number): number {
+  if (untilDay === undefined) return data.partnerPersonalTotals[key] ?? 0;
+  const daily = data.partnerPersonalDaily[key] ?? {};
+  return Object.entries(daily).reduce((a, [day, v]) => (Number(day) <= untilDay ? a + v : a), 0);
+}
+
+/** Расходы семьи за месяц; untilDay — только записи с 1-го по этот день включительно */
 export const monthExpense = (data: TrackerData, key: string, untilDay?: number) =>
-  sumBase(data.months[`m-${key}`]?.expenses ?? [], untilDay);
-export const monthIncome = (data: TrackerData, key: string, untilDay?: number) =>
-  sumBase(data.incomes[`i-${key}`]?.items ?? [], untilDay);
+  sumBase(data.familyExpenses[key] ?? [], untilDay) + sumBase(data.myExpenses[key] ?? [], untilDay) + partnerSpent(data, key, untilDay);
+export const monthIncome = (data: TrackerData, key: string, untilDay?: number) => sumBase(data.incomes[key] ?? [], untilDay);
 
 /** Ключи n последних полностью завершённых месяцев, от старых к новым (без текущего) */
 export function completedMonths(today: string, n: number): string[] {
@@ -39,7 +46,8 @@ export function completedMonths(today: string, n: number): string[] {
 
 /** Месяц учитывается в средних, только если в нём есть хоть одна трата или поступление */
 const hasRecords = (data: TrackerData, key: string) =>
-  (data.months[`m-${key}`]?.expenses.length ?? 0) + (data.incomes[`i-${key}`]?.items.length ?? 0) > 0;
+  (data.familyExpenses[key]?.length ?? 0) + (data.myExpenses[key]?.length ?? 0) + (data.incomes[key]?.length ?? 0) > 0 ||
+  (data.partnerPersonalTotals[key] ?? 0) > 0;
 
 export type Average = { income: number; expense: number; months: number };
 
@@ -159,3 +167,10 @@ export const fmtChange = (x: number | null) => {
   const p = Math.round(x * 100);
   return `${p > 0 ? "+" : p < 0 ? "−" : ""}${Math.abs(p)}%`;
 };
+
+/** Суммы base по авторам: вклад в семейные траты или доходы */
+export function byAuthor<T extends { base: number; authorId: string }>(items: T[], filter: (x: T) => boolean = () => true) {
+  const out: Record<string, number> = {};
+  for (const x of items) if (filter(x)) out[x.authorId] = (out[x.authorId] ?? 0) + x.base;
+  return out;
+}
