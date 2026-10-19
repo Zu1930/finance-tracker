@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useTracker } from "./TrackerProvider";
 import { useNarrow } from "./AsciiBar";
 import { fmtPct, monthlySeries, savingsRate } from "@/lib/metrics";
-import { MONTHS_SHORT, activeCats, curMonthKey, fmt, monthTitle, shiftMonth, spentByCat, termName } from "@/lib/utils";
+import { MONTHS_SHORT, aliveIn, curMonthKey, limitIn, fmt, monthTitle, shiftMonth, spentByCat, termName } from "@/lib/utils";
 
 /** Цвет категории — токен cat-1…cat-8 по её индексу в списке категорий */
 const catColor = (i: number) => `var(--cat-${(i % 8) + 1})`;
@@ -61,12 +61,14 @@ export function ChartView() {
   st.familyCategories.forEach((c, i) => (color[c.id] = catColor(i)));
   // Цветов категорий 8 и они у семейных; личное — нейтральными токенами, порядок по id одинаков у обоих
   people.forEach((u, i) => (color[personalId(u.id)] = i === 0 ? "var(--muted)" : "var(--dim)"));
-  const limitSum = activeCats(st).reduce((a, c) => a + c.limit, 0);
+  // Сумма лимитов каждого месяца — как действовала тогда; на графике ступеньками
+  const limits = keys.map((k) => st.familyCategories.reduce((a, c) => (aliveIn(c, k) ? a + limitIn(c, k) : a), 0));
+  const limitSum = limits[limits.length - 1];
 
   // Левая ось: расходы, лимиты и доходы включённых слоёв
   const leftMax = Math.max(
     1,
-    ...(on.expense ? [limitSum, ...series.map((p) => p.expense)] : []),
+    ...(on.expense ? [...limits, ...series.map((p) => p.expense)] : []),
     ...(on.income ? series.map((p) => p.income) : []),
   );
   const cums = series.map((p) => p.cumulative);
@@ -179,9 +181,9 @@ export function ChartView() {
             );
           })}
 
-          {on.expense && limitSum > 0 && (
+          {on.expense && limits.some((v) => v > 0) && (
             <>
-              <line x1={L} x2={W - R} y1={y(limitSum)} y2={y(limitSum)} stroke="var(--ink)" strokeDasharray="5 4" strokeWidth={1.5} />
+              <path d={limits.map((v, i) => `${i ? "V" : "M" + L} ${y(v)} H ${L + (i + 1) * slot}`).join(" ")} fill="none" stroke="var(--ink)" strokeDasharray="5 4" strokeWidth={1.5} />
               <text x={W - R} y={y(limitSum) - 6} textAnchor="end" fontSize="12" fill="var(--ink)">СУММА ЛИМИТОВ {fmt(limitSum)}</text>
             </>
           )}

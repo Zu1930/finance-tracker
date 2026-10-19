@@ -34,7 +34,10 @@ export function rebaseEntry<T extends Entry>(e: T, p: RebaseParams): T {
 }
 
 const rebaseCategories = (cats: Category[], p: RebaseParams) =>
-  cats.map((c) => ({ ...c, limit: roundLimit(c.limit / p.rate, p.limitRounding) }));
+  cats.map((c) => {
+    const limit = (n: number) => roundLimit(n / p.rate, p.limitRounding);
+    return { ...c, limit: limit(c.limit), ...(c.history && { history: c.history.map((h) => ({ ...h, limit: limit(h.limit) })) }) };
+  });
 
 /** Личные лимиты пересчитываются с тем же шагом округления, что и семейные */
 export const rebaseUserSettings = (u: UserSettings, p: RebaseParams): UserSettings => ({

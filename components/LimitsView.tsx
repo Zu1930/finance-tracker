@@ -8,19 +8,20 @@ import { AsciiBar } from "./AsciiBar";
 import { Contribution } from "./entry/Contribution";
 import { byAuthor, fmtPct, monthIncome, savingsRate } from "@/lib/metrics";
 import type { Category, Expense } from "@/lib/types";
-import { activeCats, amountChars, curMonthKey, fmt, liveCats, monthTitle, parseAmount, shiftMonth, spentByCat, termName, uid } from "@/lib/utils";
+import { activeCats, amountChars, catsIn, curMonthKey, fmt, liveCats, monthTitle, parseAmount, setLimit, shiftMonth, spentByCat, termName, uid } from "@/lib/utils";
 
 const signed = (n: number) => `${n < 0 ? "−" : "+"}${fmt(Math.abs(n))}`;
 
 export function LimitsView() {
   const { data, month, setMonth, setSettings, setMySettings } = useTracker();
   const st = data.settings!;
-  const familyCats = activeCats(st);
-  const myCats = liveCats(data.mySettings.personalCategories);
   const family = data.familyExpenses[month] ?? [];
   const mine = data.myExpenses[month] ?? [];
   const familySpent = spentByCat(family);
   const mySpent = spentByCat(mine);
+  // Блоки — как было в выбранном месяце; редактор — действующие категории, правки с текущего месяца
+  const familyCats = catsIn(st.familyCategories, month, familySpent);
+  const myCats = catsIn(data.mySettings.personalCategories, month, mySpent);
 
   // Итог семьи — одинаковый у обоих: личное = мои личные + сумма личных партнёра
   const income = monthIncome(data, month);
@@ -89,15 +90,16 @@ export function LimitsView() {
         <div className="max-w-3xl pt-3 pb-2">
           <h3 className="lbl">Семья, {st.base}</h3>
           <CategoryEditor
-            cats={familyCats}
+            cats={activeCats(st)}
             update={(fn) => setSettings((s) => ({ ...s!, familyCategories: fn(s!.familyCategories) }))}
           />
           <h3 className="lbl mt-8">Личное, {st.base}</h3>
           <CategoryEditor
-            cats={myCats}
+            cats={liveCats(data.mySettings.personalCategories)}
             update={(fn) => setMySettings((s) => ({ ...s, personalCategories: fn(s.personalCategories) }))}
           />
-          <p className="mt-6 text-muted uppercase">
+          <p className="mt-6 text-muted uppercase">// Изменения действуют с текущего месяца, прошлые не меняются</p>
+          <p className="mt-2 text-muted uppercase">
             Валюты, основная валюта и данные →{" "}
             <Link href="/settings" className="tb">Настройки</Link>
           </p>
@@ -139,11 +141,11 @@ function LimitBlocks({ cats, spent, contribution }: { cats: Category[]; spent: R
 function CategoryEditor({ cats, update }: { cats: Category[]; update: (fn: (all: Category[]) => Category[]) => void }) {
   const { toast } = useTracker();
   const [newCat, setNewCat] = useState("");
-  const patch = (id: string, p: Partial<Category>) => update((all) => all.map((c) => (c.id === id ? { ...c, ...p } : c)));
+  const patch = (id: string, p: (c: Category) => Category) => update((all) => all.map((c) => (c.id === id ? p(c) : c)));
   const add = () => {
     const name = newCat.trim();
     if (!name) return;
-    update((all) => [...all, { id: uid(), name: name.slice(0, 40), limit: 0 }]);
+    update((all) => [...all, { id: uid(), name: name.slice(0, 40), limit: 0, since: curMonthKey() }]);
     setNewCat("");
   };
 
@@ -152,16 +154,16 @@ function CategoryEditor({ cats, update }: { cats: Category[]; update: (fn: (all:
       {cats.map((c) => (
         <div className="mt-2 grid grid-cols-[minmax(0,1fr)_12ch_auto] items-end gap-4" key={c.id}>
           <CommitInput className="tfield w-full" aria-label="Название категории" value={c.name}
-            onCommit={(v) => { const n = v.trim(); if (!n) return false; patch(c.id, { name: n.slice(0, 40) }); }} />
+            onCommit={(v) => { const n = v.trim(); if (!n) return false; patch(c.id, (x) => ({ ...x, name: n.slice(0, 40) })); }} />
           <CommitInput className="tfield w-full text-right" aria-label={`Лимит, ${c.name}`} inputMode="decimal" sanitize={amountChars} value={String(c.limit)}
             onCommit={(v) => {
               const n = parseAmount(v);
               if (n === null || !(n >= 0)) { toast("Лимит должен быть числом."); return false; }
-              patch(c.id, { limit: n });
+              patch(c.id, (x) => setLimit(x, n, curMonthKey()));
             }} />
           <button className="xb" aria-label={`Удалить категорию ${c.name}`} onClick={() => {
-            patch(c.id, { archived: true });
-            toast(`Категория ${termName(c.name)} удалена`, "Вернуть", () => patch(c.id, { archived: false }));
+            patch(c.id, (x) => ({ ...x, archived: true, archivedFrom: curMonthKey() }));
+            toast(`Категория ${termName(c.name)} удалена`, "Вернуть", () => patch(c.id, ({ archivedFrom: _, ...x }) => ({ ...x, archived: false })));
           }}>×</button>
         </div>
       ))}

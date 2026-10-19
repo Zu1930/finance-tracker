@@ -121,8 +121,17 @@ export function buildView(raw: RawStore, me: User, partner: User): TrackerData {
 
 // ---------- Проверка документов, которые клиент пишет целиком ----------
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+const isMonth = (v: unknown) => typeof v === "string" && /^\d{4}-\d{2}$/.test(v);
+const optMonth = (v: unknown) => v === undefined || isMonth(v);
 const isCategories = (v: unknown) =>
-  Array.isArray(v) && v.every((c) => isObj(c) && typeof c.id === "string" && typeof c.name === "string" && typeof c.limit === "number");
+  Array.isArray(v) &&
+  v.every(
+    (c) =>
+      isObj(c) && typeof c.id === "string" && typeof c.name === "string" && typeof c.limit === "number" &&
+      optMonth(c.since) && optMonth(c.archivedFrom) &&
+      (c.history === undefined ||
+        (Array.isArray(c.history) && c.history.every((h) => isObj(h) && isMonth(h.until) && typeof h.limit === "number"))),
+  );
 
 export const isSettingsData = (v: unknown): v is Omit<Settings, "version"> =>
   isObj(v) && typeof v.base === "string" && Array.isArray(v.currencies) && isObj(v.rates) && isCategories(v.familyCategories);

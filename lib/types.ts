@@ -1,4 +1,14 @@
-export type Category = { id: string; name: string; limit: number; archived?: boolean };
+/** limit — действующий лимит; history — прежние лимиты по месяц until включительно, по возрастанию until.
+ *  since — месяц создания, archivedFrom — месяц удаления: в прошлых месяцах категория видна как была */
+export type Category = {
+  id: string;
+  name: string;
+  limit: number;
+  archived?: boolean;
+  since?: string;
+  archivedFrom?: string;
+  history?: { until: string; limit: number }[];
+};
 
 /** Семейная трата — общие лимиты, видят оба; личная — свои категории, видит только автор */
 export type Scope = "family" | "personal";
