@@ -4,15 +4,13 @@ import { useState } from "react";
 import { useTracker } from "../TrackerProvider";
 import { downloadJson } from "../ImportExport";
 import { rebaseData, type LimitRounding } from "@/lib/rebase";
-import { goalsSaved, monthExpense } from "@/lib/metrics";
+import { monthExpense } from "@/lib/metrics";
 import type { TrackerData } from "@/lib/types";
 import { activeCats, liveCats, amountChars, curMonthKey, fmt, fmtRate, parseAmount, termName, todayStr } from "@/lib/utils";
 
 const ROUNDINGS: LimitRounding[] = [0, 1, 10, 100];
 const defaultRounding = (cur: string): LimitRounding => (cur === "EUR" || cur === "USD" ? 10 : 100);
 
-/** Отложено в копилках в базовой валюте: у копилок своя валюта, переводим по текущему курсу */
-const goalsTotal = (d: TrackerData) => Math.round(goalsSaved(d));
 const monthSpent = (d: TrackerData) => monthExpense(d, curMonthKey());
 
 /** Смена базовой валюты: выбор валюты и курса, превью пересчёта, применение через /api/rebase */
@@ -152,17 +150,12 @@ export function BaseCurrency() {
                 </li>
               ))}
               <li className="mt-2 flex justify-between gap-4 border-t border-dashed border-line2 pt-2">
-                <span className="uppercase">Копилки, всего</span>
-                <span className="shrink-0 text-muted">
-                  {fmt(goalsTotal(data))} {st.base} → <b className="text-ink">{fmt(goalsTotal(preview))} {to}</b>
-                </span>
-              </li>
-              <li className="flex justify-between gap-4 py-0.5">
                 <span className="uppercase">Траты за месяц</span>
                 <span className="shrink-0 text-muted">
                   {fmt(monthSpent(data))} {st.base} → <b className="text-ink">{fmt(monthSpent(preview))} {to}</b>
                 </span>
               </li>
+              <li className="mt-1 text-muted2">// Счета и копилки остаются в своих валютах, история сверок пересчитается</li>
             </ul>
           )}
 

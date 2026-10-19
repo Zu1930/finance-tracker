@@ -8,9 +8,7 @@ import { AsciiBar } from "./AsciiBar";
 import { Contribution } from "./entry/Contribution";
 import { byAuthor, fmtPct, monthIncome, savingsRate } from "@/lib/metrics";
 import type { Category, Expense } from "@/lib/types";
-import { activeCats, amountChars, catsIn, curMonthKey, fmt, liveCats, monthTitle, parseAmount, setLimit, shiftMonth, spentByCat, termName, uid } from "@/lib/utils";
-
-const signed = (n: number) => `${n < 0 ? "−" : "+"}${fmt(Math.abs(n))}`;
+import { activeCats, amountChars, catsIn, curMonthKey, fmt, liveCats, monthTitle, parseAmount, setLimit, shiftMonth, signed, spentByCat, termName, uid } from "@/lib/utils";
 
 export function LimitsView() {
   const { data, month, setMonth, setSettings, setMySettings } = useTracker();

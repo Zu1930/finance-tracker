@@ -26,7 +26,7 @@ export type Settings = {
   ratesUpdatedAt?: string;
   /** Смены базовой валюты: rate — сколько from стоило 1 to на момент смены */
   baseHistory?: { from: string; to: string; rate: number; at: string }[];
-  /** 2 — данные в семейном формате (после /api/migrate-v2 или новой установки) */
+  /** 2 — данные в семейном формате (после /api/migrate-v2 или новой установки); 3 — копилки перенесены в «Сбережения» */
   schemaVersion?: number;
   /** Версия для записи с проверкой (CAS): растёт на 1 при каждом сохранении */
   version: number;
@@ -71,11 +71,93 @@ export type Income = {
 };
 export type IncomeSource = { id: string; name: string };
 
-export type GoalOp = { id: string; amount: number; date: string; ts: number };
-/** target и операции — в валюте копилки; нет currency — копилка в общей base (созданные до выбора валюты) */
-export type Goal = { id: string; name: string; target: number; ops: GoalOp[]; currency?: string };
-/** ft:goals — общие копилки, запись с проверкой версии */
-export type GoalsDoc = { items: Goal[]; version: number };
+// ---------- Копилки до раздела «Сбережения» (ft:goals): читает только миграция v3 ----------
+export type LegacyGoalOp = { id: string; amount: number; date: string; ts: number };
+/** target и операции — в валюте копилки; нет currency — копилка в общей base */
+export type LegacyGoal = { id: string; name: string; target: number; ops: LegacyGoalOp[]; currency?: string };
+export type GoalsDoc = { items: LegacyGoal[]; version: number };
+
+// ---------- Сбережения ----------
+/** Счёт: ft:accounts (семейные) или ft:u:<id>:accounts (личные), поле хеша = id */
+export type Account = {
+  id: string;
+  name: string;
+  currency: string;
+  scope: Scope;
+  /** Только у personal */
+  ownerId?: string;
+  /** Остаток в валюте счёта */
+  balance: number;
+  /** Остаток при создании — точка отсчёта для «факта», пока счёт не попал в сверку */
+  initial: number;
+  updatedAt: string; // ISO
+  updatedBy: string;
+  archived?: boolean;
+  version: number;
+};
+
+/** + выделить, − вернуть; в валюте копилки */
+export type GoalOp = { id: string; amount: number; date: string; ts: number; by: string };
+/** Копилка — часть общих сбережений, отведённая под цель. target и allocated — в валюте копилки */
+export type Goal = {
+  id: string;
+  name: string;
+  target: number;
+  currency: string;
+  allocated: number;
+  scope: Scope;
+  ownerId?: string;
+  ops: GoalOp[];
+  version: number;
+};
+
+/** Суммы в базовой валюте; счета без курса не входят */
+export type Totals = { family: number; byUser: Record<string, number>; all: number };
+
+/** Снимок сверки: ft:recons (ZSET, score = время). Полностью — только на сервере */
+export type Recon = {
+  id: string;
+  at: string; // ISO
+  /** День сверки у пользователя, YYYY-MM-DD: граница периода для трат и доходов */
+  day: string;
+  by: string;
+  /** accountId → остаток в валюте счёта, все счета семьи */
+  balances: Record<string, number>;
+  /** Курсы к базе на момент сверки */
+  rates: Record<string, number>;
+  totals: Totals;
+  /** Доходы и расходы всей семьи с прошлой сверки; null — первая сверка */
+  income: number | null;
+  expense: number | null;
+  expected: number | null;
+  fact: number | null;
+  gap: number | null;
+};
+
+/** Снимок в ответе клиенту: без поштучных остатков */
+export type ReconView = {
+  at: string;
+  day: string;
+  all: number;
+  family: number;
+  mine: number;
+  partner: number;
+  income: number | null;
+  expense: number | null;
+  expected: number | null;
+  fact: number | null;
+  gap: number | null;
+};
+
+export type SavingsView = {
+  accounts: { family: Account[]; mine: Account[] };
+  goals: { family: Goal[]; mine: Goal[] };
+  /** Личное партнёра — только суммы в базовой валюте */
+  partner: { total: number; goalsAllocated: number; lastUpdatedAt: string | null };
+  recons: ReconView[];
+  /** Старые копилки ещё не перенесены; owner — кто запускает перенос */
+  migration?: { goals: number; owner: User };
+};
 
 export type User = { id: string; name: string };
 
@@ -88,8 +170,7 @@ export type TrackerData = {
   partner: User;
   settings: Settings | null;
   mySettings: UserSettings;
-  goals: Goal[];
-  goalsVersion: number;
+  savings: SavingsView;
   familyExpenses: Record<MonthKey, Expense[]>;
   myExpenses: Record<MonthKey, Expense[]>;
   incomes: Record<MonthKey, Income[]>;

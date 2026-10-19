@@ -1,7 +1,8 @@
 import "server-only";
 import { Redis } from "@upstash/redis";
 import { K, parseMonthKey, type RawStore } from "./store";
-import type { Expense, Income, Settings, UserSettings } from "./types";
+import type { RawSavings } from "./savings";
+import type { Account, Expense, Goal, Income, Recon, Settings, UserSettings } from "./types";
 
 let client: Redis | null = null;
 
@@ -39,7 +40,71 @@ export async function readStore(userIds: string[]): Promise<RawStore> {
     keys.forEach((k, i) => (hashes[k] = values[i] ?? {}));
   }
   // Отсутствующий ключ в pipeline приходит как undefined — приводим к null, как обещают типы
-  return { settings: (settings as Settings | null) ?? null, goals: (goals as RawStore["goals"]) ?? null, userSettings, hashes };
+  return { settings: (settings as Settings | null) ?? null, goals: (goals as RawStore["goals"]) ?? null, userSettings, hashes, savings: await readSavings(userIds) };
+}
+
+/** Счета, копилки обоих и все снимки сверок */
+export async function readSavings(userIds: string[]): Promise<RawSavings> {
+  const p = getRedis().pipeline();
+  p.hgetall(K.accounts);
+  p.hgetall(K.goals2);
+  for (const id of userIds) p.hgetall(K.userAccounts(id));
+  for (const id of userIds) p.hgetall(K.userGoals(id));
+  p.zrange(K.recons, 0, -1);
+  const res = (await p.exec()) as unknown[];
+  const n = userIds.length;
+  const hash = <T>(v: unknown) => (v ?? {}) as Record<string, T>;
+  return {
+    accounts: hash<Account>(res[0]),
+    goals: hash<Goal>(res[1]),
+    userAccounts: Object.fromEntries(userIds.map((id, i) => [id, hash<Account>(res[2 + i])])),
+    userGoals: Object.fromEntries(userIds.map((id, i) => [id, hash<Goal>(res[2 + n + i])])),
+    recons: ((res[2 + 2 * n] ?? []) as (Recon | string)[]).map((r) => (typeof r === "string" ? (JSON.parse(r) as Recon) : r)),
+  };
+}
+
+/**
+ * CAS для полей хешей: все записи проверяются по version (поля нет — версия −1), затем пишутся или удаляются,
+ * и при zadd снимок добавляется в ZSET (только если число снимков не изменилось). Всё атомарно в Lua.
+ * ARGV: n, затем по 4 на запись (поле, ожидаемая версия, set|del|check, JSON), затем [score, member, ожидаемый ZCARD]
+ */
+const HASH_CAS_SCRIPT = `
+local n = tonumber(ARGV[1])
+for i = 1, n do
+  local b = 1 + (i - 1) * 4
+  local cur = redis.call('HGET', KEYS[i], ARGV[b + 1])
+  local v = -1
+  if cur then
+    v = 0
+    local ok, doc = pcall(cjson.decode, cur)
+    if ok and type(doc) == 'table' and doc.version then v = tonumber(doc.version) end
+  end
+  if v ~= tonumber(ARGV[b + 2]) then return {0, i} end
+end
+local z = 2 + n * 4
+if #KEYS > n and redis.call('ZCARD', KEYS[n + 1]) ~= tonumber(ARGV[z + 2]) then return {0, 0} end
+for i = 1, n do
+  local b = 1 + (i - 1) * 4
+  if ARGV[b + 3] == 'set' then redis.call('HSET', KEYS[i], ARGV[b + 1], ARGV[b + 4])
+  elseif ARGV[b + 3] == 'del' then redis.call('HDEL', KEYS[i], ARGV[b + 1]) end
+end
+if #KEYS > n then redis.call('ZADD', KEYS[n + 1], ARGV[z], ARGV[z + 1]) end
+return {1, n}
+`;
+
+export type HashOp = { key: string; id: string; expected: number; op: "set" | "del" | "check"; doc?: object };
+
+/** true — записано; false — чья-то версия изменилась (или появился новый снимок) */
+export async function casHashes(ops: HashOp[], zadd?: { key: string; score: number; member: object; count: number }): Promise<boolean> {
+  const keys = ops.map((o) => o.key);
+  const args = [String(ops.length)];
+  for (const o of ops) args.push(o.id, String(o.expected), o.op, o.doc ? JSON.stringify(o.doc) : "");
+  if (zadd) {
+    keys.push(zadd.key);
+    args.push(String(zadd.score), JSON.stringify(zadd.member), String(zadd.count));
+  }
+  const [ok] = (await getRedis().eval(HASH_CAS_SCRIPT, keys, args)) as [number, number];
+  return ok === 1;
 }
 
 /** Добавление поля хеша и регистрация ключа месяца в индексе — одной транзакцией */
@@ -130,6 +195,12 @@ export async function writeStoreAtomic(raw: RawStore): Promise<void> {
   const keys = Object.keys(raw.hashes).filter((k) => Object.keys(raw.hashes[k]).length > 0);
   for (const k of keys) tx.hset(k, raw.hashes[k]);
   if (keys.length) tx.sadd(K.index, keys[0], ...keys.slice(1));
+  // Снимки сверок переписываются целиком (смена базы); счета и копилки в своих валютах не меняются
+  if (raw.savings?.recons.length) {
+    const [first, ...rest] = raw.savings.recons.map((r) => ({ score: Date.parse(r.at), member: JSON.stringify(r) }));
+    tx.del(K.recons);
+    tx.zadd(K.recons, first, ...rest);
+  }
   await tx.exec();
 }
 

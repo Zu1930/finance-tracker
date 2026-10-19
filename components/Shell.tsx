@@ -22,7 +22,7 @@ import { monthExpense } from '@/lib/metrics'
 const TABS = [
 	{ href: '/', label: 'Ввод' },
 	{ href: '/limits', label: 'Лимиты' },
-	{ href: '/goals', label: 'Копилки' },
+	{ href: '/savings', label: 'Сбережения' },
 	{ href: '/chart', label: 'График' }
 ]
 

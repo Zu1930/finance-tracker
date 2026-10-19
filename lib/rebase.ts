@@ -3,7 +3,8 @@
  * и сервер (/api/rebase), и превью на клиенте, и тесты (lib/rebase.test.mjs).
  * Здесь только type-импорты: файл запускается напрямую через node --test.
  */
-import type { Category, Goal, Settings, TrackerData, UserSettings } from "./types.ts";
+import type { Category, LegacyGoal, Settings, TrackerData, UserSettings } from "./types.ts";
+import { rebaseRecon } from "./savings.ts";
 import type { RawStore } from "./store.ts";
 
 export type LimitRounding = 0 | 1 | 10 | 100;
@@ -62,10 +63,10 @@ export function rebaseSettings(s: Settings, p: RebaseParams, at: string): Settin
 }
 
 /**
- * Копилки ведутся в своей валюте и при смене базы не пересчитываются. У старых копилок без валюты она была
- * общей base — фиксируем её явно (from), суммы остаются точными
+ * Старые копилки (до переноса в «Сбережения») ведутся в своей валюте и не пересчитываются. У копилок без валюты
+ * она была общей base — фиксируем её явно (from), чтобы перенос не принял их за новую базу
  */
-export const rebaseGoals = (goals: Goal[], p: RebaseParams): Goal[] => goals.map((g) => (g.currency ? g : { ...g, currency: p.from }));
+export const rebaseGoals = (goals: LegacyGoal[], p: RebaseParams): LegacyGoal[] => goals.map((g) => (g.currency ? g : { ...g, currency: p.from }));
 
 /**
  * Всё хранилище в новой базе: семейное и личные данные ОБОИХ пользователей (сервер, /api/rebase).
@@ -84,6 +85,8 @@ export function rebaseStore(raw: RawStore, p: RebaseParams, at: string): RawStor
     goals: raw.goals && { ...raw.goals, items: rebaseGoals(raw.goals.items, p) },
     userSettings,
     hashes,
+    // Копилки и счета в своих валютах не меняются; суммы снимков сверок — в новую базу
+    savings: raw.savings && { ...raw.savings, recons: raw.savings.recons.map((r) => rebaseRecon(r, p.from, p.to, p.rate)) },
   };
 }
 
@@ -103,7 +106,6 @@ export function rebaseData(data: TrackerData, p: RebaseParams, at: string): Trac
     ...data,
     settings: rebaseSettings(data.settings, p, at),
     mySettings: rebaseUserSettings(data.mySettings, p),
-    goals: rebaseGoals(data.goals, p),
     familyExpenses: mapMonths(data.familyExpenses, p),
     myExpenses: mapMonths(data.myExpenses, p),
     incomes: mapMonths(data.incomes, p),

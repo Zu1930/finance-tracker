@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { Expense, Goal, Income, Settings, TrackerData, UserSettings } from "@/lib/types";
+import type { Expense, Income, Settings, TrackerData, UserSettings } from "@/lib/types";
 import { curMonthKey } from "@/lib/utils";
 
 type ToastState = { id: number; msg: string; actionLabel?: string; action?: () => void } | null;
@@ -20,7 +20,8 @@ type Ctx = {
   restoreEntry: (kind: Kind, e: Entry) => void;
   setSettings: (fn: (s: Settings | null) => Omit<Settings, "version">) => void;
   setMySettings: (fn: (s: UserSettings) => Omit<UserSettings, "version">) => void;
-  setGoals: (fn: (g: Goal[]) => Goal[]) => void;
+  /** Запрос к API сбережений; после него данные перечитываются. null — ошибка (тост уже показан) */
+  api: <T = unknown>(url: string, method: string, body?: unknown) => Promise<T | null>;
   /** Курсы сливаются на сервере без проверки версии: курс — «последний известный» */
   /** base — к какой базе посчитаны курсы: если её успели сменить, курсы отбрасываются */
   updateRates: (rates: Record<string, number>, ratesUpdatedAt?: string, base?: string) => void;
@@ -45,8 +46,7 @@ const EMPTY: TrackerData = {
   partner: NOBODY,
   settings: null,
   mySettings: { personalCategories: [], version: 0 },
-  goals: [],
-  goalsVersion: 0,
+  savings: { accounts: { family: [], mine: [] }, goals: { family: [], mine: [] }, partner: { total: 0, goalsAllocated: 0, lastUpdatedAt: null }, recons: [] },
   familyExpenses: {},
   myExpenses: {},
   incomes: {},
@@ -149,7 +149,7 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
 
   /** Документ с версией: семейные настройки, мои настройки, копилки */
   const saveVersioned = useCallback(
-    (doc: "settings" | "my-settings" | "goals", payload: () => { version: number; data: unknown }, setVersion: (v: number) => void) => {
+    (doc: "settings" | "my-settings", payload: () => { version: number; data: unknown }, setVersion: (v: number) => void) => {
       const run = (queues.current[doc] ?? Promise.resolve()).then(() =>
         track(async () => {
           const res = await send(`/api/${doc}`, "PUT", payload());
@@ -235,13 +235,18 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
         (v) => commit({ ...ref.current, mySettings: { ...ref.current.mySettings, version: v } }),
       );
     },
-    setGoals: (fn) => {
-      commit({ ...ref.current, goals: fn(ref.current.goals) });
-      saveVersioned(
-        "goals",
-        () => ({ version: ref.current.goalsVersion, data: ref.current.goals }),
-        (v) => commit({ ...ref.current, goalsVersion: v }),
-      );
+    api: async <T,>(url: string, method: string, body?: unknown) => {
+      let out: T | null = null;
+      await track(async () => {
+        const res = await send(url, method, body);
+        const j = (await res.json().catch(() => ({}))) as T & { error?: string };
+        if (res.ok) out = j;
+        else toast(j.error ?? SAVE_FAILED);
+        return true;
+      }).then((ok) => ok || toast(SAVE_FAILED));
+      // И после отказа: при 409 на экране должны оказаться свежие данные
+      await reload(true);
+      return out;
     },
     updateRates: (rates, ratesUpdatedAt, base) => {
       const s = ref.current.settings;

@@ -4,7 +4,7 @@
  * Месяцы — ключи YYYY-MM. Только type-импорты: файл запускается напрямую через node --test.
  * Считается по семье: семейные траты + мои личные + личные суммы партнёра + доходы обоих.
  */
-import type { Goal, Settings, TrackerData } from "./types.ts";
+import type { TrackerData } from "./types.ts";
 
 /** Короткие названия месяцев для таблиц: СЕНТ, а не СЕН, чтобы не путать с «сен» на графике */
 export const MONTHS_ABBR = ["ЯНВ", "ФЕВ", "МАР", "АПР", "МАЙ", "ИЮН", "ИЮЛ", "АВГ", "СЕНТ", "ОКТ", "НОЯ", "ДЕК"];
@@ -133,37 +133,6 @@ export function periodCompare(data: TrackerData, today: string): PeriodCompare {
     income: change(monthIncome(data, cur, day), monthIncome(data, prevKey, prevDays)),
     expense: change(monthExpense(data, cur, day), monthExpense(data, prevKey, prevDays)),
   };
-}
-
-/** Сумма в базовой валюте по текущему курсу; null — курса этой валюты нет */
-export function toBase(amount: number, currency: string, settings: Settings | null): number | null {
-  if (!settings || currency === settings.base) return amount;
-  const r = settings.rates[currency];
-  return r ? amount * r : null;
-}
-
-/** Валюта копилки: явная или общая base */
-export const goalCurrency = (g: Goal, settings: Settings | null) => g.currency ?? settings?.base ?? "";
-
-/** Отложено во всех копилках в базовой валюте; missing — валюты копилок без известного курса */
-export function goalsTotal(data: TrackerData): { total: number; missing: string[] } {
-  let total = 0;
-  const missing = new Set<string>();
-  for (const g of data.goals) {
-    const cur = goalCurrency(g, data.settings);
-    const v = toBase(g.ops.reduce((b, o) => b + o.amount, 0), cur, data.settings);
-    if (v === null) missing.add(cur);
-    else total += v;
-  }
-  return { total, missing: [...missing] };
-}
-export const goalsSaved = (data: TrackerData) => goalsTotal(data).total;
-
-/** Запас прочности в месяцах среднего расхода, одна цифра после запятой; null без среднего расхода */
-export function runwayMonths(data: TrackerData, today: string): number | null {
-  const avg = average(data, today);
-  if (!avg || !(avg.expense > 0)) return null;
-  return Math.round((goalsSaved(data) / avg.expense) * 10) / 10;
 }
 
 export type SeriesPoint = { key: string; expense: number; income: number; balance: number; cumulative: number };

@@ -2,12 +2,19 @@
  * Семейное хранилище без Redis: ключи, сборка ответа GET /api/data с учётом приватности, подготовка записей.
  * Чистые функции — их вызывают route handlers и тесты (lib/store.test.mjs).
  */
-import type { Expense, Goal, Income, MonthKey, Scope, Settings, TrackerData, User, UserSettings } from "./types.ts";
+import type { Expense, GoalsDoc, Income, MonthKey, Scope, Settings, TrackerData, User, UserSettings } from "./types.ts";
+import { buildSavings, type RawSavings } from "./savings.ts";
 
 // ---------- Ключи Redis ----------
 export const K = {
   settings: "ft:settings",
+  /** Старые копилки (JSON) — после миграции v3 остаются как резервная копия */
   goals: "ft:goals",
+  accounts: "ft:accounts",
+  userAccounts: (userId: string) => `ft:u:${userId}:accounts`,
+  goals2: "ft:goals2",
+  userGoals: (userId: string) => `ft:u:${userId}:goals`,
+  recons: "ft:recons",
   index: "ft:index",
   family: (m: MonthKey) => `ft:m:${m}`,
   incomes: (m: MonthKey) => `ft:i:${m}`,
@@ -16,6 +23,12 @@ export const K = {
   /** Удалённая запись на время «Вернуть» в тосте */
   trash: (id: string) => `ft:trash:${id}`,
 };
+
+/** Хеш счетов или копилок: личные — только в хеше пользователя из сессии, чужие недоступны по построению */
+export const recordKey = (kind: "accounts" | "goals", scope: Scope, userId: string) =>
+  kind === "accounts"
+    ? scope === "personal" ? K.userAccounts(userId) : K.accounts
+    : scope === "personal" ? K.userGoals(userId) : K.goals2;
 
 export const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 const DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
@@ -70,11 +83,15 @@ export function prepareEntry(kind: Kind, body: unknown, authorId: string): Expen
 /** Всё, что лежит в Redis: настройки, копилки, личные настройки и хеши месяцев по ключам */
 export type RawStore = {
   settings: Settings | null;
-  goals: { items: Goal[]; version: number } | null;
+  goals: GoalsDoc | null;
   userSettings: Record<string, UserSettings | null>;
   /** ключ хеша → { id записи → запись } */
   hashes: Record<string, Record<string, Expense | Income>>;
+  /** Нет — сбережения пусты (тесты и старые вызовы) */
+  savings?: RawSavings;
 };
+
+export const EMPTY_SAVINGS: RawSavings = { accounts: {}, userAccounts: {}, goals: {}, userGoals: {}, recons: [] };
 
 const byDate = <T extends { date: string; ts: number }>(a: T, b: T) => a.date.localeCompare(b.date) || a.ts - b.ts;
 const EMPTY_USER: UserSettings = { personalCategories: [], version: 0 };
@@ -89,8 +106,7 @@ export function buildView(raw: RawStore, me: User, partner: User): TrackerData {
     partner,
     settings: raw.settings,
     mySettings: raw.userSettings[me.id] ?? EMPTY_USER,
-    goals: raw.goals?.items ?? [],
-    goalsVersion: raw.goals?.version ?? 0,
+    savings: buildSavings(raw.savings ?? EMPTY_SAVINGS, me, partner, raw.settings?.base ?? "", raw.settings?.rates ?? {}),
     familyExpenses: {},
     myExpenses: {},
     incomes: {},
@@ -138,9 +154,6 @@ export const isSettingsData = (v: unknown): v is Omit<Settings, "version"> =>
 const isCode = (v: unknown) => typeof v === "string" && /^[A-Z]{3,5}$/.test(v);
 export const isUserSettingsData = (v: unknown): v is Omit<UserSettings, "version"> =>
   isObj(v) && isCategories(v.personalCategories) && (v.preferredCurrency === undefined || isCode(v.preferredCurrency));
-export const isGoals = (v: unknown): v is Goal[] =>
-  Array.isArray(v) &&
-  v.every((g) => isObj(g) && typeof g.id === "string" && typeof g.target === "number" && Array.isArray(g.ops) && (g.currency === undefined || isCode(g.currency)));
 
 /** Ответ API на конфликт версий: клиент перечитывает данные и просит проверить и повторить */
 export const CONFLICT_MESSAGE = "Настройки изменил другой пользователь, проверьте и повторите.";

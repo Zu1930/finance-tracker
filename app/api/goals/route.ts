@@ -1,10 +1,21 @@
 import { requireUser, unauthorized } from "@/lib/session";
-import { casResponse } from "@/lib/cas-route";
-import { K, isGoals } from "@/lib/store";
+import { getRedis } from "@/lib/redis";
+import { createRecord, fail } from "@/lib/records";
+import { prepareGoal } from "@/lib/savings";
+import { K, recordKey } from "@/lib/store";
+import type { Settings } from "@/lib/types";
 
-/** Общие копилки: { version, data: Goal[] } с проверкой версии, чтобы одновременные операции не терялись */
-export async function PUT(req: Request) {
-  if (!(await requireUser(req))) return unauthorized();
-  const body = (await req.json().catch(() => null)) as { version?: unknown; data?: unknown } | null;
-  return casResponse(K.goals, body?.version, isGoals(body?.data) ? { items: body!.data } : null);
+/** Новая копилка: { name, target, currency, scope }. Старый ft:goals (PUT целиком) больше не пишется */
+export async function POST(req: Request) {
+  const user = await requireUser(req);
+  if (!user) return unauthorized();
+  try {
+    const settings = await getRedis().get<Settings>(K.settings);
+    const g = prepareGoal(await req.json().catch(() => null), user.id, settings?.currencies ?? [], crypto.randomUUID());
+    if (!g) return fail(400, "Укажите название и сумму цели.");
+    return await createRecord(recordKey("goals", g.scope, user.id), g);
+  } catch (e) {
+    console.error(e);
+    return fail(500, "Не удалось создать копилку.");
+  }
 }

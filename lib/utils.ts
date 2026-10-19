@@ -7,6 +7,8 @@ export const uid = () =>
 
 const nf = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
 export const fmt = (n: number) => nf.format(Math.round(n * 100) / 100);
+/** +1 250 / −300 */
+export const signed = (n: number) => `${n < 0 ? "−" : "+"}${fmt(Math.abs(n))}`;
 /** Курс: значимые цифры вместо копеек, чтобы 1 RSD = 0,00853 EUR не превращался в 0,01 */
 const rf = new Intl.NumberFormat("ru-RU", { maximumSignificantDigits: 6 });
 export const fmtRate = (n: number) => rf.format(n);
@@ -19,6 +21,13 @@ export const todayStr = () => {
 /** Месяц YYYY-MM — ключ во всех данных */
 export const monthKeyOf = (date: string) => date.slice(0, 7);
 export const curMonthKey = () => monthKeyOf(todayStr());
+/** Локальный день YYYY-MM-DD из ISO-времени */
+export const localDay = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+/** 2026-10-01 → 01.10 */
+export const ddmm = (day: string) => `${day.slice(8, 10)}.${day.slice(5, 7)}`;
 
 export const MONTHS = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
 export const MONTHS_SHORT = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
