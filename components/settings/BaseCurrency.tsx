@@ -4,14 +4,15 @@ import { useState } from "react";
 import { useTracker } from "../TrackerProvider";
 import { downloadJson } from "../ImportExport";
 import { rebaseData, type LimitRounding } from "@/lib/rebase";
-import { monthExpense } from "@/lib/metrics";
+import { goalsSaved, monthExpense } from "@/lib/metrics";
 import type { TrackerData } from "@/lib/types";
 import { activeCats, liveCats, amountChars, curMonthKey, fmt, fmtRate, parseAmount, termName, todayStr } from "@/lib/utils";
 
 const ROUNDINGS: LimitRounding[] = [0, 1, 10, 100];
 const defaultRounding = (cur: string): LimitRounding => (cur === "EUR" || cur === "USD" ? 10 : 100);
 
-const goalsTotal = (d: TrackerData) => d.goals.reduce((a, g) => a + g.ops.reduce((b, o) => b + o.amount, 0), 0);
+/** Отложено в копилках в базовой валюте: у копилок своя валюта, переводим по текущему курсу */
+const goalsTotal = (d: TrackerData) => Math.round(goalsSaved(d));
 const monthSpent = (d: TrackerData) => monthExpense(d, curMonthKey());
 
 /** Смена базовой валюты: выбор валюты и курса, превью пересчёта, применение через /api/rebase */

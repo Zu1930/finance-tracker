@@ -23,7 +23,12 @@ export type Settings = {
 };
 
 /** Личные настройки пользователя: ft:u:<id>:settings */
-export type UserSettings = { personalCategories: Category[]; version: number };
+export type UserSettings = {
+  personalCategories: Category[];
+  /** Валюта по умолчанию для моих личных трат и доходов; нет — общая base */
+  preferredCurrency?: string;
+  version: number;
+};
 
 export type Expense = {
   id: string;
@@ -57,7 +62,8 @@ export type Income = {
 export type IncomeSource = { id: string; name: string };
 
 export type GoalOp = { id: string; amount: number; date: string; ts: number };
-export type Goal = { id: string; name: string; target: number; ops: GoalOp[] };
+/** target и операции — в валюте копилки; нет currency — копилка в общей base (созданные до выбора валюты) */
+export type Goal = { id: string; name: string; target: number; ops: GoalOp[]; currency?: string };
 /** ft:goals — общие копилки, запись с проверкой версии */
 export type GoalsDoc = { items: Goal[]; version: number };
 

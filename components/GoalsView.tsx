@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useTracker } from "./TrackerProvider";
 import { AsciiBar } from "./AsciiBar";
-import { runwayMonths } from "@/lib/metrics";
+import { goalCurrency, goalsTotal, runwayMonths, toBase } from "@/lib/metrics";
 import type { Goal } from "@/lib/types";
 import { amountChars, fmt, parseAmount, termName, todayStr, uid } from "@/lib/utils";
 
@@ -12,18 +12,21 @@ const saved = (g: Goal) => g.ops.reduce((a, o) => a + o.amount, 0);
 function GoalCard({ g }: { g: Goal }) {
   const { data, setGoals, toast } = useTracker();
   const base = data.settings!.base;
+  // Копилка ведётся в своей валюте: цель, операции и тосты — в ней
+  const cur = goalCurrency(g, data.settings);
   const [val, setVal] = useState("");
   const s = saved(g);
+  const inBase = cur === base ? null : toBase(s, cur, data.settings);
   const last = g.ops[g.ops.length - 1];
 
   const move = (sign: 1 | -1) => {
     const v = parseAmount(val);
     if (!v || !(v > 0)) return toast("Введите сумму больше нуля.");
-    if (sign < 0 && v > s) return toast(`В копилке только ${fmt(s)} ${base}.`);
+    if (sign < 0 && v > s) return toast(`В копилке только ${fmt(s)} ${cur}.`);
     const op = { id: uid(), amount: sign * v, date: todayStr(), ts: Date.now() };
     setGoals((gs) => gs.map((x) => (x.id === g.id ? { ...x, ops: [...x.ops, op] } : x)));
     setVal("");
-    toast(`${sign > 0 ? "Положено" : "Взято"} ${fmt(v)} ${base} → ${termName(g.name)}`, "Отменить", () =>
+    toast(`${sign > 0 ? "Положено" : "Взято"} ${fmt(v)} ${cur} → ${termName(g.name)}`, "Отменить", () =>
       setGoals((gs) => gs.map((x) => (x.id === g.id ? { ...x, ops: x.ops.filter((o) => o.id !== op.id) } : x))),
     );
   };
@@ -43,7 +46,10 @@ function GoalCard({ g }: { g: Goal }) {
         <button className="xb -mr-2" aria-label={`Удалить копилку ${g.name}`} onClick={remove}>×</button>
       </div>
       <div className="mt-1"><AsciiBar value={s} max={g.target} variant="goal" label={g.name} /></div>
-      <p className="mt-2 text-muted uppercase">Собрано {fmt(s)} из {fmt(g.target)} {base}</p>
+      <p className="mt-2 text-muted uppercase">
+        Собрано {fmt(s)} из {fmt(g.target)} {cur}
+        {inBase !== null && <span className="text-muted2"> // ≈ {fmt(Math.round(inBase))} {base}</span>}
+      </p>
       {last && (
         <p className="text-muted2">
           // {last.amount > 0 ? "+" : "−"}{fmt(Math.abs(last.amount))} · {last.date.slice(8)}.{last.date.slice(5, 7)}
@@ -66,7 +72,11 @@ export function GoalsView() {
   const base = data.settings!.base;
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
-  const total = data.goals.reduce((a, g) => a + saved(g), 0);
+  const [currency, setCurrency] = useState(base);
+  const curs = data.settings!.currencies;
+  const newCur = curs.includes(currency) ? currency : base;
+  // Итог — в общей валюте по текущему курсу; копилки в валютах без курса перечисляются отдельно
+  const { total, missing } = goalsTotal(data);
   const runway = runwayMonths(data, todayStr());
 
   const add = () => {
@@ -74,7 +84,7 @@ export function GoalsView() {
     const t = parseAmount(target);
     if (!n) return;
     if (!t || !(t > 0)) return toast("Укажите сумму цели.");
-    setGoals((gs) => [...gs, { id: uid(), name: n.slice(0, 40), target: t, ops: [] }]);
+    setGoals((gs) => [...gs, { id: uid(), name: n.slice(0, 40), target: t, ops: [], currency: newCur }]);
     setName("");
     setTarget("");
   };
@@ -84,7 +94,10 @@ export function GoalsView() {
       <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
         <h1 className="sec">Goals</h1>
         <p className="flex flex-wrap gap-x-4 text-muted uppercase sm:ml-auto">
-          <span>Отложено всего <b className="text-ink">{fmt(total)} {base}</b></span>
+          <span>
+            Отложено всего <b className="text-ink">{data.goals.some((g) => goalCurrency(g, data.settings) !== base) && "≈ "}{fmt(Math.round(total))} {base}</b>
+            {missing.length > 0 && <span className="text-muted2"> // без курса: {missing.join(", ")}</span>}
+          </span>
           {/* Запас прочности: на сколько месяцев среднего расхода хватит накоплений */}
           <span>
             [ Запас:{" "}
@@ -108,8 +121,13 @@ export function GoalsView() {
           </div>
           <div className="flex min-w-[200px] flex-[1_1_200px] items-center gap-3">
             <label htmlFor="goal-target" className="lbl">Target</label>
-            <input id="goal-target" className="tfield flex-1" inputMode="decimal" placeholder={base}
+            <input id="goal-target" className="tfield flex-1" inputMode="decimal" placeholder={newCur}
               value={target} onChange={(e) => setTarget(amountChars(e.target.value))} onKeyDown={(e) => e.key === "Enter" && add()} />
+          </div>
+          <div className="flex gap-2" role="group" aria-label="Валюта копилки">
+            {curs.map((c) => (
+              <button key={c} className="tb tb-tight" aria-pressed={newCur === c} onClick={() => setCurrency(c)}>{c}</button>
+            ))}
           </div>
           <button className="tb" onClick={add}>Создать</button>
         </div>

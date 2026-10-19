@@ -95,7 +95,7 @@ export function LimitsView() {
           <h3 className="lbl mt-8">Личное, {st.base}</h3>
           <CategoryEditor
             cats={myCats}
-            update={(fn) => setMySettings((s) => ({ personalCategories: fn(s.personalCategories) }))}
+            update={(fn) => setMySettings((s) => ({ ...s, personalCategories: fn(s.personalCategories) }))}
           />
           <p className="mt-6 text-muted uppercase">
             Валюты, основная валюта и данные →{" "}

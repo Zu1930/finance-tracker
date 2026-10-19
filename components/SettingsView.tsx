@@ -6,6 +6,7 @@ import { useTracker } from './TrackerProvider'
 import { ExportButton } from './ImportExport'
 import { Currencies } from './settings/Currencies'
 import { BaseCurrency } from './settings/BaseCurrency'
+import { MyCurrency } from './settings/MyCurrency'
 import { ThemeSwitch } from './settings/ThemeSwitch'
 import { HoldLogout } from './settings/HoldLogout'
 
@@ -32,6 +33,9 @@ export function SettingsView() {
 			</Section>
 			<Section title="Основная валюта">
 				<BaseCurrency />
+			</Section>
+			<Section title="Моя валюта">
+				<MyCurrency />
 			</Section>
 			<Section title="Оформление">
 				<ThemeSwitch />

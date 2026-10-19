@@ -19,12 +19,6 @@ import {
 	uid
 } from '@/lib/utils'
 
-/** Последняя валюта помнится отдельно для трат и поступлений */
-const CUR_KEYS: Record<EntryMode, string> = {
-	expense: 'ft:cur',
-	income: 'ft:income-cur'
-}
-
 /**
  * Ввод трат и поступлений на одной странице. Режим и scope живут в URL: /?mode=income, /?scope=personal.
  * Семейные траты — общие лимиты, личные — свои категории, видит только автор
@@ -45,7 +39,10 @@ export function EntryPage() {
 	const sources = incomeSources(st)
 
 	// Форма общая для обоих режимов и не сбрасывается при переключении
-	const form = useEntryForm(CUR_KEYS[mode])
+	// Семейные траты — в общей валюте; личные траты и доходы — в моей валюте из настроек
+	const mine = data.mySettings.preferredCurrency
+	const myCurrency = mine && st.currencies.includes(mine) ? mine : st.base
+	const form = useEntryForm(mode === 'expense' && scope === 'family' ? st.base : myCurrency)
 	// Выбранная категория — отдельно для семейного и личного
 	const [catIds, setCatIds] = useState<Record<Scope, string | null>>({ family: null, personal: null })
 	const catId = catIds[scope]

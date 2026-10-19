@@ -58,12 +58,11 @@ export function rebaseSettings(s: Settings, p: RebaseParams, at: string): Settin
   };
 }
 
-export const rebaseGoals = (goals: Goal[], p: RebaseParams): Goal[] =>
-  goals.map((g) => ({
-    ...g,
-    target: round2(g.target / p.rate),
-    ops: g.ops.map((o) => ({ ...o, amount: round2(o.amount / p.rate) })),
-  }));
+/**
+ * Копилки ведутся в своей валюте и при смене базы не пересчитываются. У старых копилок без валюты она была
+ * общей base — фиксируем её явно (from), суммы остаются точными
+ */
+export const rebaseGoals = (goals: Goal[], p: RebaseParams): Goal[] => goals.map((g) => (g.currency ? g : { ...g, currency: p.from }));
 
 /**
  * Всё хранилище в новой базе: семейное и личные данные ОБОИХ пользователей (сервер, /api/rebase).

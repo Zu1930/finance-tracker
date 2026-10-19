@@ -126,10 +126,12 @@ const isCategories = (v: unknown) =>
 
 export const isSettingsData = (v: unknown): v is Omit<Settings, "version"> =>
   isObj(v) && typeof v.base === "string" && Array.isArray(v.currencies) && isObj(v.rates) && isCategories(v.familyCategories);
+const isCode = (v: unknown) => typeof v === "string" && /^[A-Z]{3,5}$/.test(v);
 export const isUserSettingsData = (v: unknown): v is Omit<UserSettings, "version"> =>
-  isObj(v) && isCategories(v.personalCategories);
+  isObj(v) && isCategories(v.personalCategories) && (v.preferredCurrency === undefined || isCode(v.preferredCurrency));
 export const isGoals = (v: unknown): v is Goal[] =>
-  Array.isArray(v) && v.every((g) => isObj(g) && typeof g.id === "string" && typeof g.target === "number" && Array.isArray(g.ops));
+  Array.isArray(v) &&
+  v.every((g) => isObj(g) && typeof g.id === "string" && typeof g.target === "number" && Array.isArray(g.ops) && (g.currency === undefined || isCode(g.currency)));
 
 /** Ответ API на конфликт версий: клиент перечитывает данные и просит проверить и повторить */
 export const CONFLICT_MESSAGE = "Настройки изменил другой пользователь, проверьте и повторите.";

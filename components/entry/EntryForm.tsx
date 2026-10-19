@@ -27,11 +27,15 @@ const MODE_UI: Record<
 	}
 }
 
-/** Общее состояние форм трат и поступлений. Последняя валюта помнится в localStorage под curKey */
-export function useEntryForm(curKey: string) {
+/**
+ * Общее состояние форм трат и поступлений.
+ * defaultCurrency — валюта контекста: общая для семейных трат, моя для личных трат и доходов.
+ * При смене контекста валюта переключается на его валюту; сумма, заметка и дата остаются
+ */
+export function useEntryForm(defaultCurrency: string) {
 	const { data, updateRates } = useTracker()
 	const st = data.settings!
-	const [cur, setCurState] = useState(st.base)
+	const [cur, setCurState] = useState(defaultCurrency)
 	const [amount, setAmount] = useState('')
 	const [rate, setRate] = useState('')
 	const [note, setNote] = useState('')
@@ -40,12 +44,7 @@ export function useEntryForm(curKey: string) {
 	const amountRef = useRef<HTMLInputElement>(null)
 
 	useEffect(() => {
-		try {
-			const saved = localStorage.getItem(curKey)
-			if (saved && st.currencies.includes(saved)) setCurState(saved)
-		} catch {}
 		amountRef.current?.focus()
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [])
 
 	const currency = st.currencies.includes(cur) ? cur : st.base
@@ -54,16 +53,13 @@ export function useEntryForm(curKey: string) {
 	const setCur = (c: string) => {
 		setCurState(c)
 		setRate(c === st.base ? '' : String(st.rates[c] ?? ''))
-		try {
-			localStorage.setItem(curKey, c)
-		} catch {}
 	}
 
-	// Подставить последний курс, когда валюта выбрана из localStorage
+	// Сменился контекст (семья / личное / доход) или моя валюта в настройках — переключиться на его валюту
 	useEffect(() => {
-		if (isForeign && rate === '') setRate(String(st.rates[currency] ?? ''))
+		setCur(defaultCurrency)
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [currency])
+	}, [defaultCurrency])
 
 	const a = parseAmount(amount)
 	const r = parseAmount(rate)
