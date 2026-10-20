@@ -90,7 +90,7 @@ export function QuickTokens() {
 				</ul>
 			)}
 			<p className="mt-3">
-				<Link href="/settings/siri" className="tb">Как настроить Siri</Link>
+				<Link href="/settings/siri#siri" className="tb">Как настроить Siri</Link>
 			</p>
 		</div>
 	)

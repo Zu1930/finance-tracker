@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useTracker } from '../TrackerProvider'
 import type { Category, Expense } from '@/lib/types'
 import { parsePhrase, type ParsedEntry, type QuickScope } from '@/lib/quick-entry/parse'
@@ -214,6 +215,7 @@ export function QuickEntry({ familyCats, personalCats, onEdit }: Props) {
 					}}
 				/>
 				<span className="hidden text-muted2 uppercase sm:block touch:hidden">Alt + M · /</span>
+				<Link href="/settings/siri" className="xb hover:text-ink" aria-label="Как пользоваться голосовым вводом">?</Link>
 			</div>
 			{hint === 'keyboard' && <p className="mt-2 text-muted uppercase">Микрофон клавиатуры: нажмите 🎤 на клавиатуре</p>}
 			{hint === 'denied' && <p className="mt-2 text-bad uppercase" role="alert">!! Нет доступа к микрофону — разрешите в настройках браузера</p>}
