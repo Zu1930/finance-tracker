@@ -9,7 +9,7 @@ import { amountChars, ddmm, fmt, parseAmount, termName, todayStr } from '@/lib/u
 const isDesktop = () => window.matchMedia('(min-width: 640px)').matches
 
 /** Подпись даты на кнопке записи: сегодня, вчера или 12.10 */
-function dateLabel(date: string) {
+export function dateLabel(date: string) {
 	const today = todayStr()
 	if (!date || date === today) return 'Сегодня'
 	const y = new Date()
@@ -56,6 +56,8 @@ export function useEntryForm(defaultCurrency: string) {
 	const [date, setDate] = useState(todayStr)
 	const [error, setError] = useState('')
 	const amountRef = useRef<HTMLInputElement>(null)
+	/** Валюта, заданная fill: следующая смена контекста не должна её сбросить */
+	const heldCur = useRef<string | null>(null)
 
 	const focusAmount = () => {
 		if (isDesktop()) amountRef.current?.focus()
@@ -72,7 +74,8 @@ export function useEntryForm(defaultCurrency: string) {
 
 	// Сменился контекст (семья / личное / доход) или моя валюта в настройках — переключиться на его валюту
 	useEffect(() => {
-		setCur(defaultCurrency)
+		setCur(heldCur.current ?? defaultCurrency)
+		heldCur.current = null
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [defaultCurrency])
 
@@ -108,6 +111,16 @@ export function useEntryForm(defaultCurrency: string) {
 		}
 	}
 
+	/** Заполнить форму целиком (трата из голосового ввода). contextChanges — следом сменится валюта контекста */
+	const fill = (v: { amount: string; currency: string; note: string; date: string }, contextChanges: boolean) => {
+		setCur(v.currency)
+		heldCur.current = contextChanges ? v.currency : null
+		setAmount(v.amount)
+		setNote(v.note)
+		setDate(v.date)
+		setError('')
+	}
+
 	/** После записи: очистить сумму и заметку, вернуть фокус в сумму */
 	const reset = () => {
 		setAmount('')
@@ -135,6 +148,7 @@ export function useEntryForm(defaultCurrency: string) {
 		focusAmount,
 		conv,
 		collect,
+		fill,
 		reset
 	}
 }

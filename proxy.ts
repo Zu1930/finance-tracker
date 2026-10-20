@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, readSession } from "@/lib/session";
 
-// /api/cron/* проверяет CRON_SECRET сам: у Vercel Cron нет сессии
-const PUBLIC = new Set(["/login", "/api/login", "/api/users", "/api/cron/daily"]);
+// /api/cron/* проверяет CRON_SECRET сам: у Vercel Cron нет сессии; /api/quick — токен Быстрой команды (Bearer)
+const PUBLIC = new Set(["/login", "/api/login", "/api/users", "/api/cron/daily", "/api/quick"]);
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;

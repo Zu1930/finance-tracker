@@ -18,8 +18,11 @@ type Ctx = {
   queued: number;
   /** force — применить ответ, даже если идут другие запросы (после 409) */
   reload: (force?: boolean) => Promise<void>;
-  /** Новая запись. authorId выставит сервер; локально — текущий пользователь. Без связи — в очередь */
-  addEntry: (kind: Kind, e: Entry) => void;
+  /**
+   * Новая запись. authorId выставит сервер; локально — текущий пользователь. Без связи — в очередь.
+   * Промис — ошибка сервера (запись уже убрана с экрана) или null: записано или ждёт в очереди
+   */
+  addEntry: (kind: Kind, e: Entry) => Promise<string | null>;
   /** Удаление; запись на сервере 10 минут лежит в корзине — restoreEntry вернёт её с исходным автором */
   removeEntry: (kind: Kind, e: Entry) => void;
   restoreEntry: (kind: Kind, e: Entry) => void;
@@ -258,18 +261,23 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
     addEntry: (kind, e) => {
       const local = { ...e, authorId: ref.current.me.id };
       commit(withEntry(ref.current, kind, local, true));
-      if (offlineRef.current) return enqueue(kind, local);
+      if (offlineRef.current) {
+        enqueue(kind, local);
+        return Promise.resolve(null);
+      }
       pending.current++;
-      send("/api/entries", "POST", { kind, entry: local })
-        .then((res) => {
-          if (res.ok) return;
+      return send("/api/entries", "POST", { kind, entry: local })
+        .then(async (res) => {
+          if (res.ok) return null;
           commit(withEntry(ref.current, kind, local, false));
           toast(SAVE_FAILED);
+          return ((await res.json().catch(() => ({}))) as { error?: string }).error ?? SAVE_FAILED;
         })
         // Сети нет — запись остаётся на экране и ждёт в очереди
         .catch(() => {
           setOffline(offlineRef.current ?? { savedAt: null });
           enqueue(kind, local);
+          return null;
         })
         .finally(() => pending.current--);
     },

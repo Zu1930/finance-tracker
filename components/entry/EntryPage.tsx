@@ -23,6 +23,8 @@ import { itemLeft, itemStatus, linkedByItem } from '@/lib/plan'
 import { monthOccurrences } from '@/lib/metrics'
 import { matchPayment } from '@/lib/recurring'
 import { DueBlock } from '../recurring/DueBlock'
+import { QuickEntry } from './QuickEntry'
+import type { ParsedEntry } from '@/lib/quick-entry/parse'
 
 /**
  * Ввод трат и поступлений на одной странице. Режим и scope живут в URL: /?mode=income, /?scope=personal.
@@ -130,6 +132,14 @@ export function EntryPage() {
 		form.focusAmount()
 	}
 
+	// Трата из голосового ввода → обычная форма для ручной правки
+	const editParsed = (p: ParsedEntry) => {
+		const defaultCur = (sc: Scope) => (sc === 'family' ? st.base : myCurrency)
+		form.fill({ amount: p.amount === null ? '' : String(p.amount), currency: p.currency, note: p.note, date: p.date }, defaultCur(p.scope) !== defaultCur(scope))
+		setCatIds((c) => ({ ...c, [p.scope]: p.categoryId }))
+		go('expense', p.scope, true)
+	}
+
 	const recorded = (what: string, undo: () => void) => {
 		form.reset()
 		toast(`Записано: ${what}`, 'Отменить', undo)
@@ -163,6 +173,7 @@ export function EntryPage() {
 	return (
 		<>
 						<DueBlock />
+			{mode === 'expense' && <QuickEntry familyCats={familyCats} personalCats={personalCats} onEdit={editParsed} />}
 			<div ref={rootRef}>
 				<h1 className="sr-only">
 					{mode === 'income' ? 'Новый доход' : scope === 'personal' ? 'Новый личный расход' : 'Новый семейный расход'}

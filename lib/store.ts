@@ -28,6 +28,10 @@ export const K = {
   incomes: (m: MonthKey) => `ft:i:${m}`,
   userSettings: (userId: string) => `ft:u:${userId}:settings`,
   personal: (userId: string, m: MonthKey) => `ft:u:${userId}:m:${m}`,
+  /** Токены Быстрых команд: поле = id, значение = { name, hash, createdAt, lastUsedAt } */
+  tokens: (userId: string) => `ft:u:${userId}:tokens`,
+  /** Счётчик запросов токена за минуту, TTL 60 с */
+  quickRate: (tokenId: string, minute: number) => `ft:quick-rate:${tokenId}:${minute}`,
   /** Удалённая запись на время «Вернуть» в тосте */
   trash: (id: string) => `ft:trash:${id}`,
 };
