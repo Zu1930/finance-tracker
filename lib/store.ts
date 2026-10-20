@@ -2,9 +2,10 @@
  * Семейное хранилище без Redis: ключи, сборка ответа GET /api/data с учётом приватности, подготовка записей.
  * Чистые функции — их вызывают route handlers и тесты (lib/store.test.mjs).
  */
-import type { Expense, GoalsDoc, Income, MonthKey, Scope, Settings, TrackerData, User, UserSettings } from "./types.ts";
+import type { Expense, GoalsDoc, Income, MonthKey, RecurringPayment, Scope, Settings, TrackerData, User, UserSettings } from "./types.ts";
 import { buildSavings, type RawSavings } from "./savings.ts";
 import { EMPTY_PLANS, buildPlans, plannedDaily, type RawPlans } from "./plan.ts";
+import { occurrences, recurringTotal } from "./recurring.ts";
 
 // ---------- Ключи Redis ----------
 export const K = {
@@ -19,7 +20,9 @@ export const K = {
   plan: (m: MonthKey) => `ft:plan:${m}`,
   myPlan: (userId: string, m: MonthKey) => `ft:u:${userId}:plan:${m}`,
   planItems: (m: MonthKey) => `ft:plan-items:${m}`,
-  myPlanItems: (userId: string, m: MonthKey) => `ft:u:${userId}:plan-items:${m}`,
+    myPlanItems: (userId: string, m: MonthKey) => `ft:u:${userId}:plan-items:${m}`,
+  recurring: "ft:recurring",
+  userRecurring: (userId: string) => `ft:u:${userId}:recurring`,
   index: "ft:index",
   family: (m: MonthKey) => `ft:m:${m}`,
   incomes: (m: MonthKey) => `ft:i:${m}`,
@@ -59,6 +62,8 @@ export function parseMonthKey(key: string): { kind: "family" | "incomes" | "pers
 
 /** Хеш пунктов плана: личные — только в хеше пользователя из сессии */
 export const planItemsKey = (scope: Scope, userId: string, m: MonthKey) => (scope === "personal" ? K.myPlanItems(userId, m) : K.planItems(m));
+/** Хеш регулярных платежей: личные — только в хеше пользователя из сессии */
+export const recurringKey = (scope: Scope, userId: string) => (scope === "personal" ? K.userRecurring(userId) : K.recurring);
 
 /** Разбор ключа плана из индекса: семейный или личный документ (JSON) либо хеш пунктов */
 export function parsePlanKey(key: string): { kind: "plan" | "items"; month: MonthKey; userId?: string } | null {
@@ -97,8 +102,11 @@ export function prepareEntry(kind: Kind, body: unknown, authorId: string): Expen
   }
   const catId = str(b.catId, 64);
   const scope: Scope = b.scope === "personal" ? "personal" : "family";
-  const planItemId = str(b.planItemId, 64);
-  return catId ? { ...common, catId, scope, ...(planItemId && { planItemId }) } : null;
+    const planItemId = str(b.planItemId, 64);
+  const recurringId = str(b.recurringId, 64);
+  const recurringMonth = str(b.recurringMonth, 7);
+  if (recurringId && !MONTH.test(recurringMonth)) return null;
+  return catId ? { ...common, catId, scope, ...(planItemId && { planItemId }), ...(recurringId && { recurringId, recurringMonth }) } : null;
 }
 
 // ---------- Сборка ответа GET /api/data ----------
@@ -111,8 +119,10 @@ export type RawStore = {
   hashes: Record<string, Record<string, Expense | Income>>;
   /** Нет — сбережения пусты (тесты и старые вызовы) */
   savings?: RawSavings;
-  /** Нет — планов нет */
+    /** Нет — планов нет */
   plans?: RawPlans;
+  /** Нет — регулярных платежей нет */
+  recurring?: { family: Record<string, RecurringPayment>; byUser: Record<string, Record<string, RecurringPayment>> };
 };
 
 export const EMPTY_SAVINGS: RawSavings = { accounts: {}, userAccounts: {}, goals: {}, userGoals: {}, recons: [] };
@@ -137,8 +147,11 @@ export function buildView(raw: RawStore, me: User, partner: User, curMonth = new
     partnerPersonalTotals: {},
     partnerPersonalDaily: {},
     partnerPlannedDaily: {},
-    plans: {},
+        plans: {},
     partnerLimits: {},
+    recurring: { family: [], mine: [] },
+    partnerRecurring: {},
+    partnerRecurringDaily: {},
   };
   const plans = raw.plans ?? EMPTY_PLANS;
   const partnerExpenses: Record<string, Expense[]> = {};
@@ -160,8 +173,12 @@ export function buildView(raw: RawStore, me: User, partner: User, curMonth = new
       view.partnerPersonalTotals[k.month] = Math.round(total * 100) / 100;
       view.partnerPersonalDaily[k.month] = daily;
       partnerExpenses[k.month] = items as Expense[];
-      const planned = plannedDaily(items as Expense[], Object.values(plans.userItems[partner.id]?.[k.month] ?? {}));
+            const planned = plannedDaily(items as Expense[], Object.values(plans.userItems[partner.id]?.[k.month] ?? {}));
       if (Object.keys(planned).length) view.partnerPlannedDaily[k.month] = planned;
+      // Оплаты регулярных партнёра по дням — только суммы
+      const rec: Record<string, number> = {};
+      for (const e of items as Expense[]) if (e.recurringId) rec[String(Number(e.date.slice(8, 10)))] = Math.round(((rec[String(Number(e.date.slice(8, 10)))] ?? 0) + e.base) * 100) / 100;
+      if (Object.keys(rec).length) view.partnerRecurringDaily[k.month] = rec;
     }
   }
   // Сумма личных лимитов партнёра нужна для плана: прошлый месяц (разница часовых поясов) … 12 вперёд
@@ -171,8 +188,21 @@ export function buildView(raw: RawStore, me: User, partner: User, curMonth = new
     return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
   });
   const built = buildPlans(plans, me, partner, raw.userSettings[partner.id]?.personalCategories ?? [], partnerExpenses, limitMonths);
-  view.plans = built.plans;
+    view.plans = built.plans;
   view.partnerLimits = built.partnerLimits;
+  // Регулярные: свои и семейные целиком, у партнёра — сумма на месяц (факт оплаченных + оценка по текущему курсу)
+  const byName = (a: RecurringPayment, b: RecurringPayment) => a.name.localeCompare(b.name, "ru");
+  view.recurring = {
+    family: Object.values(raw.recurring?.family ?? {}).sort(byName),
+    mine: Object.values(raw.recurring?.byUser[me.id] ?? {}).sort(byName),
+  };
+  const partnerPayments = Object.values(raw.recurring?.byUser[partner.id] ?? {});
+  if (partnerPayments.length) {
+    const all = Object.values(partnerExpenses).flat();
+    for (const m of limitMonths) {
+      view.partnerRecurring[m] = recurringTotal(occurrences(partnerPayments, m, all, `${curMonth}-01`, raw.settings?.base ?? "", raw.settings?.rates ?? {}));
+    }
+  }
   return view;
 }
 

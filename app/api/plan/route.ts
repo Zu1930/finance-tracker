@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser, unauthorized } from "@/lib/session";
 import { readStore } from "@/lib/redis";
 import { fail } from "@/lib/records";
-import { average } from "@/lib/metrics";
+import { average, recurringPlanPart } from "@/lib/metrics";
 import { isMonth, planResponse } from "@/lib/plan";
 import { buildView } from "@/lib/store";
 import { partnerOf } from "@/lib/users";
@@ -19,7 +19,13 @@ export async function GET(req: Request) {
   try {
     const partner = partnerOf(me.id);
     const view = buildView(await readStore([me.id, partner.id]), me, partner, month);
-    return NextResponse.json(planResponse(view, month, average(view, todayStr())?.income ?? null), { headers: { "Cache-Control": "no-store" } });
+    const today = todayStr();
+    const plan = planResponse(view, month, average(view, today)?.income ?? null);
+    const rec = recurringPlanPart(view, month, today);
+    return NextResponse.json(
+      { ...plan, recurring: rec.recurring, recurringTotal: rec.recurringTotal, partner: { ...plan.partner, recurringTotal: rec.partnerRecurringTotal } },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (e) {
     console.error(e);
     return fail(500, "Хранилище недоступно.");

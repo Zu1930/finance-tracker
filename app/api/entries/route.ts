@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireUser, unauthorized } from "@/lib/session";
 import { addEntry, casHashes, getRedis } from "@/lib/redis";
 import { fail, registerKey } from "@/lib/records";
+import { recordRecurringPayment } from "@/lib/recurring-server";
 import { planLinkError } from "@/lib/plan";
 import { entryKey, planItemsKey, prepareEntry, type Kind } from "@/lib/store";
 import type { Expense, PlanItem } from "@/lib/types";
@@ -22,7 +23,9 @@ export async function POST(req: Request) {
   const month = entry.date.slice(0, 7);
   const key = entryKey(kind, "scope" in entry ? entry.scope : undefined, user.id, month);
   try {
-    const e = entry as Expense;
+        const e = entry as Expense;
+    // Оплата регулярного платежа: права, категория, вхождение месяца и повторная оплата проверяются отдельно
+    if (kind === "expense" && e.recurringId) return await recordRecurringPayment(user.id, e);
     if (kind !== "expense" || !e.planItemId) {
       await addEntry(key, entry);
       return NextResponse.json({ entry });

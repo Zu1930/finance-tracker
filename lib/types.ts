@@ -54,8 +54,11 @@ export type Expense = {
   scope: Scope;
   /** Выставляет сервер из сессии */
   authorId: string;
-  /** Трата по пункту плана месяца: в шкалу категории не входит, кроме превышения пункта */
+    /** Трата по пункту плана месяца: в шкалу категории не входит, кроме превышения пункта */
   planItemId?: string;
+  /** Оплата регулярного платежа за recurringMonth: в шкалу категории не входит совсем */
+  recurringId?: string;
+  recurringMonth?: string;
 };
 
 export type Income = {
@@ -161,6 +164,34 @@ export type SavingsView = {
   migration?: { goals: number; owner: User };
 };
 
+// ---------- Регулярные платежи ----------
+/** ft:recurring (семейные) или ft:u:<id>:recurring (личные), поле = id. Сумма — в валюте платежа */
+export type RecurringPayment = {
+  id: string;
+  name: string;
+  currency: string;
+  /** Примерная сумма (коммуналка): при оплате вводится факт */
+  approx: boolean;
+  frequency: "monthly" | "yearly";
+  /** 1–31; в коротком месяце — последний день */
+  day: number;
+  /** 1–12, только для yearly */
+  month?: number;
+  categoryId: string;
+  scope: Scope;
+  ownerId?: string;
+  startMonth: string;
+  /** Включительно; задаётся при удалении */
+  endMonth?: string;
+  paused: boolean;
+  /** Пропущенные месяцы YYYY-MM */
+  skips: string[];
+  /** История цены: действует последняя запись с fromMonth ≤ месяца */
+  amounts: { fromMonth: string; amount: number }[];
+  createdBy: string;
+  version: number;
+};
+
 // ---------- План месяца ----------
 /** Семейная часть плана: ft:plan:<YYYY-MM>. Нет ключа — пустой план */
 export type MonthPlan = {
@@ -229,8 +260,14 @@ export type TrackerData = {
   partnerPlannedDaily: Record<MonthKey, Record<string, number>>;
   /** Планы месяцев, где есть хоть что-то запланированное */
   plans: Record<MonthKey, PlanView>;
-  /** Сумма личных лимитов партнёра по месяцам (текущий −1 … +12) с его поправками на месяц */
+    /** Сумма личных лимитов партнёра по месяцам (текущий −1 … +12) с его поправками на месяц */
   partnerLimits: Record<MonthKey, number>;
+  /** Регулярные платежи: семейные и мои целиком */
+  recurring: { family: RecurringPayment[]; mine: RecurringPayment[] };
+  /** Личные регулярные партнёра — только сумма на месяц (факт оплаченных + оценка остальных), текущий −1 … +12 */
+  partnerRecurring: Record<MonthKey, number>;
+  /** Оплаты регулярных партнёра по дням — чтобы отделить обычные траты от регулярных */
+  partnerRecurringDaily: Record<MonthKey, Record<string, number>>;
   /** Есть данные старого формата, ещё не перенесённые в семейный; owner — кто запускает перенос */
   migration?: { pending: true; owner: User };
 };

@@ -6,7 +6,7 @@ import { useNarrow } from '../AsciiBar'
 import { CommitInput } from '../CommitInput'
 import { usePlan, withOverride } from './usePlan'
 import { limitsSum, monthLimit, planIncome, planSummary } from '@/lib/plan'
-import { average } from '@/lib/metrics'
+import { average, monthRecurring } from '@/lib/metrics'
 import type { Category } from '@/lib/types'
 import { aliveIn, amountChars, fmt, minus, monthName, parseAmount, signed, termName, todayStr } from '@/lib/utils'
 
@@ -18,15 +18,17 @@ export function PlanSummary({ month }: { month: string }) {
 	const st = data.settings!
 	const { plan, items, savePlan } = usePlan(month)
 	const narrow = useNarrow()
-	const avg = average(data, todayStr())?.income ?? null
+		const avg = average(data, todayStr())?.income ?? null
 	const override = plan.incomeOverride
+	const rec = monthRecurring(data, month, todayStr())
 	const s = planSummary({
 		income: planIncome(override, avg),
 		familyLimits: limitsSum(st.familyCategories, month, plan.familyOverrides),
 		myLimits: limitsSum(data.mySettings.personalCategories, month, plan.myOverrides),
 		partnerLimits: data.partnerLimits[month] ?? 0,
-		items,
-		partnerPlanned: plan.partner.plannedTotal
+				items,
+		partnerPlanned: plan.partner.plannedTotal,
+		recurring: rec
 	})
 	const income = s.income
 
@@ -38,12 +40,13 @@ export function PlanSummary({ month }: { month: string }) {
 		void savePlan({ incomeOverride: n })
 	}
 
-	// Шкала: █ лимиты, ▓ покупки, ░ остаток. План больше дохода — делим по плану, справа +!!
+		// Шкала: █ регулярные и лимиты (обязательное), ▓ покупки, ░ остаток. План больше дохода — делим по плану, справа +!!
 	const w = narrow ? 24 : BAR
-	const total = s.limits.total + s.planned.total
+	const fixed = s.recurring.total + s.limits.total
+	const total = fixed + s.planned.total
 	const scale = income !== null && income > 0 && !s.short ? income : total
 	const cells = (v: number) => (scale > 0 ? Math.round((v / scale) * w) : 0)
-	const lim = Math.min(w, cells(s.limits.total))
+		const lim = Math.min(w, cells(fixed))
 	const buy = Math.min(w - lim, cells(s.planned.total))
 	const rest = income === null ? 0 : w - lim - buy
 	const pct = income && s.rest !== null ? Math.round((s.rest / income) * 100) : null
@@ -72,9 +75,11 @@ export function PlanSummary({ month }: { month: string }) {
 						onCommit={commitIncome} />
 					<span className="flex flex-wrap items-center gap-y-1 max-sm:w-full max-sm:justify-end max-sm:text-right max-sm:text-xs">{caption}</span>
 				</dd>
-				{[
+								{[
+					{ mark: <span aria-hidden="true">↻ </span>, label: 'Регулярные', value: <b>{minus(s.recurring.total)}</b>,
+						note: `Семья ${fmt(s.recurring.family)} · Личное ${fmt(s.recurring.mine + s.recurring.partner)}${income ? ` · ${Math.round((s.recurring.total / income) * 100)}% дохода` : ''}` },
 					{ mark: <span aria-hidden="true">█ </span>, label: 'Лимиты', value: <b>{minus(s.limits.total)}</b>,
-						note: `Семья ${fmt(s.limits.family)} · Личное ${fmt(s.limits.mine + s.limits.partner)}` },
+						note: `Только переменные траты · семья ${fmt(s.limits.family)} · личное ${fmt(s.limits.mine + s.limits.partner)}` },
 					{ mark: <span aria-hidden="true" className="text-muted">▓ </span>, label: 'Покупки', value: <b>{minus(s.planned.total)}</b>,
 						note: `${s.planned.count} шт.${s.planned.partner > 0 ? ` · вкл. ${data.partner.name} ${fmt(s.planned.partner)}` : ''}` },
 					{ mark: <span aria-hidden="true" className="text-dim">░ </span>, label: 'Останется',

@@ -6,6 +6,7 @@
  */
 import type { TrackerData } from "./types.ts";
 import { linkedByItem, plannedForecast } from "./plan.ts";
+import { dueNow, occurrences, recurringTotal, type Occurrence } from "./recurring.ts";
 
 /** Короткие названия месяцев для таблиц: СЕНТ, а не СЕН, чтобы не путать с «сен» на графике */
 export const MONTHS_ABBR = ["ЯНВ", "ФЕВ", "МАР", "АПР", "МАЙ", "ИЮН", "ИЮЛ", "АВГ", "СЕНТ", "ОКТ", "НОЯ", "ДЕК"];
@@ -52,8 +53,32 @@ export function monthPlanned(data: TrackerData, key: string, untilDay?: number):
   const partner = Object.entries(data.partnerPlannedDaily[key] ?? {}).reduce((a, [d, v]) => (untilDay === undefined || Number(d) <= untilDay ? a + v : a), 0);
   return sumBase(own, untilDay) + partner;
 }
-/** Обычные траты — без связанных с планом: по ним экстраполяция и сравнения */
-export const monthRegular = (data: TrackerData, key: string, untilDay?: number) => monthExpense(data, key, untilDay) - monthPlanned(data, key, untilDay);
+/** Оплаты регулярных платежей в месяце: свои и семейные по recurringId, партнёра — суммы по дням */
+export function monthRecurringPaid(data: TrackerData, key: string, untilDay?: number): number {
+  const own = ownExpenses(data, key).filter((e) => e.recurringId);
+  const partner = Object.entries(data.partnerRecurringDaily?.[key] ?? {}).reduce((a, [d, v]) => (untilDay === undefined || Number(d) <= untilDay ? a + v : a), 0);
+  return sumBase(own, untilDay) + partner;
+}
+/** Обычные траты — без связанных с планом и без регулярных: по ним экстраполяция и сравнения */
+export const monthRegular = (data: TrackerData, key: string, untilDay?: number) =>
+  monthExpense(data, key, untilDay) - monthPlanned(data, key, untilDay) - monthRecurringPaid(data, key, untilDay);
+
+/** Вхождения регулярных месяца: семейные (оплаты среди семейных трат) и мои (среди моих личных) */
+export function monthOccurrences(data: TrackerData, key: string, today: string): { family: Occurrence[]; mine: Occurrence[] } {
+  const base = data.settings?.base ?? "", rates = data.settings?.rates ?? {};
+  const rec = data.recurring ?? { family: [], mine: [] };
+  return {
+    family: occurrences(rec.family, key, Object.values(data.familyExpenses).flat(), today, base, rates),
+    mine: occurrences(rec.mine, key, Object.values(data.myExpenses).flat(), today, base, rates),
+  };
+}
+
+/** Регулярные месяца для плана и прогноза: факт оплаченных + оценка остальных, у партнёра — сумма с сервера */
+export function monthRecurring(data: TrackerData, key: string, today: string): { family: number; mine: number; partner: number; total: number } {
+  const occ = monthOccurrences(data, key, today);
+  const family = recurringTotal(occ.family), mine = recurringTotal(occ.mine), partner = data.partnerRecurring?.[key] ?? 0;
+  return { family, mine, partner, total: Math.round((family + mine + partner) * 100) / 100 };
+}
 
 /** Плановые траты месяца для прогноза: по каждому пункту max(сумма плана, связанные траты), включая партнёра */
 export function monthPlannedForecast(data: TrackerData, key: string): number {
@@ -112,8 +137,10 @@ export type Forecast = {
   forecastExpense: number;
   /** Обычные траты, экстраполированные на месяц */
   forecastRegular: number;
-  /** Плановые: по каждому пункту max(план, факт) */
+    /** Плановые: по каждому пункту max(план, факт) */
   planned: number;
+  /** Регулярные: факт оплаченных + оценка неоплаченных */
+  recurring: number;
   expectedIncome: number;
   /** Полученного меньше среднего — доход взят по среднему за 3 месяца */
   incomeIsExpected: boolean;
@@ -134,8 +161,9 @@ export function forecast(data: TrackerData, today: string): Forecast | null {
   const spentSoFar = monthExpense(data, cur);
   // Экстраполируются только обычные траты: покупка по плану не повторится до конца месяца
   const forecastRegular = (monthRegular(data, cur) / day) * lastDay;
-  const planned = monthPlannedForecast(data, cur);
-  const forecastExpense = forecastRegular + planned;
+    const planned = monthPlannedForecast(data, cur);
+  const recurring = monthRecurring(data, cur, today).total;
+  const forecastExpense = forecastRegular + planned + recurring;
   const got = monthIncome(data, cur);
   const avg = average(data, today);
   const incomeIsExpected = avg !== null && got < avg.income;
@@ -143,8 +171,9 @@ export function forecast(data: TrackerData, today: string): Forecast | null {
   return {
     spentSoFar,
     forecastExpense,
-    forecastRegular,
+        forecastRegular,
     planned,
+    recurring,
     expectedIncome,
     incomeIsExpected,
     forecastBalance: expectedIncome - forecastExpense,
@@ -202,4 +231,21 @@ export function byAuthor<T extends { base: number; authorId: string }>(items: T[
   const out: Record<string, number> = {};
   for (const x of items) if (filter(x)) out[x.authorId] = (out[x.authorId] ?? 0) + x.base;
   return out;
+}
+
+/** Регулярные в ответе GET /api/plan: вхождения своих и семейных, у партнёра — только сумма */
+export function recurringPlanPart(data: TrackerData, month: string, today: string) {
+  const occ = monthOccurrences(data, month, today);
+  const r = monthRecurring(data, month, today);
+  return { recurring: occ, recurringTotal: r.total, partnerRecurringTotal: r.partner };
+}
+
+/** GET /api/recurring/due: к оплате сейчас — свои и семейные */
+export function dueResponse(data: TrackerData, today: string) {
+  const base = data.settings?.base ?? "", rates = data.settings?.rates ?? {};
+  const rec = data.recurring ?? { family: [], mine: [] };
+  return {
+    family: dueNow(rec.family, Object.values(data.familyExpenses).flat(), today, base, rates),
+    mine: dueNow(rec.mine, Object.values(data.myExpenses).flat(), today, base, rates),
+  };
 }

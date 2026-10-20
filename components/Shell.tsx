@@ -8,10 +8,11 @@ import { Setup } from './Setup'
 import { Migration } from './Migration'
 import { useDailyRates } from './useDailyRates'
 import { ThemeToggle } from './settings/ThemeSwitch'
-import { catsIn, curMonthKey, fmt, minus, monthTitle } from '@/lib/utils'
+import { catsIn, curMonthKey, fmt, minus, monthTitle, todayStr } from '@/lib/utils'
 import type { Category, Expense, PlanItem, TrackerData } from '@/lib/types'
 import { abbr, monthExpense } from '@/lib/metrics'
 import { planSpentByCat } from '@/lib/plan'
+import { dueRows } from './recurring/DueBlock'
 
 const TABS = [
 	{ href: '/', label: 'Ввод' },
@@ -37,7 +38,10 @@ function MetricsBar({ data }: { data: TrackerData }) {
 	const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
 	// Темп — по всей семье: семейные, мои личные и личные суммы партнёра. Первые 3 дня — мало данных, как у прогноза
 	const pace = day > 3 ? monthExpense(data, key) / day : null
-	const paceText = pace === null ? '—' : fmt(Math.abs(pace) >= 100 ? Math.round(pace) : pace)
+		const paceText = pace === null ? '—' : fmt(Math.abs(pace) >= 100 ? Math.round(pace) : pace)
+	// Просроченные регулярные — напоминание в полосе метрик, ведёт к блоку «К оплате» на вводе
+	const overdue = dueRows(data, todayStr()).filter((r) => r.status === 'overdue').length
+	const overdueText = `${overdue} не ${overdue === 1 ? 'отмечен' : 'отмечены'}`
 	const val = (n: number) => (
 		<b className={n < 0 ? 'text-bad' : 'text-ink'}>
 			{fmt(n)} {st.base}
@@ -57,7 +61,8 @@ function MetricsBar({ data }: { data: TrackerData }) {
 					))}
 				</dl>
 				<p className="mt-2 text-xs text-muted">
-					{abbr(key)} {day}/{days} · Темп {paceText}{pace !== null && '/день'} · {st.base}
+										{abbr(key)} {day}/{days} · Темп {paceText}{pace !== null && '/день'} · {st.base}
+					{overdue > 0 && <Link href="/#due" className="text-warn"> · {overdueText}</Link>}
 				</p>
 			</div>
 			<div className="hidden flex-wrap justify-between gap-x-6 gap-y-1 border-y border-dashed border-line py-3 text-muted uppercase sm:flex">
@@ -69,8 +74,15 @@ function MetricsBar({ data }: { data: TrackerData }) {
 					<b className="text-ink">{pace === null ? '—' : `${minus(Math.abs(pace) >= 100 ? Math.round(pace) : pace)} ${st.base}/ДЕНЬ`}</b>{' '}
 					]
 				</span>
-				<span>
-					[ {monthTitle(key)} // ДЕНЬ {day}/{days} ]
+								<span>
+					[ {monthTitle(key)} // {day}/{days}
+					{overdue > 0 && (
+						<>
+							{' // '}
+							<Link href="/#due" className="text-warn hover:underline">{overdueText}</Link>
+						</>
+					)}{' '}
+					]
 				</span>
 			</div>
 		</>

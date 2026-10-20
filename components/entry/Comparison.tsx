@@ -8,7 +8,8 @@ import {
 	fmtPct,
 	forecast,
 	monthOf,
-	monthPlannedForecast,
+		monthPlannedForecast,
+	monthRecurring,
 	periodCompare,
 	savingsRates,
 	shiftKey
@@ -34,7 +35,9 @@ export function Comparison() {
 	const cmp = periodCompare(data, today)
 	const prevAbbr = abbr(shiftKey(monthOf(today), -1))
 	// Покупки по плану: max(план, факт) по каждому пункту, включая партнёра
-	const planned = monthPlannedForecast(data, monthOf(today))
+		const planned = monthPlannedForecast(data, monthOf(today))
+	// Регулярные: факт оплаченных + оценка остальных
+	const recurring = monthRecurring(data, monthOf(today), today).total
 	const lowData = <span className="text-muted">— // мало данных</span>
 
 	return (
@@ -71,6 +74,7 @@ export function Comparison() {
 					)}
 				</Row>
 
+				{recurring > 0 && <Row label="↻ Регулярные">{signed(-recurring, base)}</Row>}
 				{planned > 0 && <Row label="Плановые">{signed(-planned, base)}</Row>}
 
 				<Row label="Прогноз остатка">

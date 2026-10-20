@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTracker } from "./TrackerProvider";
 import { useNarrow } from "./AsciiBar";
-import { fmtPct, monthPlanned, monthlySeries, savingsRate } from "@/lib/metrics";
+import { fmtPct, monthPlanned, monthRecurringPaid, monthlySeries, savingsRate } from "@/lib/metrics";
 import { limitsSum } from "@/lib/plan";
 import type { Expense } from "@/lib/types";
 import { MONTHS_SHORT, curMonthKey, fmt, monthTitle, shiftMonth, signed, spentByCat, termName } from "@/lib/utils";
@@ -34,8 +34,9 @@ function niceScale(lo: number, hi: number, divisions = 4) {
   return { min, max, ticks };
 }
 
-/** Сегмент плановых трат */
+/** Сегменты плановых трат и регулярных платежей */
 const PLAN = "plan";
+const RECURRING = "recurring";
 
 /** Штриховка из двух цветов токенов: светлая подложка и косые линии */
 function PlanHatch({ id = "plan-hatch" }: { id?: string }) {
@@ -69,12 +70,14 @@ export function ChartView() {
   const perMonth = keys.map((k) => {
     const p = data.plans[k];
     const ids = new Set(p ? [...p.items.family, ...p.items.mine].map((i) => i.id) : []);
-    const regular = (list: Expense[] = []) => list.filter((e) => !(e.planItemId && ids.has(e.planItemId)));
+    const regular = (list: Expense[] = []) => list.filter((e) => !e.recurringId && !(e.planItemId && ids.has(e.planItemId)));
     const partnerPlanned = Object.values(data.partnerPlannedDaily[k] ?? {}).reduce((a, v) => a + v, 0);
+    const partnerRecurring = Object.values(data.partnerRecurringDaily?.[k] ?? {}).reduce((a, v) => a + v, 0);
     return {
       ...spentByCat(regular(data.familyExpenses[k])),
       [personalId(data.me.id)]: regular(data.myExpenses[k]).reduce((a, e) => a + e.base, 0),
-      [personalId(data.partner.id)]: (data.partnerPersonalTotals[k] ?? 0) - partnerPlanned,
+      [personalId(data.partner.id)]: (data.partnerPersonalTotals[k] ?? 0) - partnerPlanned - partnerRecurring,
+      [RECURRING]: monthRecurringPaid(data, k),
       [PLAN]: monthPlanned(data, k),
     } as Record<string, number>;
   });
@@ -83,11 +86,14 @@ export function ChartView() {
     .map((u) => ({ id: personalId(u.id), name: `Личное · ${u.name}`, limit: 0 }))
     .filter((c) => perMonth.some((d) => d[c.id]));
   const plan = perMonth.some((d) => d[PLAN] > 0) ? [{ id: PLAN, name: "План", limit: 0 }] : [];
-  const used = [...st.familyCategories.filter((c) => !c.archived || perMonth.some((d) => d[c.id])), ...personal, ...plan];
+  const rec = perMonth.some((d) => d[RECURRING] > 0) ? [{ id: RECURRING, name: "↻ Регулярные", limit: 0 }] : [];
+  const used = [...st.familyCategories.filter((c) => !c.archived || perMonth.some((d) => d[c.id])), ...personal, ...rec, ...plan];
   const color: Record<string, string> = {};
   st.familyCategories.forEach((c, i) => (color[c.id] = catColor(i)));
   // Цветов категорий 8 и они у семейных; личное — нейтральными токенами, порядок по id одинаков у обоих
-  people.forEach((u, i) => (color[personalId(u.id)] = i === 0 ? "var(--muted)" : "var(--dim)"));
+  // var(--muted) занят регулярными — личные сегменты темнее
+  people.forEach((u, i) => (color[personalId(u.id)] = i === 0 ? "var(--dim)" : "var(--line)"));
+  color[RECURRING] = "var(--muted)";
   color[PLAN] = "url(#plan-hatch)";
   // Сумма лимитов каждого месяца — как действовала тогда, с поправками плана на месяц; на графике ступеньками
   const limits = keys.map((k) => limitsSum(st.familyCategories, k, data.plans[k]?.familyOverrides));
@@ -253,7 +259,7 @@ export function ChartView() {
               <span aria-hidden="true" style={{ color: color[c.id] }}>■</span>
             )}
             {/* Личные сегменты — не категории: имя человека без замены пробелов на _ */}
-            <span className="min-w-0 flex-1 truncate uppercase sm:flex-none sm:shrink-0">{c.id.startsWith("personal:") || c.id === PLAN ? c.name : termName(c.name)}</span>
+            <span className="min-w-0 flex-1 truncate uppercase sm:flex-none sm:shrink-0">{c.id.startsWith("personal:") || c.id === PLAN || c.id === RECURRING ? c.name : termName(c.name)}</span>
             <span aria-hidden="true" className="min-w-4 flex-1 overflow-hidden whitespace-nowrap text-dim max-sm:hidden">{".".repeat(80)}</span>
             <b className="shrink-0">{fmt(periodTotal[c.id] ?? 0)}</b>
           </li>

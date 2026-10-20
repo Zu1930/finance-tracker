@@ -3,7 +3,7 @@ import { Redis } from "@upstash/redis";
 import { K, parseMonthKey, parsePlanKey, type RawStore } from "./store";
 import type { RawPlans } from "./plan";
 import type { RawSavings } from "./savings";
-import type { Account, Expense, Goal, Income, MonthPlan, MyMonthPlan, PlanItem, Recon, Settings, UserSettings } from "./types";
+import type { Account, Expense, Goal, Income, MonthPlan, MyMonthPlan, PlanItem, Recon, RecurringPayment, Settings, UserSettings } from "./types";
 
 let client: Redis | null = null;
 
@@ -48,8 +48,18 @@ export async function readStore(userIds: string[]): Promise<RawStore> {
     userSettings,
     hashes,
     savings: await readSavings(userIds),
-    plans: await readPlans(indexed),
+        plans: await readPlans(indexed),
+    recurring: await readRecurring(userIds),
   };
+}
+
+/** Регулярные платежи: семейные и личные обоих */
+async function readRecurring(userIds: string[]): Promise<NonNullable<RawStore["recurring"]>> {
+  const p = getRedis().pipeline();
+  p.hgetall(K.recurring);
+  for (const id of userIds) p.hgetall(K.userRecurring(id));
+  const [family, ...users] = (await p.exec()) as (Record<string, RecurringPayment> | null)[];
+  return { family: family ?? {}, byUser: Object.fromEntries(userIds.map((id, i) => [id, users[i] ?? {}])) };
 }
 
 /** Документы и хеши планов из индекса: план — JSON, пункты — HASH */

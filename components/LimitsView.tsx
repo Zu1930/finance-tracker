@@ -10,10 +10,12 @@ import { CarryOver } from "./plan/CarryOver";
 import { PlanItems } from "./plan/PlanItems";
 import { PlanLimits, PlanSummary } from "./plan/MonthPlan";
 import { usePlan, withOverride } from "./plan/usePlan";
-import { byAuthor, fmtPct, monthIncome, savingsRate } from "@/lib/metrics";
+import { RecurringSection } from "./recurring/RecurringSection";
+import { RecurringManager } from "./recurring/RecurringManager";
+import { byAuthor, fmtPct, monthIncome, monthOccurrences, savingsRate } from "@/lib/metrics";
 import { MAX_AHEAD, isMonth, itemStatus, linkedByItem, monthLimit, monthsAhead, planSpentByCat } from "@/lib/plan";
 import type { Category, Expense, PlanItem } from "@/lib/types";
-import { activeCats, amountChars, catsIn, curMonthKey, fmt, liveCats, monthName, monthTitle, minus, parseAmount, setLimit, shiftMonth, signed, termName, uid } from "@/lib/utils";
+import { activeCats, amountChars, catsIn, curMonthKey, fmt, liveCats, monthName, monthTitle, minus, parseAmount, setLimit, shiftMonth, signed, termName, todayStr, uid } from "@/lib/utils";
 
 export function LimitsView() {
   const { month, setMonth } = useTracker();
@@ -48,6 +50,7 @@ export function LimitsView() {
       {ahead > 0 ? (
         <>
           <PlanSummary month={month} />
+          <RecurringSection month={month} future />
           <PlanItems month={month} withStatus={false} />
           <PlanLimits month={month} />
         </>
@@ -81,7 +84,11 @@ function MonthLimits() {
   const personalTotal = mine.reduce((a, e) => a + e.base, 0) + (data.partnerPersonalTotals[month] ?? 0);
   const expense = familyTotal + personalTotal;
   const rest = income - expense;
-  const myLeft = myCats.reduce((a, c) => a + c.limit - (mySpent[c.id] ?? 0), 0);
+    const myLeft = myCats.reduce((a, c) => a + c.limit - (mySpent[c.id] ?? 0), 0);
+  // Регулярные по категориям: факт оплаченных или оценка — для строки под шкалой
+  const occ = monthOccurrences(data, month, todayStr());
+  const byCat = (list: typeof occ.family) => list.reduce<Record<string, number>>((a, o) => ({ ...a, [o.categoryId]: (a[o.categoryId] ?? 0) + (o.paidBase ?? o.estimateBase ?? 0) }), {});
+  const recurringByCat = { family: byCat(occ.family), mine: byCat(occ.mine) };
 
   return (
     <>
@@ -109,11 +116,13 @@ function MonthLimits() {
         </dl>
       </section>
 
+      {month === cur && <PlanSummary month={month} />}
+      <RecurringSection month={month} future={false} />
       {items.length > 0 && <PlanItems month={month} withStatus form={false} />}
 
       <section className="mt-6 border-t border-dashed border-line pt-5">
         <h2 className="sec">Семья</h2>
-        <LimitBlocks cats={familyCats} spent={familySpent} contribution={family} planned={plan.items.family} />
+        <LimitBlocks cats={familyCats} spent={familySpent} contribution={family} planned={plan.items.family} recurring={recurringByCat.family} />
       </section>
 
       <section className="mt-6 border-t border-dashed border-line pt-5">
@@ -123,7 +132,7 @@ function MonthLimits() {
         {myCats.length === 0 ? (
           <p className="mt-3 text-muted uppercase">Нет категорий — добавьте ниже</p>
         ) : (
-          <LimitBlocks cats={myCats} spent={mySpent} planned={plan.items.mine} />
+          <LimitBlocks cats={myCats} spent={mySpent} planned={plan.items.mine} recurring={recurringByCat.mine} />
         )}
       </section>
 
@@ -157,12 +166,17 @@ function MonthLimits() {
           </p>
         </div>
       </details>
+      <RecurringManager />
     </>
   );
 }
 
 /** Блоки лимитов в 2 колонки; для семейных — строка вклада по именам; под шкалой — покупки по плану в категории */
-function LimitBlocks({ cats, spent, contribution, planned }: { cats: Category[]; spent: Record<string, number>; contribution?: Expense[]; planned: PlanItem[] }) {
+function LimitBlocks({ cats, spent, contribution, planned, recurring }: {
+  cats: Category[]; spent: Record<string, number>; contribution?: Expense[]; planned: PlanItem[];
+  /** Регулярные месяца по категориям: в шкалу не входят, строкой под ней */
+  recurring: Record<string, number>;
+}) {
   const { data, month } = useTracker();
   const base = data.settings!.base;
   const linked = linkedByItem([...(data.familyExpenses[month] ?? []), ...(data.myExpenses[month] ?? [])], planned);
@@ -178,6 +192,7 @@ function LimitBlocks({ cats, spent, contribution, planned }: { cats: Category[];
             <p className={`mt-1 uppercase ${left < 0 ? "text-bad" : "text-muted"}`}>
               {left < 0 ? `Перерасход ${fmt(-left)} ${base}` : `Осталось ${fmt(left)} из ${fmt(c.limit)} ${base}`}
             </p>
+            {recurring[c.id] > 0 && <p className="mt-1 text-muted2 uppercase">↻ Регулярные {fmt(Math.round(recurring[c.id]))} — отдельно</p>}
             {planned.filter((it) => it.categoryId === c.id).map((it) => {
               const status = itemStatus(it, linked[it.id] ?? 0);
               return (

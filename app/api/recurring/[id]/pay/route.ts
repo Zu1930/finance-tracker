@@ -1,0 +1,41 @@
+import { requireUser, unauthorized } from "@/lib/session";
+import { getRedis } from "@/lib/redis";
+import { fail } from "@/lib/records";
+import { activeIn, amountIn, isMonth } from "@/lib/recurring";
+import { recordRecurringPayment } from "@/lib/recurring-server";
+import { K, recurringKey } from "@/lib/store";
+import type { Expense, RecurringPayment, Settings } from "@/lib/types";
+import { todayStr } from "@/lib/utils";
+
+const DAY = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+/**
+ * Отметить оплату: { scope, month, amount?, today? }. Для примерного платежа amount обязателен, для точного —
+ * сумма платежа. Трата: категория и scope из платежа, автор из сессии, дата — сегодня, курс — текущий
+ */
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const user = await requireUser(req);
+  if (!user) return unauthorized();
+  const { id } = await params;
+  const b = (await req.json().catch(() => null)) as { scope?: unknown; month?: unknown; amount?: unknown; today?: unknown } | null;
+  if (!isMonth(b?.month)) return fail(400, "Неверный месяц.");
+  const scope = b.scope === "personal" ? "personal" : "family";
+  try {
+    const [p, settings] = await Promise.all([getRedis().hget<RecurringPayment>(recurringKey(scope, user.id), id), getRedis().get<Settings>(K.settings)]);
+    if (!p) return fail(403, "Платёж не найден.");
+    if (!activeIn(p, b.month)) return fail(400, "В этом месяце платежа нет.");
+    const amount = p.approx ? b.amount : (b.amount ?? amountIn(p, b.month));
+    if (typeof amount !== "number" || !Number.isFinite(amount) || !(amount > 0)) return fail(400, p.approx ? "Введите сумму оплаты." : "Неверная сумма.");
+    const rate = p.currency === settings?.base ? 1 : settings?.rates[p.currency];
+    if (!rate) return fail(400, `Нет курса ${p.currency}.`);
+    const date = typeof b.today === "string" && DAY.test(b.today) ? b.today : todayStr();
+    const e: Expense = {
+      id: crypto.randomUUID(), amount, currency: p.currency, rate, base: Math.round(amount * rate * 100) / 100,
+      catId: p.categoryId, note: p.name, date, ts: Date.now(), scope, authorId: user.id, recurringId: p.id, recurringMonth: b.month,
+    };
+    return await recordRecurringPayment(user.id, e);
+  } catch (e) {
+    console.error(e);
+    return fail(500, "Не удалось сохранить.");
+  }
+}

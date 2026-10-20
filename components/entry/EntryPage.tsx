@@ -15,10 +15,14 @@ import {
 	byRecentUse,
 	fmt,
 	incomeSources,
+		parseAmount,
 	termName,
 	uid
 } from '@/lib/utils'
 import { itemLeft, itemStatus, linkedByItem } from '@/lib/plan'
+import { monthOccurrences } from '@/lib/metrics'
+import { matchPayment } from '@/lib/recurring'
+import { DueBlock } from '../recurring/DueBlock'
 
 /**
  * Ввод трат и поступлений на одной странице. Режим и scope живут в URL: /?mode=income, /?scope=personal.
@@ -95,13 +99,29 @@ export function EntryPage() {
 	const planChips = mode === 'expense' ? scopeItems.filter((i) => i.categoryId === catId && itemStatus(i, linked[i.id] ?? 0) !== 'done') : []
 	const [planId, setPlanId] = useState<string | null>(null)
 	const planItem = planChips.find((i) => i.id === planId)
-	// Смена категории, scope или режима сбрасывает выбранный пункт
-	useEffect(() => setPlanId(null), [catId, scope, mode])
+		// Ручная трата похожа на неоплаченный регулярный платёж этой категории (±10%) — предложить связать
+	const amountBase = (() => {
+				const a = parseAmount(form.amount)
+		const r = form.currency === st.base ? 1 : st.rates[form.currency]
+		return a && a > 0 && r ? a * r : 0
+	})()
+	const occ = monthOccurrences(data, planMonth, form.date)
+	const match = mode === 'expense' && catId && amountBase > 0
+		? matchPayment([...(scope === 'personal' ? occ.mine : occ.family)].map((o) => ({ ...o, month: planMonth })), catId, amountBase)
+		: undefined
+	const [recId, setRecId] = useState<string | null>(null)
+	const recurring = match && match.paymentId === recId ? match : undefined
+	// Смена категории, scope или режима сбрасывает выбранный пункт и платёж
+	useEffect(() => {
+		setPlanId(null)
+		setRecId(null)
+	}, [catId, scope, mode])
 
 	const pickPlan = (id: string) => {
 		const it = planChips.find((i) => i.id === id)
 		if (!it || planId === id) return setPlanId(null)
-		setPlanId(id)
+				setPlanId(id)
+		setRecId(null)
 		// Сумма пустая — подставить остаток пункта; он в базовой валюте
 		if (!form.amount.trim()) {
 			form.setCur(st.base)
@@ -120,10 +140,13 @@ export function EntryPage() {
 			const cat = cats.find((c) => c.id === catId)
 			const entry = form.collect(() => (cat ? null : 'Выберите категорию.'))
 			if (!entry || !cat) return
-			const e: Expense = { id: uid(), ...entry, catId: cat.id, scope, authorId: data.me.id, ...(planItem && entry.date.slice(0, 7) === planMonth && { planItemId: planItem.id }) }
+			const e: Expense = { id: uid(), ...entry, catId: cat.id, scope, authorId: data.me.id, ...(planItem && entry.date.slice(0, 7) === planMonth && { planItemId: planItem.id }),
+				...(!planItem && recurring && { recurringId: recurring.paymentId, recurringMonth: recurring.month }) }
 			addEntry('expense', e)
 			setCatId(null)
-			const tag = e.planItemId && planItem ? ` // План ${(linked[planItem.id] ?? 0) + e.base >= planItem.amount ? '✓' : '~'}` : ''
+			const tag = e.planItemId && planItem
+				? ` // План ${(linked[planItem.id] ?? 0) + e.base >= planItem.amount ? '✓' : '~'}`
+				: e.recurringId && recurring ? ` // ↻ ${termName(recurring.name)}` : ''
 			recorded(`−${fmt(e.amount)} ${e.currency} → ${termName(cat.name)}${tag}`, () => removeEntry('expense', e))
 		} else {
 			const entry = form.collect()
@@ -139,6 +162,7 @@ export function EntryPage() {
 
 	return (
 		<>
+						<DueBlock />
 			<div ref={rootRef}>
 				<h1 className="sr-only">
 					{mode === 'income' ? 'Новый доход' : scope === 'personal' ? 'Новый личный расход' : 'Новый семейный расход'}
@@ -170,14 +194,19 @@ export function EntryPage() {
 					onPick={(id) => (mode === 'expense' ? setCatId(catId === id ? null : id) : setSrcId(id))}
 					onPlus={() => go('income', scope, false)}
 					onSubmit={submit}
-					extra={
-						planChips.length > 0 && (
+										extra={
+						(planChips.length > 0 || match) && (
 							<div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Пункт плана">
 								{planChips.map((i) => (
-									<button key={i.id} className="tb" aria-pressed={planId === i.id} onClick={() => pickPlan(i.id)}>
+																		<button key={i.id} className="tb" aria-pressed={planId === i.id} onClick={() => pickPlan(i.id)}>
 										План: {termName(i.name)} {fmt(itemLeft(i, linked[i.id] ?? 0))}
 									</button>
 								))}
+								{match && (
+									<button className="tb" aria-pressed={recId === match.paymentId} onClick={() => { setRecId(recId === match.paymentId ? null : match.paymentId); setPlanId(null) }}>
+										↻ Это {termName(match.name)}?
+									</button>
+								)}
 							</div>
 						)
 					}
