@@ -27,6 +27,8 @@ export async function POST(req: Request) {
       await addEntry(key, entry);
       return NextResponse.json({ entry });
     }
+    // Повтор из офлайн-очереди (ответ на первую отправку потерялся): запись уже есть — второй раз не связываем
+    if (await getRedis().hget(key, e.id)) return NextResponse.json({ entry });
     const itemKey = planItemsKey(e.scope, user.id, month);
     await registerKey(key);
     for (let i = 0; i < 5; i++) {

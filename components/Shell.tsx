@@ -64,7 +64,7 @@ function MetricsBar({ data }: { data: TrackerData }) {
 
 export function Shell({ children }: { children: ReactNode }) {
 	const pathname = usePathname()
-	const { status, data, reload, toastState, dismissToast } = useTracker()
+	const { status, data, reload, toastState, dismissToast, offline, queued } = useTracker()
 	useDailyRates()
 	const router = useRouter()
 
@@ -143,6 +143,13 @@ export function Shell({ children }: { children: ReactNode }) {
 					<MetricsBar data={data} />
 				) : (
 					<hr className="dash" />
+				)}
+				{(offline || queued > 0) && (
+					<p className="mt-3 text-warn uppercase" role="status">
+						{offline ? '!! Нет связи' : '> Отправка'}
+						{offline?.savedAt && ` // данные на ${new Date(offline.savedAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`}
+						{queued > 0 && ` // в очереди: ${queued}`}
+					</p>
 				)}
 				<main className="pt-6">{body}</main>
 			</div>

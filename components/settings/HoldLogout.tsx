@@ -1,9 +1,15 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import { SW_CACHE } from '@/lib/offline'
 
 const logout = async () => {
 	await fetch('/api/logout', { method: 'POST' })
+	// Офлайн-копия данных и очередь — этого пользователя: на общем устройстве их не должен увидеть следующий
+	try {
+		await caches.delete(SW_CACHE)
+		Object.keys(localStorage).filter((k) => k.startsWith('ft:queue:')).forEach((k) => localStorage.removeItem(k))
+	} catch {}
 	window.location.href = '/login'
 }
 

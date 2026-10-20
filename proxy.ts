@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, readSession } from "@/lib/session";
 
-const PUBLIC = new Set(["/login", "/api/login", "/api/users"]);
+// /api/cron/* проверяет CRON_SECRET сам: у Vercel Cron нет сессии
+const PUBLIC = new Set(["/login", "/api/login", "/api/users", "/api/cron/daily"]);
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -18,5 +19,5 @@ export async function proxy(req: NextRequest) {
 
 export const config = {
   // Иконки и манифест браузер запрашивает без сессии (манифест — даже без cookie): они должны отдаваться всем
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|icon-.*\\.png|apple-icon.png|manifest.webmanifest|robots.txt).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|icon-.*\\.png|apple-icon.png|manifest.webmanifest|sw.js|robots.txt).*)"],
 };

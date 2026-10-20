@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { useTracker } from '../TrackerProvider'
 import type { Expense, Income, Scope } from '@/lib/types'
 import { EntryForm, useAltPick, useEntryForm, type EntryMode } from './EntryForm'
@@ -27,7 +27,6 @@ import { itemLeft, itemStatus, linkedByItem } from '@/lib/plan'
 export function EntryPage() {
 	const { data, addEntry, removeEntry, toast } = useTracker()
 	const st = data.settings!
-	const router = useRouter()
 	const params = useSearchParams()
 	const mode: EntryMode = params.get('mode') === 'income' ? 'income' : 'expense'
 	const scope: Scope = params.get('scope') === 'personal' ? 'personal' : 'family'
@@ -58,7 +57,8 @@ export function EntryPage() {
 			const q = new URLSearchParams()
 			if (m === 'income') q.set('mode', 'income')
 			if (sc === 'personal') q.set('scope', 'personal')
-			router.replace(q.size ? `/?${q}` : '/', { scroll: false })
+			// Без похода на сервер: useSearchParams видит history.replaceState, и переключение работает без связи
+			window.history.replaceState(null, '', q.size ? `/?${q}` : '/')
 		}
 		if (focusAmount) form.amountRef.current?.focus()
 	}

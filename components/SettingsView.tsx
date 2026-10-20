@@ -9,6 +9,7 @@ import { BaseCurrency } from './settings/BaseCurrency'
 import { MyCurrency } from './settings/MyCurrency'
 import { ThemeSwitch } from './settings/ThemeSwitch'
 import { HoldLogout } from './settings/HoldLogout'
+import { Notifications } from './settings/Notifications'
 
 /** Настройки: валюты, основная валюта, оформление, данные, аккаунт */
 export function SettingsView() {
@@ -39,6 +40,9 @@ export function SettingsView() {
 			</Section>
 			<Section title="Оформление">
 				<ThemeSwitch />
+			</Section>
+			<Section title="Уведомления">
+				<Notifications />
 			</Section>
 			<Section title="Данные">
 				<div className="flex flex-wrap gap-2">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTracker } from "./TrackerProvider";
 import { CommitInput } from "./CommitInput";
@@ -11,7 +11,7 @@ import { PlanItems } from "./plan/PlanItems";
 import { PlanLimits, PlanSummary } from "./plan/MonthPlan";
 import { usePlan, withOverride } from "./plan/usePlan";
 import { byAuthor, fmtPct, monthIncome, savingsRate } from "@/lib/metrics";
-import { MAX_AHEAD, itemStatus, linkedByItem, monthLimit, monthsAhead, planSpentByCat } from "@/lib/plan";
+import { MAX_AHEAD, isMonth, itemStatus, linkedByItem, monthLimit, monthsAhead, planSpentByCat } from "@/lib/plan";
 import type { Category, Expense, PlanItem } from "@/lib/types";
 import { activeCats, amountChars, catsIn, curMonthKey, fmt, liveCats, monthName, monthTitle, parseAmount, setLimit, shiftMonth, signed, termName, uid } from "@/lib/utils";
 
@@ -19,6 +19,11 @@ export function LimitsView() {
   const { month, setMonth } = useTracker();
   const cur = curMonthKey();
   const ahead = monthsAhead(cur, month);
+  // /limits?month=YYYY-MM — из пуша «пора спланировать»: открыть этот месяц (не дальше 12 вперёд)
+  useEffect(() => {
+    const m = new URLSearchParams(window.location.search).get("month");
+    if (m && isMonth(m) && monthsAhead(cur, m) <= MAX_AHEAD) setMonth(m);
+  }, [cur, setMonth]);
 
   return (
     <>
