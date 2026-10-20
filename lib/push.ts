@@ -52,5 +52,5 @@ export function weeklyReminder(weekday: number, count: number, week: string): Pu
 export function updateMessage(previous: string | null, current: string, commitMessage?: string): PushMessage | null {
   if (!previous || previous === current) return null;
   const first = commitMessage?.split("\n")[0].trim();
-  return { title: "SPEND.LOG обновился", body: first || "Откройте, чтобы загрузить новую версию", url: "/", tag: `update-${current.slice(0, 7)}` };
+  return { title: "Новая версия", body: first || "Откройте, чтобы загрузить новую версию", url: "/", tag: `update-${current.slice(0, 7)}` };
 }

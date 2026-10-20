@@ -6,6 +6,6 @@ import { sendPush } from "@/lib/push-server";
 export async function POST(req: Request) {
   const user = await requireUser(req);
   if (!user) return unauthorized();
-  const sent = await sendPush({ title: "SPEND.LOG", body: "Уведомления работают", url: "/settings", tag: "test" }, [user.id]);
+  const sent = await sendPush({ title: "Уведомления работают", body: "Так будут приходить напоминания", url: "/settings", tag: "test" }, [user.id]);
   return NextResponse.json({ sent });
 }

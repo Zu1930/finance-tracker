@@ -122,7 +122,7 @@ export function Shell({ children }: { children: ReactNode }) {
 			<Link
 				key={t.href}
 				href={t.href}
-				className={mobile ? 'mbare tbox h-[52px] justify-center border-0 px-0 text-xs not-first:border-l not-first:border-line aria-[current=page]:border-ink' : 'tb'}
+				className={mobile ? 'mbare tbox h-[calc(52px+env(safe-area-inset-bottom,0px))] justify-center border-0 px-0 pb-[env(safe-area-inset-bottom,0px)] text-xs not-first:border-l not-first:border-line aria-[current=page]:border-ink' : 'tb'}
 				aria-current={pathname === t.href ? 'page' : undefined}
 			>
 				{t.label}
@@ -172,7 +172,7 @@ export function Shell({ children }: { children: ReactNode }) {
 				<main className="pt-6">{body}</main>
 			</div>
 			<nav
-				className="sticky bottom-0 z-10 grid grid-cols-4 border-t border-line bg-panel pb-[env(safe-area-inset-bottom,0px)] sm:hidden"
+				className="sticky bottom-0 z-10 grid grid-cols-4 border-t border-line bg-panel sm:hidden"
 				aria-label="Разделы"
 			>
 				{tabs(true)}
