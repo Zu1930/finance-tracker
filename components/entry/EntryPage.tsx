@@ -18,6 +18,7 @@ import {
 	termName,
 	uid
 } from '@/lib/utils'
+import { itemLeft, itemStatus, linkedByItem } from '@/lib/plan'
 
 /**
  * Ввод трат и поступлений на одной странице. Режим и scope живут в URL: /?mode=income, /?scope=personal.
@@ -86,6 +87,29 @@ export function EntryPage() {
 		form.setError('')
 	})
 
+	// Пункты плана выбранной категории в месяце даты траты, ещё не купленные полностью
+	const planMonth = form.date.slice(0, 7)
+	const plan = data.plans[planMonth]
+	const scopeItems = (scope === 'personal' ? plan?.items.mine : plan?.items.family) ?? []
+	const linked = linkedByItem([...(data.familyExpenses[planMonth] ?? []), ...(data.myExpenses[planMonth] ?? [])], scopeItems)
+	const planChips = mode === 'expense' ? scopeItems.filter((i) => i.categoryId === catId && itemStatus(i, linked[i.id] ?? 0) !== 'done') : []
+	const [planId, setPlanId] = useState<string | null>(null)
+	const planItem = planChips.find((i) => i.id === planId)
+	// Смена категории, scope или режима сбрасывает выбранный пункт
+	useEffect(() => setPlanId(null), [catId, scope, mode])
+
+	const pickPlan = (id: string) => {
+		const it = planChips.find((i) => i.id === id)
+		if (!it || planId === id) return setPlanId(null)
+		setPlanId(id)
+		// Сумма пустая — подставить остаток пункта; он в базовой валюте
+		if (!form.amount.trim()) {
+			form.setCur(st.base)
+			form.setAmount(String(itemLeft(it, linked[it.id] ?? 0)))
+		}
+		form.amountRef.current?.focus()
+	}
+
 	const recorded = (what: string, undo: () => void) => {
 		form.reset()
 		toast(`Записано: ${what}`, 'Отменить', undo)
@@ -96,10 +120,11 @@ export function EntryPage() {
 			const cat = cats.find((c) => c.id === catId)
 			const entry = form.collect(() => (cat ? null : 'Выберите категорию.'))
 			if (!entry || !cat) return
-			const e: Expense = { id: uid(), ...entry, catId: cat.id, scope, authorId: data.me.id }
+			const e: Expense = { id: uid(), ...entry, catId: cat.id, scope, authorId: data.me.id, ...(planItem && entry.date.slice(0, 7) === planMonth && { planItemId: planItem.id }) }
 			addEntry('expense', e)
 			setCatId(null)
-			recorded(`−${fmt(e.amount)} ${e.currency} → ${termName(cat.name)}`, () => removeEntry('expense', e))
+			const tag = e.planItemId && planItem ? ` // План ${(linked[planItem.id] ?? 0) + e.base >= planItem.amount ? '✓' : '~'}` : ''
+			recorded(`−${fmt(e.amount)} ${e.currency} → ${termName(cat.name)}${tag}`, () => removeEntry('expense', e))
 		} else {
 			const entry = form.collect()
 			if (!entry) return
@@ -144,6 +169,17 @@ export function EntryPage() {
 					onPick={(id) => (mode === 'expense' ? setCatId(catId === id ? null : id) : setSrcId(id))}
 					onPlus={() => go('income', scope, false)}
 					onSubmit={submit}
+					extra={
+						planChips.length > 0 && (
+							<div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Пункт плана">
+								{planChips.map((i) => (
+									<button key={i.id} className="tb" aria-pressed={planId === i.id} onClick={() => pickPlan(i.id)}>
+										План: {termName(i.name)} {fmt(itemLeft(i, linked[i.id] ?? 0))}
+									</button>
+								))}
+							</div>
+						)
+					}
 					empty={
 						scope === 'personal' && (
 							<p className="text-muted uppercase">

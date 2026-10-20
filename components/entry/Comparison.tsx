@@ -8,6 +8,7 @@ import {
 	fmtPct,
 	forecast,
 	monthOf,
+	monthPlannedForecast,
 	periodCompare,
 	savingsRates,
 	shiftKey
@@ -32,6 +33,8 @@ export function Comparison() {
 	const f = forecast(data, today)
 	const cmp = periodCompare(data, today)
 	const prevAbbr = abbr(shiftKey(monthOf(today), -1))
+	// Покупки по плану: max(план, факт) по каждому пункту, включая партнёра
+	const planned = monthPlannedForecast(data, monthOf(today))
 	const lowData = <span className="text-muted">— // мало данных</span>
 
 	return (
@@ -54,7 +57,7 @@ export function Comparison() {
 					{f ? (
 						<>
 							<span className={f.vsAverage !== null && f.vsAverage > WARN_GROWTH ? 'text-warn' : ''}>
-								{signed(-f.forecastExpense, base)}
+								{signed(-f.forecastRegular, base)}
 							</span>
 							<span className="text-muted">
 								{' '}
@@ -67,6 +70,8 @@ export function Comparison() {
 						lowData
 					)}
 				</Row>
+
+				{planned > 0 && <Row label="Плановые">{signed(-planned, base)}</Row>}
 
 				<Row label="Прогноз остатка">
 					{f ? (

@@ -54,6 +54,8 @@ export type Expense = {
   scope: Scope;
   /** Выставляет сервер из сессии */
   authorId: string;
+  /** Трата по пункту плана месяца: в шкалу категории не входит, кроме превышения пункта */
+  planItemId?: string;
 };
 
 export type Income = {
@@ -159,6 +161,51 @@ export type SavingsView = {
   migration?: { goals: number; owner: User };
 };
 
+// ---------- План месяца ----------
+/** Семейная часть плана: ft:plan:<YYYY-MM>. Нет ключа — пустой план */
+export type MonthPlan = {
+  month: string;
+  /** null — доход плана = среднее за 3 завершённых месяца */
+  incomeOverride: number | null;
+  /** familyCategoryId → лимит только на этот месяц */
+  limitOverrides: Record<string, number>;
+  version: number;
+};
+/** Личная часть плана: ft:u:<id>:plan:<YYYY-MM> */
+export type MyMonthPlan = { month: string; limitOverrides: Record<string, number>; version: number };
+/** Плановая покупка: ft:plan-items:<YYYY-MM> или ft:u:<id>:plan-items:<YYYY-MM>, поле = id. amount — в базовой валюте */
+export type PlanItem = {
+  id: string;
+  month: string;
+  name: string;
+  amount: number;
+  categoryId: string;
+  scope: Scope;
+  ownerId?: string;
+  createdBy: string;
+  expenseIds: string[];
+  /** Месяц, из которого перенесена */
+  movedFrom?: string;
+  version: number;
+};
+export type PlanItemStatus = "planned" | "partial" | "done";
+
+/** План месяца в ответе /api/data: своё и семейное целиком, партнёра — суммами */
+export type PlanView = {
+  month: string;
+  incomeOverride: number | null;
+  familyOverrides: Record<string, number>;
+  myOverrides: Record<string, number>;
+  items: { family: PlanItem[]; mine: PlanItem[] };
+  partner: {
+    plannedTotal: number;
+    /** Σ max(сумма пункта, связанные траты) — для прогноза */
+    plannedForecast: number;
+  };
+  planVersion: number;
+  myPlanVersion: number;
+};
+
 export type User = { id: string; name: string };
 
 /** Месяц YYYY-MM */
@@ -178,6 +225,12 @@ export type TrackerData = {
   partnerPersonalTotals: Record<MonthKey, number>;
   /** То же по дням месяца ("1".."31") — для честного сравнения периодов; без записей и категорий */
   partnerPersonalDaily: Record<MonthKey, Record<string, number>>;
+  /** Из них по пунктам плана партнёра, по дням — чтобы отделить обычные траты от плановых */
+  partnerPlannedDaily: Record<MonthKey, Record<string, number>>;
+  /** Планы месяцев, где есть хоть что-то запланированное */
+  plans: Record<MonthKey, PlanView>;
+  /** Сумма личных лимитов партнёра по месяцам (текущий −1 … +12) с его поправками на месяц */
+  partnerLimits: Record<MonthKey, number>;
   /** Есть данные старого формата, ещё не перенесённые в семейный; owner — кто запускает перенос */
   migration?: { pending: true; owner: User };
 };

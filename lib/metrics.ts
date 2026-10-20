@@ -5,6 +5,7 @@
  * Считается по семье: семейные траты + мои личные + личные суммы партнёра + доходы обоих.
  */
 import type { TrackerData } from "./types.ts";
+import { linkedByItem, plannedForecast } from "./plan.ts";
 
 /** Короткие названия месяцев для таблиц: СЕНТ, а не СЕН, чтобы не путать с «сен» на графике */
 export const MONTHS_ABBR = ["ЯНВ", "ФЕВ", "МАР", "АПР", "МАЙ", "ИЮН", "ИЮЛ", "АВГ", "СЕНТ", "ОКТ", "НОЯ", "ДЕК"];
@@ -38,6 +39,28 @@ export const monthExpense = (data: TrackerData, key: string, untilDay?: number) 
   sumBase(data.familyExpenses[key] ?? [], untilDay) + sumBase(data.myExpenses[key] ?? [], untilDay) + partnerSpent(data, key, untilDay);
 export const monthIncome = (data: TrackerData, key: string, untilDay?: number) => sumBase(data.incomes[key] ?? [], untilDay);
 
+const planItems = (data: TrackerData, key: string) => {
+  const p = data.plans[key];
+  return p ? [...p.items.family, ...p.items.mine] : [];
+};
+const ownExpenses = (data: TrackerData, key: string) => [...(data.familyExpenses[key] ?? []), ...(data.myExpenses[key] ?? [])];
+
+/** Траты по пунктам плана: семейные и мои — по planItemId существующих пунктов, партнёра — суммы по дням */
+export function monthPlanned(data: TrackerData, key: string, untilDay?: number): number {
+  const ids = new Set(planItems(data, key).map((i) => i.id));
+  const own = ownExpenses(data, key).filter((e) => e.planItemId && ids.has(e.planItemId));
+  const partner = Object.entries(data.partnerPlannedDaily[key] ?? {}).reduce((a, [d, v]) => (untilDay === undefined || Number(d) <= untilDay ? a + v : a), 0);
+  return sumBase(own, untilDay) + partner;
+}
+/** Обычные траты — без связанных с планом: по ним экстраполяция и сравнения */
+export const monthRegular = (data: TrackerData, key: string, untilDay?: number) => monthExpense(data, key, untilDay) - monthPlanned(data, key, untilDay);
+
+/** Плановые траты месяца для прогноза: по каждому пункту max(сумма плана, связанные траты), включая партнёра */
+export function monthPlannedForecast(data: TrackerData, key: string): number {
+  const items = planItems(data, key);
+  return plannedForecast(items, linkedByItem(ownExpenses(data, key), items)) + (data.plans[key]?.partner.plannedForecast ?? 0);
+}
+
 /** Ключи n последних полностью завершённых месяцев, от старых к новым (без текущего) */
 export function completedMonths(today: string, n: number): string[] {
   const cur = monthOf(today);
@@ -49,7 +72,8 @@ const hasRecords = (data: TrackerData, key: string) =>
   (data.familyExpenses[key]?.length ?? 0) + (data.myExpenses[key]?.length ?? 0) + (data.incomes[key]?.length ?? 0) > 0 ||
   (data.partnerPersonalTotals[key] ?? 0) > 0;
 
-export type Average = { income: number; expense: number; months: number };
+/** expense — все траты, regular — без связанных с планом */
+export type Average = { income: number; expense: number; regular: number; months: number };
 
 /** Средние доход и расход за n завершённых месяцев с записями; null — таких месяцев нет */
 export function average(data: TrackerData, today: string, n = 3): Average | null {
@@ -57,7 +81,8 @@ export function average(data: TrackerData, today: string, n = 3): Average | null
   if (keys.length === 0) return null;
   const income = keys.reduce((a, k) => a + monthIncome(data, k), 0);
   const expense = keys.reduce((a, k) => a + monthExpense(data, k), 0);
-  return { income: income / keys.length, expense: expense / keys.length, months: keys.length };
+  const regular = keys.reduce((a, k) => a + monthRegular(data, k), 0);
+  return { income: income / keys.length, expense: expense / keys.length, regular: regular / keys.length, months: keys.length };
 }
 
 /** (доход − расход) / доход; null при нулевом доходе */
@@ -83,14 +108,19 @@ export function savingsRates(data: TrackerData, today: string): SavingsRates {
 
 export type Forecast = {
   spentSoFar: number;
+  /** Все расходы на конец месяца = обычные (экстраполяция) + плановые */
   forecastExpense: number;
+  /** Обычные траты, экстраполированные на месяц */
+  forecastRegular: number;
+  /** Плановые: по каждому пункту max(план, факт) */
+  planned: number;
   expectedIncome: number;
   /** Полученного меньше среднего — доход взят по среднему за 3 месяца */
   incomeIsExpected: boolean;
   forecastBalance: number;
   /** Последний день месяца, на который прогноз */
   lastDay: number;
-  /** Прогноз расходов к среднему за 3 месяца; null — среднего нет */
+  /** Обычные траты: прогноз к среднему за 3 месяца; null — среднего нет */
   vsAverage: number | null;
   averageExpense: number | null;
 };
@@ -102,7 +132,10 @@ export function forecast(data: TrackerData, today: string): Forecast | null {
   const cur = monthOf(today);
   const lastDay = daysInMonth(cur);
   const spentSoFar = monthExpense(data, cur);
-  const forecastExpense = (spentSoFar / day) * lastDay;
+  // Экстраполируются только обычные траты: покупка по плану не повторится до конца месяца
+  const forecastRegular = (monthRegular(data, cur) / day) * lastDay;
+  const planned = monthPlannedForecast(data, cur);
+  const forecastExpense = forecastRegular + planned;
   const got = monthIncome(data, cur);
   const avg = average(data, today);
   const incomeIsExpected = avg !== null && got < avg.income;
@@ -110,12 +143,14 @@ export function forecast(data: TrackerData, today: string): Forecast | null {
   return {
     spentSoFar,
     forecastExpense,
+    forecastRegular,
+    planned,
     expectedIncome,
     incomeIsExpected,
     forecastBalance: expectedIncome - forecastExpense,
     lastDay,
-    vsAverage: avg ? change(forecastExpense, avg.expense) : null,
-    averageExpense: avg ? avg.expense : null,
+    vsAverage: avg ? change(forecastRegular, avg.regular) : null,
+    averageExpense: avg ? avg.regular : null,
   };
 }
 
@@ -131,7 +166,8 @@ export function periodCompare(data: TrackerData, today: string): PeriodCompare {
     prevKey,
     prevDays,
     income: change(monthIncome(data, cur, day), monthIncome(data, prevKey, prevDays)),
-    expense: change(monthExpense(data, cur, day), monthExpense(data, prevKey, prevDays)),
+    // Расходы сравниваются по обычным тратам: плановая покупка не делает месяц «дороже»
+    expense: change(monthRegular(data, cur, day), monthRegular(data, prevKey, prevDays)),
   };
 }
 

@@ -152,6 +152,8 @@ type FormProps = {
 	onPlus: () => void
 	/** Что показать вместо пустой сетки (нет личных категорий) */
 	empty?: ReactNode
+	/** Под сеткой вариантов: чипы пунктов плана */
+	extra?: ReactNode
 	onSubmit: () => void
 }
 
@@ -164,6 +166,7 @@ export function EntryForm({
 	onPick,
 	onPlus,
 	empty,
+	extra,
 	onSubmit
 }: FormProps) {
 	const { st, currency, isForeign, amountRef } = form
@@ -276,6 +279,7 @@ export function EntryForm({
 				))}
 			</div>
 			)}
+			{extra}
 
 			<div className="mt-8 flex flex-wrap items-end gap-x-6 gap-y-4">
 				<div className="flex min-w-[240px] flex-[2_1_240px] items-center gap-3">

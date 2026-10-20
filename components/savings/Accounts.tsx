@@ -75,9 +75,9 @@ export function Accounts() {
             const day = localDay(a.updatedAt);
             return (
               <li key={a.id} className="flex min-h-11 flex-wrap items-center gap-x-4 border-b border-dashed border-line2 py-1 uppercase">
-                <span className="min-w-[12ch] flex-1 truncate">{a.name}</span>
+                <span className="min-w-[12ch] flex-1 truncate max-sm:basis-full max-sm:pt-2">{a.name}</span>
                 {editing ? (
-                  <label className="flex items-center gap-2">
+                  <label className="flex items-center gap-2 max-sm:ml-auto">
                     <input ref={(el) => { inputs.current[i] = el; }} className="tfield w-[14ch] text-right" inputMode="decimal"
                       aria-label={`Остаток, ${a.name}`} value={vals[a.id] ?? ""}
                       onChange={(e) => { setVals((v) => ({ ...v, [a.id]: amountChars(e.target.value) })); setTouched((s) => new Set(s).add(a.id)); }}
@@ -86,7 +86,7 @@ export function Accounts() {
                   </label>
                 ) : (
                   <>
-                    <span className="text-right">
+                    <span className="text-right max-sm:mr-auto">
                       <b>{fmt(a.balance)} {a.currency}</b>
                       {a.currency !== st.base && (
                         <span className="text-muted2"> {inBase === null ? "КУРС?" : `≈ ${fmt(Math.round(inBase))}`}</span>

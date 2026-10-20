@@ -4,6 +4,7 @@ import { useTracker } from '../TrackerProvider'
 import { AsciiBar } from '../AsciiBar'
 import { Contribution } from './Contribution'
 import { byAuthor } from '@/lib/metrics'
+import { monthLimit, planSpentByCat } from '@/lib/plan'
 import type { Category, Scope } from '@/lib/types'
 import { curMonthKey, fmt, termName } from '@/lib/utils'
 
@@ -11,10 +12,15 @@ import { curMonthKey, fmt, termName } from '@/lib/utils'
 export function ExpenseSummary({ scope, cats, sel }: { scope: Scope; cats: Category[]; sel: Category | undefined }) {
 	const { data } = useTracker()
 	const st = data.settings!
-	const list = (scope === 'personal' ? data.myExpenses : data.familyExpenses)[curMonthKey()] ?? []
+	const key = curMonthKey()
+	const list = (scope === 'personal' ? data.myExpenses : data.familyExpenses)[key] ?? []
+	const plan = data.plans[key]
+	const ov = scope === 'personal' ? plan?.myOverrides : plan?.familyOverrides
+	// Лимит месяца с поправкой плана; траты по плану не входят, кроме превышения пункта
+	const spent = planSpentByCat(list, (scope === 'personal' ? plan?.items.mine : plan?.items.family) ?? [])
 	const ids = new Set(sel ? [sel.id] : cats.map((c) => c.id))
-	const limit = sel ? sel.limit : cats.reduce((acc, c) => acc + c.limit, 0)
-	const used = list.reduce((a, e) => (ids.has(e.catId) ? a + e.base : a), 0)
+	const limit = (sel ? [sel] : cats).reduce((acc, c) => acc + monthLimit(c, key, ov), 0)
+	const used = [...ids].reduce((a, id) => a + (spent[id] ?? 0), 0)
 	const left = limit - used
 
 	return (

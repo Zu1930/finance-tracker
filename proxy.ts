@@ -17,5 +17,6 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|robots.txt).*)"],
+  // Иконки и манифест браузер запрашивает без сессии (манифест — даже без cookie): они должны отдаваться всем
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.svg|icon-.*\\.png|apple-icon.png|manifest.webmanifest|robots.txt).*)"],
 };

@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireUser, unauthorized } from "@/lib/session";
 import { removeEntry } from "@/lib/redis";
+import { setPlanLink } from "@/lib/records";
 import { MONTH, entryKey } from "@/lib/store";
+import type { Expense } from "@/lib/types";
 
 /**
  * Удаление: ?kind=expense|income&scope=family|personal&month=YYYY-MM.
@@ -20,6 +22,8 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   try {
     const entry = await removeEntry(entryKey(kind, scope === "personal" ? "personal" : "family", user.id, month), id);
     if (!entry) return NextResponse.json({ error: "Запись не найдена." }, { status: 404 });
+    // Трата по плану: убрать её id из пункта (пункта может уже не быть)
+    if ((entry as Expense).planItemId) await setPlanLink(entry as Expense, false);
     return NextResponse.json({ entry });
   } catch (e) {
     console.error(e);

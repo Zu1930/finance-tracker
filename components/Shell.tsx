@@ -8,16 +8,10 @@ import { Setup } from './Setup'
 import { Migration } from './Migration'
 import { useDailyRates } from './useDailyRates'
 import { ThemeToggle } from './settings/ThemeSwitch'
-import {
-	activeCats,
-	liveCats,
-	curMonthKey,
-	fmt,
-	monthTitle,
-	spentByCat
-} from '@/lib/utils'
-import type { Category, Expense, TrackerData } from '@/lib/types'
+import { catsIn, curMonthKey, fmt, monthTitle } from '@/lib/utils'
+import type { Category, Expense, PlanItem, TrackerData } from '@/lib/types'
 import { monthExpense } from '@/lib/metrics'
+import { planSpentByCat } from '@/lib/plan'
 
 const TABS = [
 	{ href: '/', label: 'Ввод' },
@@ -30,12 +24,14 @@ const TABS = [
 function MetricsBar({ data }: { data: TrackerData }) {
 	const st = data.settings!
 	const key = curMonthKey()
-	const left = (cats: Category[], list: Expense[]) => {
-		const spent = spentByCat(list)
-		return cats.reduce((a, c) => a + c.limit - (spent[c.id] ?? 0), 0)
+	// Лимиты месяца с поправками плана; траты по плану в остаток не входят, кроме превышения пункта
+	const plan = data.plans[key]
+	const left = (all: Category[], list: Expense[], items: PlanItem[], ov?: Record<string, number>) => {
+		const spent = planSpentByCat(list, items)
+		return catsIn(all, key, spent, ov).filter((c) => !c.archived).reduce((a, c) => a + c.limit - (spent[c.id] ?? 0), 0)
 	}
-	const family = left(activeCats(st), data.familyExpenses[key] ?? [])
-	const mine = left(liveCats(data.mySettings.personalCategories), data.myExpenses[key] ?? [])
+	const family = left(st.familyCategories, data.familyExpenses[key] ?? [], plan?.items.family ?? [], plan?.familyOverrides)
+	const mine = left(data.mySettings.personalCategories, data.myExpenses[key] ?? [], plan?.items.mine ?? [], plan?.myOverrides)
 	const now = new Date()
 	const day = now.getDate()
 	const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()

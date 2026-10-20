@@ -3,7 +3,8 @@
  * и сервер (/api/rebase), и превью на клиенте, и тесты (lib/rebase.test.mjs).
  * Здесь только type-импорты: файл запускается напрямую через node --test.
  */
-import type { Category, LegacyGoal, Settings, TrackerData, UserSettings } from "./types.ts";
+import type { Category, LegacyGoal, PlanItem, Settings, TrackerData, UserSettings } from "./types.ts";
+import type { RawPlans } from "./plan.ts";
 import { rebaseRecon } from "./savings.ts";
 import type { RawStore } from "./store.ts";
 
@@ -68,6 +69,20 @@ export function rebaseSettings(s: Settings, p: RebaseParams, at: string): Settin
  */
 export const rebaseGoals = (goals: LegacyGoal[], p: RebaseParams): LegacyGoal[] => goals.map((g) => (g.currency ? g : { ...g, currency: p.from }));
 
+const mapValues = <T, U>(o: Record<string, T>, f: (v: T) => U): Record<string, U> => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, f(v)]));
+
+/** Планы обоих в новой базе: суммы пунктов и ожидаемый доход — до копеек, поправки лимитов — с шагом округления лимитов */
+export function rebasePlans(p: RawPlans, r: RebaseParams): RawPlans {
+  const lim = (o: Record<string, number>) => mapValues(o, (v) => roundLimit(v / r.rate, r.limitRounding));
+  const item = (i: PlanItem): PlanItem => ({ ...i, amount: round2(i.amount / r.rate) });
+  return {
+    family: mapValues(p.family, (d) => ({ ...d, incomeOverride: d.incomeOverride === null ? null : round2(d.incomeOverride / r.rate), limitOverrides: lim(d.limitOverrides) })),
+    byUser: mapValues(p.byUser, (docs) => mapValues(docs, (d) => ({ ...d, limitOverrides: lim(d.limitOverrides) }))),
+    familyItems: mapValues(p.familyItems, (h) => mapValues(h, item)),
+    userItems: mapValues(p.userItems, (months) => mapValues(months, (h) => mapValues(h, item))),
+  };
+}
+
 /**
  * Всё хранилище в новой базе: семейное и личные данные ОБОИХ пользователей (сервер, /api/rebase).
  * Версии не трогает — их поднимает запись
@@ -87,6 +102,7 @@ export function rebaseStore(raw: RawStore, p: RebaseParams, at: string): RawStor
     hashes,
     // Копилки и счета в своих валютах не меняются; суммы снимков сверок — в новую базу
     savings: raw.savings && { ...raw.savings, recons: raw.savings.recons.map((r) => rebaseRecon(r, p.from, p.to, p.rate)) },
+    plans: raw.plans && rebasePlans(raw.plans, p),
   };
 }
 

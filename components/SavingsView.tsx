@@ -78,11 +78,14 @@ function Dynamics({ current }: { current: number }) {
           const prev = series[i - 1]?.value;
           const diff = p.value !== null && prev !== null && prev !== undefined ? p.value - prev : null;
           return (
-            <li key={p.key} className={`grid grid-cols-[6ch_minmax(0,1fr)_auto] items-baseline gap-x-4 sm:grid-cols-[6ch_auto_minmax(12ch,1fr)_10ch] ${p.carried ? "text-muted" : ""}`}>
+            // На мобильном шкала уходит отдельной строкой под месяцем и суммой
+            <li key={p.key} className={`grid grid-cols-[6ch_minmax(0,1fr)_auto] items-baseline gap-x-4 max-sm:pb-1 sm:grid-cols-[6ch_auto_16ch_10ch] ${p.carried ? "text-muted" : ""}`}>
               <span className={p.carried ? "" : "text-muted"}>{abbr(p.key)}</span>
-              <AsciiBar value={p.value ?? 0} max={max} bare label={`${abbr(p.key)}: остаток`} />
+              <div className="col-span-full max-sm:order-last sm:col-span-1">
+                <AsciiBar value={p.value ?? 0} max={max} bare label={`${abbr(p.key)}: остаток`} />
+              </div>
               <b className={`text-right ${p.carried ? "font-normal" : ""}`}>{p.value === null ? "—" : `${p.carried ? "~" : ""}${fmt(Math.round(p.value))} ${base}`}</b>
-              <span className="text-right text-muted max-sm:col-start-3">{diff === null || p.carried ? "" : signed(Math.round(diff))}</span>
+              <span className="text-right text-muted">{diff === null || p.carried ? "" : signed(Math.round(diff))}</span>
             </li>
           );
         })}

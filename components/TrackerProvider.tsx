@@ -52,6 +52,9 @@ const EMPTY: TrackerData = {
   incomes: {},
   partnerPersonalTotals: {},
   partnerPersonalDaily: {},
+  partnerPlannedDaily: {},
+  plans: {},
+  partnerLimits: {},
 };
 
 /** Пока вкладка видима, данные перечитываются раз в минуту — чтобы появлялись записи партнёра */

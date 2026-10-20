@@ -1,6 +1,8 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { casHashes, getRedis } from "./redis";
+import { K, planItemsKey } from "./store";
+import type { Expense, PlanItem } from "./types";
 
 type Fail = { status: number; error: string };
 export const fail = (status: number, error: string) => NextResponse.json({ error }, { status });
@@ -36,4 +38,27 @@ export async function updateRecord<T extends { version: number }>(
     if (version !== undefined) break;
   }
   return fail(409, conflict);
+}
+
+/** Ключ месяца в индексе: без него /api/data и смена базы ключ не увидят. SADD идемпотентен — вызывается до записи */
+export const registerKey = (key: string) => getRedis().sadd(K.index, key);
+
+/** Изменить запись хеша на свежих данных с повторами (служебные связи). null — записи нет */
+export async function mutateRecord<T extends { version: number }>(key: string, id: string, change: (cur: T) => T): Promise<T | null> {
+  for (let i = 0; i < 5; i++) {
+    const cur = await getRedis().hget<T>(key, id);
+    if (!cur) return null;
+    const doc = { ...change(cur), version: cur.version + 1 };
+    if (await casHashes([{ key, id, expected: cur.version, op: "set", doc }])) return doc;
+  }
+  throw new Error(`Не удалось записать ${key}/${id}: слишком много одновременных изменений`);
+}
+
+/** Связать трату с пунктом плана (add) или отвязать. Личный пункт — в хеше автора траты */
+export async function setPlanLink(e: Expense, add: boolean): Promise<void> {
+  if (!e.planItemId) return;
+  await mutateRecord<PlanItem>(planItemsKey(e.scope, e.authorId, e.date.slice(0, 7)), e.planItemId, (it) => ({
+    ...it,
+    expenseIds: add ? [...it.expenseIds.filter((x) => x !== e.id), e.id] : it.expenseIds.filter((x) => x !== e.id),
+  }));
 }

@@ -31,6 +31,9 @@ export const ddmm = (day: string) => `${day.slice(8, 10)}.${day.slice(5, 7)}`;
 
 export const MONTHS = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
 export const MONTHS_SHORT = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+/** «в октябре» */
+export const MONTHS_IN = ["январе", "феврале", "марте", "апреле", "мае", "июне", "июле", "августе", "сентябре", "октябре", "ноябре", "декабре"];
+export const monthName = (key: string) => MONTHS[Number(key.slice(5, 7)) - 1];
 export const monthTitle = (key: string) => {
   const [y, m] = key.split("-");
   return `${MONTHS[+m - 1]} ${y}`;
@@ -82,11 +85,14 @@ export const limitIn = (c: Category, key: string) => c.history?.find((h) => key 
 /** Категория существовала в месяце key. У старых удалённых без archivedFrom месяц удаления неизвестен */
 export const aliveIn = (c: Category, key: string) =>
   (!c.since || c.since <= key) && (c.archivedFrom ? key < c.archivedFrom : !c.archived);
-/** Категории месяца с его лимитами: существовавшие тогда и старые удалённые, по которым в нём были траты */
-export const catsIn = (cats: Category[] | undefined, key: string, spent: Record<string, number>): Category[] =>
+/**
+ * Категории месяца с его лимитами: существовавшие тогда и старые удалённые, по которым в нём были траты.
+ * overrides — поправки плана на этот месяц
+ */
+export const catsIn = (cats: Category[] | undefined, key: string, spent: Record<string, number>, overrides?: Record<string, number>): Category[] =>
   (cats ?? [])
     .filter((c) => aliveIn(c, key) || (!c.archivedFrom && c.archived && spent[c.id]))
-    .map((c) => ({ ...c, limit: limitIn(c, key) }));
+    .map((c) => ({ ...c, limit: overrides?.[c.id] ?? limitIn(c, key) }));
 /** Новый лимит действует с месяца from; прежний запоминается для месяцев до него */
 export function setLimit(c: Category, limit: number, from: string): Category {
   if (limit === c.limit) return c;

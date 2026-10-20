@@ -6,20 +6,62 @@ import { useTracker } from "./TrackerProvider";
 import { CommitInput } from "./CommitInput";
 import { AsciiBar } from "./AsciiBar";
 import { Contribution } from "./entry/Contribution";
+import { CarryOver } from "./plan/CarryOver";
+import { PlanItems } from "./plan/PlanItems";
+import { PlanLimits, PlanSummary } from "./plan/MonthPlan";
+import { usePlan, withOverride } from "./plan/usePlan";
 import { byAuthor, fmtPct, monthIncome, savingsRate } from "@/lib/metrics";
-import type { Category, Expense } from "@/lib/types";
-import { activeCats, amountChars, catsIn, curMonthKey, fmt, liveCats, monthTitle, parseAmount, setLimit, shiftMonth, signed, spentByCat, termName, uid } from "@/lib/utils";
+import { MAX_AHEAD, itemStatus, linkedByItem, monthLimit, monthsAhead, planSpentByCat } from "@/lib/plan";
+import type { Category, Expense, PlanItem } from "@/lib/types";
+import { activeCats, amountChars, catsIn, curMonthKey, fmt, liveCats, monthName, monthTitle, parseAmount, setLimit, shiftMonth, signed, termName, uid } from "@/lib/utils";
 
 export function LimitsView() {
-  const { data, month, setMonth, setSettings, setMySettings } = useTracker();
+  const { month, setMonth } = useTracker();
+  const cur = curMonthKey();
+  const ahead = monthsAhead(cur, month);
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+        <div className="flex items-center gap-3">
+          <button className="tb" aria-label="Предыдущий месяц" onClick={() => setMonth(shiftMonth(month, -1))}>&lt;</button>
+          <h1 className="min-w-[16ch] text-center text-lg font-bold uppercase">{monthTitle(month)}</h1>
+          <button className="tb" aria-label="Следующий месяц" disabled={ahead >= MAX_AHEAD} onClick={() => setMonth(shiftMonth(month, 1))}>&gt;</button>
+        </div>
+        {ahead > 0 && <span className="border border-dashed border-line2 px-1.5 py-0.5 text-muted uppercase">План</span>}
+        {month !== cur && (
+          <button className="tb sm:ml-auto" onClick={() => setMonth(cur)}>{ahead > 0 ? "← Текущий месяц" : "Текущий месяц →"}</button>
+        )}
+      </div>
+      {ahead > 0 ? (
+        <>
+          <PlanSummary month={month} />
+          <PlanItems month={month} withStatus={false} />
+          <PlanLimits month={month} />
+        </>
+      ) : (
+        <MonthLimits />
+      )}
+    </>
+  );
+}
+
+/** Текущий и прошлые месяцы: итог, покупки по плану, шкалы категорий (без плановых трат, кроме превышения) */
+function MonthLimits() {
+  const { data, month, setSettings, setMySettings } = useTracker();
   const st = data.settings!;
+  const cur = curMonthKey();
+  const { plan, items, savePlan, saveMyPlan } = usePlan(month);
   const family = data.familyExpenses[month] ?? [];
   const mine = data.myExpenses[month] ?? [];
-  const familySpent = spentByCat(family);
-  const mySpent = spentByCat(mine);
-  // Блоки — как было в выбранном месяце; редактор — действующие категории, правки с текущего месяца
-  const familyCats = catsIn(st.familyCategories, month, familySpent);
-  const myCats = catsIn(data.mySettings.personalCategories, month, mySpent);
+  const familySpent = planSpentByCat(family, plan.items.family);
+  const mySpent = planSpentByCat(mine, plan.items.mine);
+  // Блоки — как было в выбранном месяце, с поправками плана на месяц; редактор — действующие категории
+  const familyCats = catsIn(st.familyCategories, month, familySpent, plan.familyOverrides);
+  const myCats = catsIn(data.mySettings.personalCategories, month, mySpent, plan.myOverrides);
+  // Правка лимита в текущем месяце: навсегда (с этого месяца) или только на этот месяц
+  const [onlyMonth, setOnlyMonth] = useState(false);
+  const perMonth = onlyMonth && month === cur;
 
   // Итог семьи — одинаковый у обоих: личное = мои личные + сумма личных партнёра
   const income = monthIncome(data, month);
@@ -31,17 +73,7 @@ export function LimitsView() {
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-        <div className="flex items-center gap-3">
-          <button className="tb" aria-label="Предыдущий месяц" onClick={() => setMonth(shiftMonth(month, -1))}>&lt;</button>
-          <h1 className="min-w-[16ch] text-center text-lg font-bold uppercase">{monthTitle(month)}</h1>
-          <button className="tb" aria-label="Следующий месяц" onClick={() => setMonth(shiftMonth(month, 1))}>&gt;</button>
-        </div>
-        {month !== curMonthKey() && (
-          <button className="tb" onClick={() => setMonth(curMonthKey())}>Текущий месяц</button>
-        )}
-      </div>
-
+      {month === cur && <CarryOver />}
       <section className="mt-6 border-t border-dashed border-line pt-5">
         <h2 className="sec">Итог</h2>
         <dl className="mt-3 grid grid-cols-1 gap-x-6 uppercase sm:grid-cols-[12ch_minmax(0,1fr)] sm:gap-y-1">
@@ -65,9 +97,11 @@ export function LimitsView() {
         </dl>
       </section>
 
+      {items.length > 0 && <PlanItems month={month} withStatus form={false} />}
+
       <section className="mt-6 border-t border-dashed border-line pt-5">
         <h2 className="sec">Семья</h2>
-        <LimitBlocks cats={familyCats} spent={familySpent} contribution={family} />
+        <LimitBlocks cats={familyCats} spent={familySpent} contribution={family} planned={plan.items.family} />
       </section>
 
       <section className="mt-6 border-t border-dashed border-line pt-5">
@@ -77,7 +111,7 @@ export function LimitsView() {
         {myCats.length === 0 ? (
           <p className="mt-3 text-muted uppercase">Нет категорий — добавьте ниже</p>
         ) : (
-          <LimitBlocks cats={myCats} spent={mySpent} />
+          <LimitBlocks cats={myCats} spent={mySpent} planned={plan.items.mine} />
         )}
       </section>
 
@@ -86,17 +120,25 @@ export function LimitsView() {
           Категории и лимиты<span aria-hidden="true" className="group-open:hidden">[+]</span><span aria-hidden="true" className="hidden group-open:inline">[−]</span>
         </summary>
         <div className="max-w-3xl pt-3 pb-2">
+          {month === cur && (
+            <div className="mb-4 flex gap-2" role="group" aria-label="Изменения лимитов">
+              <button className="tb" aria-pressed={!onlyMonth} onClick={() => setOnlyMonth(false)}>Всегда</button>
+              <button className="tb" aria-pressed={onlyMonth} onClick={() => setOnlyMonth(true)}>Только {monthName(cur)}</button>
+            </div>
+          )}
           <h3 className="lbl">Семья, {st.base}</h3>
           <CategoryEditor
             cats={activeCats(st)}
+            month={perMonth ? { overrides: plan.familyOverrides, save: (o) => void savePlan({ limitOverrides: o }) } : undefined}
             update={(fn) => setSettings((s) => ({ ...s!, familyCategories: fn(s!.familyCategories) }))}
           />
           <h3 className="lbl mt-8">Личное, {st.base}</h3>
           <CategoryEditor
             cats={liveCats(data.mySettings.personalCategories)}
+            month={perMonth ? { overrides: plan.myOverrides, save: (o) => void saveMyPlan(o) } : undefined}
             update={(fn) => setMySettings((s) => ({ ...s, personalCategories: fn(s.personalCategories) }))}
           />
-          <p className="mt-6 text-muted uppercase">// Изменения действуют с текущего месяца, прошлые не меняются</p>
+          <p className="mt-6 text-muted uppercase">// {perMonth ? `Изменения — только на ${monthName(cur)}` : "Изменения действуют с текущего месяца, прошлые не меняются"}</p>
           <p className="mt-2 text-muted uppercase">
             Валюты, основная валюта и данные →{" "}
             <Link href="/settings" className="tb">Настройки</Link>
@@ -107,10 +149,11 @@ export function LimitsView() {
   );
 }
 
-/** Блоки лимитов в 2 колонки; для семейных — строка вклада по именам */
-function LimitBlocks({ cats, spent, contribution }: { cats: Category[]; spent: Record<string, number>; contribution?: Expense[] }) {
-  const { data } = useTracker();
+/** Блоки лимитов в 2 колонки; для семейных — строка вклада по именам; под шкалой — покупки по плану в категории */
+function LimitBlocks({ cats, spent, contribution, planned }: { cats: Category[]; spent: Record<string, number>; contribution?: Expense[]; planned: PlanItem[] }) {
+  const { data, month } = useTracker();
   const base = data.settings!.base;
+  const linked = linkedByItem([...(data.familyExpenses[month] ?? []), ...(data.myExpenses[month] ?? [])], planned);
   return (
     <div className="mt-2 grid grid-cols-1 gap-x-12 sm:grid-cols-2">
       {cats.map((c) => {
@@ -123,6 +166,14 @@ function LimitBlocks({ cats, spent, contribution }: { cats: Category[]; spent: R
             <p className={`mt-1 uppercase ${left < 0 ? "text-bad" : "text-muted"}`}>
               {left < 0 ? `Перерасход ${fmt(-left)} ${base}` : `Осталось ${fmt(left)} из ${fmt(c.limit)} ${base}`}
             </p>
+            {planned.filter((it) => it.categoryId === c.id).map((it) => {
+              const status = itemStatus(it, linked[it.id] ?? 0);
+              return (
+                <p key={it.id} className="mt-1 text-muted2 uppercase">
+                  План: {termName(it.name)} −{fmt(it.amount)}{status === "done" ? " ✓" : status === "partial" ? ` ~ ${fmt(linked[it.id])}` : ""}
+                </p>
+              );
+            })}
             {contribution && (
               <p className="mt-1">
                 <Contribution sums={byAuthor(contribution, (e) => e.catId === c.id)} />
@@ -135,8 +186,16 @@ function LimitBlocks({ cats, spent, contribution }: { cats: Category[]; spent: R
   );
 }
 
-/** Названия, лимиты, удаление и добавление категорий одного списка */
-function CategoryEditor({ cats, update }: { cats: Category[]; update: (fn: (all: Category[]) => Category[]) => void }) {
+/**
+ * Названия, лимиты, удаление и добавление категорий одного списка.
+ * month — режим «только текущий месяц»: поле лимита пишет поправку плана, а не сам лимит
+ */
+function CategoryEditor({ cats, update, month }: {
+  cats: Category[];
+  update: (fn: (all: Category[]) => Category[]) => void;
+  month?: { overrides: Record<string, number>; save: (o: Record<string, number>) => void };
+}) {
+  const cur = curMonthKey();
   const { toast } = useTracker();
   const [newCat, setNewCat] = useState("");
   const patch = (id: string, p: (c: Category) => Category) => update((all) => all.map((c) => (c.id === id ? p(c) : c)));
@@ -153,11 +212,13 @@ function CategoryEditor({ cats, update }: { cats: Category[]; update: (fn: (all:
         <div className="mt-2 grid grid-cols-[minmax(0,1fr)_12ch_auto] items-end gap-4" key={c.id}>
           <CommitInput className="tfield w-full" aria-label="Название категории" value={c.name}
             onCommit={(v) => { const n = v.trim(); if (!n) return false; patch(c.id, (x) => ({ ...x, name: n.slice(0, 40) })); }} />
-          <CommitInput className="tfield w-full text-right" aria-label={`Лимит, ${c.name}`} inputMode="decimal" sanitize={amountChars} value={String(c.limit)}
+          <CommitInput className="tfield w-full text-right" aria-label={`Лимит, ${c.name}`} inputMode="decimal" sanitize={amountChars}
+            value={String(month ? monthLimit(c, cur, month.overrides) : c.limit)}
             onCommit={(v) => {
               const n = parseAmount(v);
               if (n === null || !(n >= 0)) { toast("Лимит должен быть числом."); return false; }
-              patch(c.id, (x) => setLimit(x, n, curMonthKey()));
+              if (month) return void month.save(withOverride(month.overrides, c.id, n === monthLimit(c, cur) ? null : n));
+              patch(c.id, (x) => setLimit(x, n, cur));
             }} />
           <button className="xb" aria-label={`Удалить категорию ${c.name}`} onClick={() => {
             patch(c.id, (x) => ({ ...x, archived: true, archivedFrom: curMonthKey() }));

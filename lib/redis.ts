@@ -1,8 +1,9 @@
 import "server-only";
 import { Redis } from "@upstash/redis";
-import { K, parseMonthKey, type RawStore } from "./store";
+import { K, parseMonthKey, parsePlanKey, type RawStore } from "./store";
+import type { RawPlans } from "./plan";
 import type { RawSavings } from "./savings";
-import type { Account, Expense, Goal, Income, Recon, Settings, UserSettings } from "./types";
+import type { Account, Expense, Goal, Income, MonthPlan, MyMonthPlan, PlanItem, Recon, Settings, UserSettings } from "./types";
 
 let client: Redis | null = null;
 
@@ -29,7 +30,8 @@ export async function readStore(userIds: string[]): Promise<RawStore> {
   head.smembers(K.index);
   const res = await head.exec();
   const [settings, goals, ...rest] = res as unknown[];
-  const keys = ((rest.pop() as string[]) ?? []).filter((k) => parseMonthKey(k));
+  const indexed = (rest.pop() as string[]) ?? [];
+  const keys = indexed.filter((k) => parseMonthKey(k));
   const userSettings = Object.fromEntries(userIds.map((id, i) => [id, (rest[i] as UserSettings | null) ?? null]));
 
   const hashes: RawStore["hashes"] = {};
@@ -40,7 +42,37 @@ export async function readStore(userIds: string[]): Promise<RawStore> {
     keys.forEach((k, i) => (hashes[k] = values[i] ?? {}));
   }
   // Отсутствующий ключ в pipeline приходит как undefined — приводим к null, как обещают типы
-  return { settings: (settings as Settings | null) ?? null, goals: (goals as RawStore["goals"]) ?? null, userSettings, hashes, savings: await readSavings(userIds) };
+  return {
+    settings: (settings as Settings | null) ?? null,
+    goals: (goals as RawStore["goals"]) ?? null,
+    userSettings,
+    hashes,
+    savings: await readSavings(userIds),
+    plans: await readPlans(indexed),
+  };
+}
+
+/** Документы и хеши планов из индекса: план — JSON, пункты — HASH */
+async function readPlans(indexed: string[]): Promise<RawPlans> {
+  const out: RawPlans = { family: {}, byUser: {}, familyItems: {}, userItems: {} };
+  const keys = indexed.map((k) => ({ k, p: parsePlanKey(k) })).filter((x) => x.p);
+  if (!keys.length) return out;
+  const p = getRedis().pipeline();
+  for (const { k, p: pk } of keys) {
+    if (pk!.kind === "plan") p.get(k);
+    else p.hgetall(k);
+  }
+  const res = (await p.exec()) as unknown[];
+  keys.forEach(({ p: pk }, i) => {
+    const v = res[i];
+    if (!v) return;
+    const { kind, month, userId } = pk!;
+    if (kind === "plan" && !userId) out.family[month] = v as MonthPlan;
+    else if (kind === "plan") (out.byUser[userId!] ??= {})[month] = v as MyMonthPlan;
+    else if (!userId) out.familyItems[month] = v as Record<string, PlanItem>;
+    else (out.userItems[userId] ??= {})[month] = v as Record<string, PlanItem>;
+  });
+  return out;
 }
 
 /** Счета, копилки обоих и все снимки сверок */
@@ -195,6 +227,15 @@ export async function writeStoreAtomic(raw: RawStore): Promise<void> {
   const keys = Object.keys(raw.hashes).filter((k) => Object.keys(raw.hashes[k]).length > 0);
   for (const k of keys) tx.hset(k, raw.hashes[k]);
   if (keys.length) tx.sadd(K.index, keys[0], ...keys.slice(1));
+  // Планы (смена базы): документы — с новой версией, пункты — поля хешей с новой версией
+  if (raw.plans) {
+    const p = raw.plans;
+    for (const [m, doc] of Object.entries(p.family)) tx.set(K.plan(m), bump(doc));
+    for (const [u, docs] of Object.entries(p.byUser)) for (const [m, doc] of Object.entries(docs)) tx.set(K.myPlan(u, m), bump(doc));
+    const items = (key: string, h: Record<string, PlanItem>) => Object.keys(h).length && tx.hset(key, Object.fromEntries(Object.entries(h).map(([id, it]) => [id, bump(it)])));
+    for (const [m, h] of Object.entries(p.familyItems)) items(K.planItems(m), h);
+    for (const [u, months] of Object.entries(p.userItems)) for (const [m, h] of Object.entries(months)) items(K.myPlanItems(u, m), h);
+  }
   // Снимки сверок переписываются целиком (смена базы); счета и копилки в своих валютах не меняются
   if (raw.savings?.recons.length) {
     const [first, ...rest] = raw.savings.recons.map((r) => ({ score: Date.parse(r.at), member: JSON.stringify(r) }));

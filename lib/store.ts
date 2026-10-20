@@ -4,6 +4,7 @@
  */
 import type { Expense, GoalsDoc, Income, MonthKey, Scope, Settings, TrackerData, User, UserSettings } from "./types.ts";
 import { buildSavings, type RawSavings } from "./savings.ts";
+import { EMPTY_PLANS, buildPlans, plannedDaily, type RawPlans } from "./plan.ts";
 
 // ---------- Ключи Redis ----------
 export const K = {
@@ -15,6 +16,10 @@ export const K = {
   goals2: "ft:goals2",
   userGoals: (userId: string) => `ft:u:${userId}:goals`,
   recons: "ft:recons",
+  plan: (m: MonthKey) => `ft:plan:${m}`,
+  myPlan: (userId: string, m: MonthKey) => `ft:u:${userId}:plan:${m}`,
+  planItems: (m: MonthKey) => `ft:plan-items:${m}`,
+  myPlanItems: (userId: string, m: MonthKey) => `ft:u:${userId}:plan-items:${m}`,
   index: "ft:index",
   family: (m: MonthKey) => `ft:m:${m}`,
   incomes: (m: MonthKey) => `ft:i:${m}`,
@@ -52,6 +57,22 @@ export function parseMonthKey(key: string): { kind: "family" | "incomes" | "pers
   return null;
 }
 
+/** Хеш пунктов плана: личные — только в хеше пользователя из сессии */
+export const planItemsKey = (scope: Scope, userId: string, m: MonthKey) => (scope === "personal" ? K.myPlanItems(userId, m) : K.planItems(m));
+
+/** Разбор ключа плана из индекса: семейный или личный документ (JSON) либо хеш пунктов */
+export function parsePlanKey(key: string): { kind: "plan" | "items"; month: MonthKey; userId?: string } | null {
+  let m = /^ft:plan:(\d{4}-\d{2})$/.exec(key);
+  if (m) return { kind: "plan", month: m[1] };
+  m = /^ft:plan-items:(\d{4}-\d{2})$/.exec(key);
+  if (m) return { kind: "items", month: m[1] };
+  m = /^ft:u:([^:]+):plan:(\d{4}-\d{2})$/.exec(key);
+  if (m) return { kind: "plan", month: m[2], userId: m[1] };
+  m = /^ft:u:([^:]+):plan-items:(\d{4}-\d{2})$/.exec(key);
+  if (m) return { kind: "items", month: m[2], userId: m[1] };
+  return null;
+}
+
 // ---------- Подготовка записи от клиента ----------
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : NaN);
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : "");
@@ -76,7 +97,8 @@ export function prepareEntry(kind: Kind, body: unknown, authorId: string): Expen
   }
   const catId = str(b.catId, 64);
   const scope: Scope = b.scope === "personal" ? "personal" : "family";
-  return catId ? { ...common, catId, scope } : null;
+  const planItemId = str(b.planItemId, 64);
+  return catId ? { ...common, catId, scope, ...(planItemId && { planItemId }) } : null;
 }
 
 // ---------- Сборка ответа GET /api/data ----------
@@ -89,6 +111,8 @@ export type RawStore = {
   hashes: Record<string, Record<string, Expense | Income>>;
   /** Нет — сбережения пусты (тесты и старые вызовы) */
   savings?: RawSavings;
+  /** Нет — планов нет */
+  plans?: RawPlans;
 };
 
 export const EMPTY_SAVINGS: RawSavings = { accounts: {}, userAccounts: {}, goals: {}, userGoals: {}, recons: [] };
@@ -100,7 +124,7 @@ const EMPTY_USER: UserSettings = { personalCategories: [], version: 0 };
  * Данные для пользователя me. Личные записи и категории партнёра не попадают в ответ ни в каком виде:
  * от них остаются только суммы за месяц и по дням
  */
-export function buildView(raw: RawStore, me: User, partner: User): TrackerData {
+export function buildView(raw: RawStore, me: User, partner: User, curMonth = new Date().toISOString().slice(0, 7)): TrackerData {
   const view: TrackerData = {
     me,
     partner,
@@ -112,7 +136,12 @@ export function buildView(raw: RawStore, me: User, partner: User): TrackerData {
     incomes: {},
     partnerPersonalTotals: {},
     partnerPersonalDaily: {},
+    partnerPlannedDaily: {},
+    plans: {},
+    partnerLimits: {},
   };
+  const plans = raw.plans ?? EMPTY_PLANS;
+  const partnerExpenses: Record<string, Expense[]> = {};
   for (const [key, hash] of Object.entries(raw.hashes)) {
     const k = parseMonthKey(key);
     if (!k) continue;
@@ -130,8 +159,20 @@ export function buildView(raw: RawStore, me: User, partner: User): TrackerData {
       }
       view.partnerPersonalTotals[k.month] = Math.round(total * 100) / 100;
       view.partnerPersonalDaily[k.month] = daily;
+      partnerExpenses[k.month] = items as Expense[];
+      const planned = plannedDaily(items as Expense[], Object.values(plans.userItems[partner.id]?.[k.month] ?? {}));
+      if (Object.keys(planned).length) view.partnerPlannedDaily[k.month] = planned;
     }
   }
+  // Сумма личных лимитов партнёра нужна для плана: прошлый месяц (разница часовых поясов) … 12 вперёд
+  const [y, mo] = curMonth.split("-").map(Number);
+  const limitMonths = Array.from({ length: 14 }, (_, i) => {
+    const d = new Date(Date.UTC(y, mo - 2 + i, 1));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  });
+  const built = buildPlans(plans, me, partner, raw.userSettings[partner.id]?.personalCategories ?? [], partnerExpenses, limitMonths);
+  view.plans = built.plans;
+  view.partnerLimits = built.partnerLimits;
   return view;
 }
 

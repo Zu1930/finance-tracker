@@ -4,8 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTracker } from "./TrackerProvider";
 import { useNarrow } from "./AsciiBar";
-import { fmtPct, monthlySeries, savingsRate } from "@/lib/metrics";
-import { MONTHS_SHORT, aliveIn, curMonthKey, limitIn, fmt, monthTitle, shiftMonth, spentByCat, termName } from "@/lib/utils";
+import { fmtPct, monthPlanned, monthlySeries, savingsRate } from "@/lib/metrics";
+import { limitsSum } from "@/lib/plan";
+import type { Expense } from "@/lib/types";
+import { MONTHS_SHORT, curMonthKey, fmt, monthTitle, shiftMonth, spentByCat, termName } from "@/lib/utils";
 
 /** Цвет категории — токен cat-1…cat-8 по её индексу в списке категорий */
 const catColor = (i: number) => `var(--cat-${(i % 8) + 1})`;
@@ -32,6 +34,19 @@ function niceScale(lo: number, hi: number) {
   return { min, max, ticks };
 }
 
+/** Сегмент плановых трат */
+const PLAN = "plan";
+
+/** Штриховка из двух цветов токенов: светлая подложка и косые линии */
+function PlanHatch({ id = "plan-hatch" }: { id?: string }) {
+  return (
+    <pattern id={id} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="6" height="6" fill="var(--dim)" />
+      <line x1="0" y1="0" x2="0" y2="6" stroke="var(--ink)" strokeWidth="2.5" />
+    </pattern>
+  );
+}
+
 export function ChartView() {
   const { data, setMonth } = useTracker();
   const router = useRouter();
@@ -47,22 +62,32 @@ export function ChartView() {
   // Личное — двумя сегментами по людям: у меня из моих записей, у партнёра — только сумма за месяц
   const people = [data.me, data.partner].sort((a, b) => a.id.localeCompare(b.id));
   const personalId = (userId: string) => `personal:${userId}`;
-  const perMonth = keys.map((k) => ({
-    ...spentByCat(data.familyExpenses[k] ?? []),
-    [personalId(data.me.id)]: (data.myExpenses[k] ?? []).reduce((a, e) => a + e.base, 0),
-    [personalId(data.partner.id)]: data.partnerPersonalTotals[k] ?? 0,
-  }));
+  // Траты по плану — отдельным сегментом «План», в категориях и личном только обычные
+  const perMonth = keys.map((k) => {
+    const p = data.plans[k];
+    const ids = new Set(p ? [...p.items.family, ...p.items.mine].map((i) => i.id) : []);
+    const regular = (list: Expense[] = []) => list.filter((e) => !(e.planItemId && ids.has(e.planItemId)));
+    const partnerPlanned = Object.values(data.partnerPlannedDaily[k] ?? {}).reduce((a, v) => a + v, 0);
+    return {
+      ...spentByCat(regular(data.familyExpenses[k])),
+      [personalId(data.me.id)]: regular(data.myExpenses[k]).reduce((a, e) => a + e.base, 0),
+      [personalId(data.partner.id)]: (data.partnerPersonalTotals[k] ?? 0) - partnerPlanned,
+      [PLAN]: monthPlanned(data, k),
+    } as Record<string, number>;
+  });
   const series = monthlySeries(data, keys);
   const personal = people
     .map((u) => ({ id: personalId(u.id), name: `Личное · ${u.name}`, limit: 0 }))
     .filter((c) => perMonth.some((d) => d[c.id]));
-  const used = [...st.familyCategories.filter((c) => !c.archived || perMonth.some((d) => d[c.id])), ...personal];
+  const plan = perMonth.some((d) => d[PLAN] > 0) ? [{ id: PLAN, name: "План", limit: 0 }] : [];
+  const used = [...st.familyCategories.filter((c) => !c.archived || perMonth.some((d) => d[c.id])), ...personal, ...plan];
   const color: Record<string, string> = {};
   st.familyCategories.forEach((c, i) => (color[c.id] = catColor(i)));
   // Цветов категорий 8 и они у семейных; личное — нейтральными токенами, порядок по id одинаков у обоих
   people.forEach((u, i) => (color[personalId(u.id)] = i === 0 ? "var(--muted)" : "var(--dim)"));
-  // Сумма лимитов каждого месяца — как действовала тогда; на графике ступеньками
-  const limits = keys.map((k) => st.familyCategories.reduce((a, c) => (aliveIn(c, k) ? a + limitIn(c, k) : a), 0));
+  color[PLAN] = "url(#plan-hatch)";
+  // Сумма лимитов каждого месяца — как действовала тогда, с поправками плана на месяц; на графике ступеньками
+  const limits = keys.map((k) => limitsSum(st.familyCategories, k, data.plans[k]?.familyOverrides));
   const limitSum = limits[limits.length - 1];
 
   // Левая ось: расходы, лимиты и доходы включённых слоёв
@@ -116,6 +141,7 @@ export function ChartView() {
       </div>
       <div className="mt-6 overflow-x-auto">
         <svg viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full" role="img" aria-label="Расходы, доходы и накопленный остаток по месяцам">
+          <defs><PlanHatch /></defs>
           {left.ticks.map((v) => (
             <g key={v}>
               <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke="var(--line2)" strokeDasharray="3 4" />
@@ -215,9 +241,13 @@ export function ChartView() {
       <ul className="mt-3 grid grid-cols-1 gap-x-12 sm:grid-cols-2">
         {used.map((c) => (
           <li key={c.id} className="flex items-baseline gap-2 py-0.5">
-            <span aria-hidden="true" style={{ color: color[c.id] }}>■</span>
+            {c.id === PLAN ? (
+              <svg aria-hidden="true" width="10" height="10" className="shrink-0 self-center"><defs><PlanHatch id="plan-hatch-legend" /></defs><rect width="10" height="10" fill="url(#plan-hatch-legend)" /></svg>
+            ) : (
+              <span aria-hidden="true" style={{ color: color[c.id] }}>■</span>
+            )}
             {/* Личные сегменты — не категории: имя человека без замены пробелов на _ */}
-            <span className="shrink-0 uppercase">{c.id.startsWith("personal:") ? c.name : termName(c.name)}</span>
+            <span className="shrink-0 uppercase">{c.id.startsWith("personal:") || c.id === PLAN ? c.name : termName(c.name)}</span>
             <span aria-hidden="true" className="min-w-4 flex-1 overflow-hidden whitespace-nowrap text-dim">{".".repeat(80)}</span>
             <b className="shrink-0">{fmt(periodTotal[c.id] ?? 0)}</b>
           </li>
