@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useTracker } from '../TrackerProvider'
 import type { Expense, Income } from '@/lib/types'
-import { fmt, incomeSources, termName } from '@/lib/utils'
+import { ddmm, fmt, incomeSources, termName } from '@/lib/utils'
 
 /** Сколько строк показывать сразу и сколько добавлять по «Показать ещё» */
 const PAGE = 30
@@ -32,13 +32,38 @@ export function RecentLogs() {
 	}
 
 	return (
-		<section className="mt-10 max-sm:pb-24">
+		<section className="mt-10">
 			<h2 className="sec">Recent logs</h2>
 			{rows.length === 0 ? (
 				<p className="mt-3 text-muted uppercase">// Записей пока нет</p>
 			) : (
 				<>
-					<div className="mt-3 overflow-x-auto">
+					{/* Мобильный: список, у записи две строки — что | сумма, дата · кто · где | [×] */}
+					<ul className="mt-2 sm:hidden">
+						{rows.slice(0, shown).map((r) => {
+							const income = r.kind === 'income'
+							const e = r.e
+							const what = income ? sources.get((e as Income).sourceId) : cats.get((e as Expense).catId)
+							const meta = [
+								ddmm(e.date),
+								names.get(e.authorId) ?? '—',
+								...(income ? [] : [(e as Expense).scope === 'personal' ? 'ЛИЧН' : 'СЕМ']),
+								...(e.currency !== st.base ? [`${fmt(e.amount)} ${e.currency}`] : []),
+								...(e.note ? [e.note] : []),
+							]
+							return (
+								<li key={`${r.kind}-${e.id}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 border-b border-dashed border-line2 pt-2 uppercase">
+									<span className="truncate">{termName(what ?? (income ? 'Удалённый источник' : 'Удалённая категория'))}</span>
+									<b className="text-right">{income ? '+' : '−'}{fmt(e.base)}</b>
+									<span className="truncate text-xs text-muted">{meta.join(' · ')}</span>
+									<button className="xb -mr-3 justify-self-end" aria-label={income ? 'Удалить доход' : 'Удалить трату'} onClick={() => remove(r)}>
+										×
+									</button>
+								</li>
+							)
+						})}
+					</ul>
+					<div className="mt-3 hidden overflow-x-auto sm:block">
 						<ul className="grid min-w-max grid-cols-[repeat(4,auto)_minmax(16ch,1fr)_auto_auto] gap-x-4">
 							{rows.slice(0, shown).map((r) => {
 								const income = r.kind === 'income'

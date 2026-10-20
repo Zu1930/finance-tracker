@@ -39,7 +39,7 @@ export function ThemeSwitch() {
 	const theme = useTheme()
 	return (
 		<div
-			className="flex flex-wrap gap-2"
+			className="tgroup"
 			role="group"
 			aria-label="Тема оформления"
 		>
@@ -64,7 +64,7 @@ export function ThemeToggle() {
 	const cur = THEMES[i], next = THEMES[(i + 1) % THEMES.length]
 	return (
 		<button
-			className="tb w-[11ch] text-muted hover:text-ink"
+			className="tb h-10 w-[11ch] text-muted hover:text-ink sm:h-auto"
 			onClick={() => setTheme(next.id)}
 			aria-label={`Тема: ${cur.spoken}. Переключить на: ${next.spoken}`}
 			title={`Тема: ${cur.spoken} → ${next.spoken}`}

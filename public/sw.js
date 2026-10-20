@@ -58,7 +58,7 @@ self.addEventListener("fetch", (e) => {
 self.addEventListener("push", (e) => {
   const d = e.data ? e.data.json() : {};
   e.waitUntil(
-    self.registration.showNotification(d.title || "Траты", {
+    self.registration.showNotification(d.title || "SPEND.LOG", {
       body: d.body || "",
       icon: "/icon-192.png",
       badge: "/icon-192.png",

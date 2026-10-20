@@ -92,7 +92,7 @@ export function BaseCurrency() {
           </button>
         ))}
         <input
-          className="tfield ml-2 w-[16ch] uppercase"
+          className="tfield w-full uppercase sm:ml-2 sm:w-[16ch]"
           placeholder="другой код"
           aria-label="Код новой базовой валюты"
           maxLength={5}
@@ -125,8 +125,8 @@ export function BaseCurrency() {
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            <span className="mr-2 text-muted uppercase">Округление лимитов</span>
-            <div className="flex gap-2" role="group" aria-label="Округление лимитов">
+            <span className="mr-2 text-muted uppercase max-sm:w-full">Округление лимитов</span>
+            <div className="tgroup max-sm:w-full" role="group" aria-label="Округление лимитов">
               {ROUNDINGS.map((r) => (
                 <button key={r} className="tb" aria-pressed={step === r} onClick={() => setRounding(r)}>
                   {r === 0 ? "Без" : r}
@@ -159,7 +159,7 @@ export function BaseCurrency() {
             </ul>
           )}
 
-          <button className="tb mt-4 font-bold" disabled={!ready || busy} onClick={apply}>
+          <button className="tb mt-4 font-bold max-sm:h-12 max-sm:w-full" disabled={!ready || busy} onClick={apply}>
             {busy ? "Пересчёт…" : `Перевести учёт в ${to}`}
           </button>
         </>

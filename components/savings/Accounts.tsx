@@ -9,7 +9,7 @@ import { amountChars, ddmm, fmt, localDay, parseAmount, signed, todayStr } from 
 const STALE_DAYS = 14;
 
 /** Счета семьи и мои, режим сверки, блок расхождения по последнему снимку */
-export function Accounts() {
+export function Accounts({ openFamily = false }: { openFamily?: boolean }) {
   const { data, api, toast } = useTracker();
   const st = data.settings!;
   const sv = data.savings;
@@ -66,7 +66,7 @@ export function Accounts() {
       <div className="mt-4">
         <div className="flex items-baseline justify-between gap-4 border-b border-dashed border-line pb-1">
           <h3 className="lbl">{title}</h3>
-          <span className="text-muted">{items.some((a) => a.currency !== st.base) && "≈ "}{fmt(t.all)} {st.base}</span>
+          <span className="text-muted">{items.length === 0 ? "—" : <>{items.some((a) => a.currency !== st.base) && "≈ "}{fmt(t.all)} {st.base}</>}</span>
         </div>
         <ul>
           {items.map((a) => {
@@ -74,11 +74,12 @@ export function Accounts() {
             const inBase = a.currency === st.base ? null : toBase(a.balance, a.currency, st.base, st.rates);
             const day = localDay(a.updatedAt);
             return (
-              <li key={a.id} className="flex min-h-11 flex-wrap items-center gap-x-4 border-b border-dashed border-line2 py-1 uppercase">
-                <span className="min-w-[12ch] flex-1 truncate max-sm:basis-full max-sm:pt-2">{a.name}</span>
+              // Мобильный: имя | остаток, ниже 12px «≈ X · обновлён 01.10»; в сверке поле — на всю ширину под именем
+              <li key={a.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 border-b border-dashed border-line2 py-1 uppercase sm:flex sm:min-h-11 sm:flex-wrap">
+                <span className={`min-w-[12ch] truncate sm:flex-1 ${editing ? "max-sm:col-span-2 max-sm:pt-2" : ""}`}>{a.name}</span>
                 {editing ? (
-                  <label className="flex items-center gap-2 max-sm:ml-auto">
-                    <input ref={(el) => { inputs.current[i] = el; }} className="tfield w-[14ch] text-right" inputMode="decimal"
+                  <label className="flex items-center gap-2 max-sm:col-span-2">
+                    <input ref={(el) => { inputs.current[i] = el; }} className="tfield text-right max-sm:flex-1 sm:w-[14ch]" inputMode="decimal"
                       aria-label={`Остаток, ${a.name}`} value={vals[a.id] ?? ""}
                       onChange={(e) => { setVals((v) => ({ ...v, [a.id]: amountChars(e.target.value) })); setTouched((s) => new Set(s).add(a.id)); }}
                       onKeyDown={(e) => onKey(e, i, a.id)} />
@@ -86,21 +87,25 @@ export function Accounts() {
                   </label>
                 ) : (
                   <>
-                    <span className="text-right max-sm:mr-auto">
+                    <span className="text-right">
                       <b>{fmt(a.balance)} {a.currency}</b>
                       {a.currency !== st.base && (
-                        <span className="text-muted2"> {inBase === null ? "КУРС?" : `≈ ${fmt(Math.round(inBase))}`}</span>
+                        <span className="text-muted2 max-sm:hidden"> {inBase === null ? "КУРС?" : `≈ ${fmt(Math.round(inBase))}`}</span>
                       )}
                     </span>
-                    <span className="w-[9ch] text-right text-muted">{day === todayStr() ? "Сегодня" : ddmm(day)}</span>
-                    <button className="xb -mr-2" aria-label={`Убрать счёт ${a.name}`} onClick={() => void archive(a)}>×</button>
+                    <span className="truncate text-xs text-muted sm:hidden">
+                      {a.currency !== st.base && `${inBase === null ? "КУРС?" : `≈ ${fmt(Math.round(inBase))}`} · `}
+                      Обновлён {day === todayStr() ? "сегодня" : ddmm(day)}
+                    </span>
+                    <span className="w-[9ch] text-right text-muted max-sm:hidden">{day === todayStr() ? "Сегодня" : ddmm(day)}</span>
+                    <button className="xb -mr-2 justify-self-end" aria-label={`Убрать счёт ${a.name}`} onClick={() => void archive(a)}>×</button>
                   </>
                 )}
               </li>
             );
           })}
         </ul>
-        {!editing && <NewAccount scope={scope} />}
+        {!editing && <NewAccount key={scope === "family" ? String(openFamily) : scope} scope={scope} defaultOpen={scope === "family" && openFamily} />}
       </div>
     );
   };
@@ -117,9 +122,9 @@ export function Accounts() {
       {group("family", "Семья", family)}
       {group("personal", "Личное", mine)}
       {editing && (
-        <div className="mt-4 flex gap-2">
-          <button className="tb" onClick={() => setEditing(false)}>Отмена</button>
-          <button id="recon-save" className="tb font-bold" onClick={() => void save()}>Сохранить</button>
+        <div className="tgroup mt-4">
+          <button className="tb max-sm:h-12" onClick={() => setEditing(false)}>Отмена</button>
+          <button id="recon-save" className="tb font-bold max-sm:h-12" onClick={() => void save()}>Сохранить</button>
         </div>
       )}
       <ReconBlock recons={sv.recons} base={st.base} />
@@ -138,18 +143,18 @@ function ReconBlock({ recons, base }: { recons: ReconView[]; base: string }) {
   const prev = recons.at(-2);
   const status = r && gapStatus(r);
   return (
-    <div className="mt-5 space-y-1 border border-dashed border-line2 px-3 py-2 uppercase">
+    <div className="mt-5 space-y-2 border-y border-dashed border-line2 py-2 uppercase sm:space-y-1 sm:border-x sm:px-3">
       {!r || !status || !prev || r.expected === null ? (
         <p className="text-muted">{r ? `Сверка ${ddmm(r.day)} — точка отсчёта. Следующая покажет расхождение` : "Первая сверка — точка отсчёта"}</p>
       ) : (
         <>
           <p>
-            <span className="text-muted">С {ddmm(prev.day)} ожидалось </span><b>{signed(r.expected)}</b>
-            <span className="text-muted"> // доходы {fmt(r.income ?? 0)} − расходы {fmt(r.expense ?? 0)}</span>
+            <span className="text-muted max-sm:block max-sm:text-xs">С {ddmm(prev.day)} ожидалось </span><b>{signed(r.expected)}</b>
+            <span className="text-muted max-sm:block max-sm:text-xs"><span className="max-sm:hidden"> // </span>доходы {fmt(r.income ?? 0)} − расходы {fmt(r.expense ?? 0)}</span>
           </p>
-          <p><span className="text-muted">Факт </span><b>{signed(r.fact ?? 0)}</b></p>
+          <p><span className="text-muted max-sm:block max-sm:text-xs">Факт </span><b>{signed(r.fact ?? 0)}</b></p>
           <p className={status.warn ? "text-warn" : ""}>
-            <span className={status.warn ? "" : "text-muted"}>Неучтено </span>
+            <span className={`max-sm:block max-sm:text-xs ${status.warn ? "" : "text-muted"}`}>Неучтено </span>
             {status.kind === "ok" && <b>≈ 0 — всё сходится</b>}
             {status.kind === "expense" && <><b>{fmt(r.gap!)} {base}</b> — возможно, не все траты записаны</>}
             {status.kind === "income" && <><b>+{fmt(-r.gap!)} {base}</b> — возможно, не все доходы записаны</>}
@@ -161,10 +166,10 @@ function ReconBlock({ recons, base }: { recons: ReconView[]; base: string }) {
 }
 
 /** [ + СЧЁТ ] → инлайн-форма: имя, валюта, остаток */
-function NewAccount({ scope }: { scope: Scope }) {
+function NewAccount({ scope, defaultOpen = false }: { scope: Scope; defaultOpen?: boolean }) {
   const { data, api, toast } = useTracker();
   const st = data.settings!;
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [name, setName] = useState("");
   const [cur, setCur] = useState(st.base);
   const [bal, setBal] = useState("");
@@ -190,7 +195,7 @@ function NewAccount({ scope }: { scope: Scope }) {
         <input id={`${id}-name`} autoFocus className="tfield flex-1" placeholder="например, наличные" value={name}
           onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void add()} />
       </div>
-      <div className="flex gap-2" role="group" aria-label="Валюта счёта">
+      <div className="tgroup max-sm:w-full" role="group" aria-label="Валюта счёта">
         {st.currencies.map((c) => (
           <button key={c} className="tb tb-tight" aria-pressed={cur === c} onClick={() => setCur(c)}>{c}</button>
         ))}
@@ -200,7 +205,7 @@ function NewAccount({ scope }: { scope: Scope }) {
         <input id={`${id}-bal`} className="tfield flex-1 text-right" inputMode="decimal" placeholder="0" value={bal}
           onChange={(e) => setBal(amountChars(e.target.value))} onKeyDown={(e) => e.key === "Enter" && void add()} />
       </div>
-      <div className="flex gap-2">
+      <div className="tgroup max-sm:w-full">
         <button className="tb" onClick={() => setOpen(false)}>Отмена</button>
         <button className="tb font-bold" onClick={() => void add()}>Добавить</button>
       </div>

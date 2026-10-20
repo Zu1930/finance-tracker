@@ -185,7 +185,11 @@ export function monthlySeries(data: TrackerData, keys: string[]): SeriesPoint[] 
 }
 
 /** 0.63 → «63%», null → «—» */
-export const fmtPct = (x: number | null) => (x === null ? "—" : `${x < 0 ? "−" : ""}${Math.abs(Math.round(x * 100))}%`);
+export const fmtPct = (x: number | null) => {
+  if (x === null) return "—";
+  const p = Math.round(x * 100);
+  return `${p < 0 ? "−" : ""}${Math.abs(p)}%`;
+};
 /** Изменение со знаком: 0.04 → «+4%», −0.12 → «−12%», null → «—» */
 export const fmtChange = (x: number | null) => {
   if (x === null) return "—";

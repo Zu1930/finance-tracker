@@ -6,9 +6,19 @@ export const uid = () =>
     : Date.now().toString(36) + Math.random().toString(36).slice(2);
 
 const nf = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
-export const fmt = (n: number) => nf.format(Math.round(n * 100) / 100);
-/** +1 250 / −300 */
-export const signed = (n: number) => `${n < 0 ? "−" : "+"}${fmt(Math.abs(n))}`;
+/** До копеек; всё, что округляется в ноль, — ровно 0, без «-0» */
+const cents = (n: number) => {
+  const r = Math.round(n * 100) / 100;
+  return r === 0 ? 0 : r;
+};
+export const fmt = (n: number) => nf.format(cents(n));
+/** +1 250 / −300; ноль — «0» без знака */
+export const signed = (n: number) => {
+  const r = cents(n);
+  return r === 0 ? "0" : `${r < 0 ? "−" : "+"}${fmt(Math.abs(r))}`;
+};
+/** Расход со знаком: −1 250; ноль — «0» без знака */
+export const minus = (n: number) => (cents(n) === 0 ? "0" : `−${fmt(Math.abs(n))}`);
 /** Курс: значимые цифры вместо копеек, чтобы 1 RSD = 0,00853 EUR не превращался в 0,01 */
 const rf = new Intl.NumberFormat("ru-RU", { maximumSignificantDigits: 6 });
 export const fmtRate = (n: number) => rf.format(n);

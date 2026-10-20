@@ -1,5 +1,6 @@
 'use client'
 
+import { Fragment } from 'react'
 import { useTracker } from '../TrackerProvider'
 import { useNarrow } from '../AsciiBar'
 import { CommitInput } from '../CommitInput'
@@ -7,7 +8,7 @@ import { usePlan, withOverride } from './usePlan'
 import { limitsSum, monthLimit, planIncome, planSummary } from '@/lib/plan'
 import { average } from '@/lib/metrics'
 import type { Category } from '@/lib/types'
-import { aliveIn, amountChars, fmt, monthName, parseAmount, signed, termName, todayStr } from '@/lib/utils'
+import { aliveIn, amountChars, fmt, minus, monthName, parseAmount, signed, termName, todayStr } from '@/lib/utils'
 
 const BAR = 48
 
@@ -61,26 +62,33 @@ export function PlanSummary({ month }: { month: string }) {
 	return (
 		<section className="mt-6 border-t border-dashed border-line pt-5">
 			<h2 className="sec">План</h2>
-			<dl className="mt-3 grid grid-cols-1 items-baseline gap-x-6 uppercase sm:grid-cols-[max-content_minmax(0,1fr)] sm:gap-y-2 [&>dt]:whitespace-nowrap">
-				<dt className="text-muted max-sm:mt-2"><label htmlFor="plan-income">Доход</label></dt>
-				<dd className="flex flex-wrap items-center gap-x-4 gap-y-1">
+			{/* Мобильный: подпись | число, пояснение строкой 12px под числом; на десктопе число стоит в подписи */}
+			<dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-6 gap-y-2 uppercase sm:grid-cols-[max-content_minmax(0,1fr)] [&>dt]:whitespace-nowrap">
+				<dt className="text-muted"><label htmlFor="plan-income">Доход</label></dt>
+				<dd className="flex flex-wrap items-center gap-x-4 gap-y-1 max-sm:justify-end">
 					<CommitInput id="plan-income" inputMode="decimal" sanitize={amountChars}
 						className={`tfield w-[14ch] text-right ${override === null && avg === null ? 'border-warn' : ''}`}
 						value={income === null ? '' : String(Math.round(income))} placeholder={st.base}
 						onCommit={commitIncome} />
-					<span className="flex items-center">{caption}</span>
+					<span className="flex flex-wrap items-center gap-y-1 max-sm:w-full max-sm:justify-end max-sm:text-right max-sm:text-xs">{caption}</span>
 				</dd>
-				<dt className="max-sm:mt-2"><span aria-hidden="true">█ </span>Лимиты <b>−{fmt(s.limits.total)}</b></dt>
-				<dd className="text-muted">Семья {fmt(s.limits.family)} · Личное {fmt(s.limits.mine + s.limits.partner)}</dd>
-				<dt className="max-sm:mt-2"><span aria-hidden="true" className="text-muted">▓ </span>Покупки <b>−{fmt(s.planned.total)}</b></dt>
-				<dd className="text-muted">
-					{s.planned.count} шт.{s.planned.partner > 0 && ` · вкл. ${data.partner.name} ${fmt(s.planned.partner)}`}
-				</dd>
-				<dt className="max-sm:mt-2">
-					<span aria-hidden="true" className="text-dim">░ </span>Останется{' '}
-					<b className={s.short ? 'text-bad' : ''}>{s.rest === null ? '—' : signed(s.rest)}</b>
-				</dt>
-				<dd className="text-muted">{s.rest === null ? 'Нужен доход' : `В сбережения · ${pct}% дохода`}</dd>
+				{[
+					{ mark: <span aria-hidden="true">█ </span>, label: 'Лимиты', value: <b>{minus(s.limits.total)}</b>,
+						note: `Семья ${fmt(s.limits.family)} · Личное ${fmt(s.limits.mine + s.limits.partner)}` },
+					{ mark: <span aria-hidden="true" className="text-muted">▓ </span>, label: 'Покупки', value: <b>{minus(s.planned.total)}</b>,
+						note: `${s.planned.count} шт.${s.planned.partner > 0 ? ` · вкл. ${data.partner.name} ${fmt(s.planned.partner)}` : ''}` },
+					{ mark: <span aria-hidden="true" className="text-dim">░ </span>, label: 'Останется',
+						value: <b className={s.short ? 'text-bad' : ''}>{s.rest === null ? '—' : signed(s.rest)}</b>,
+						note: s.rest === null ? 'Нужен доход' : `В сбережения · ${pct}% дохода` },
+				].map((r) => (
+					<Fragment key={r.label}>
+						<dt>{r.mark}{r.label}<span className="max-sm:hidden"> {r.value}</span></dt>
+						<dd className="text-muted max-sm:text-right">
+							<span className="text-ink sm:hidden">{r.value}</span>
+							<span className="max-sm:block max-sm:text-xs">{r.note}</span>
+						</dd>
+					</Fragment>
+				))}
 			</dl>
 			<p className="mt-4 whitespace-pre" aria-hidden="true">
 				<span className="text-ink">{'█'.repeat(lim)}</span>
@@ -119,10 +127,14 @@ export function PlanLimits({ month }: { month: string }) {
 					const save = (v: number | null) =>
 						scope === 'family' ? savePlan({ limitOverrides: withOverride(ov, c.id, v) }) : saveMyPlan(withOverride(ov, c.id, v))
 					return (
-						<li key={c.id} className="grid grid-cols-[minmax(0,1fr)_auto_12ch] items-center gap-x-4 border-b border-dashed border-line2 py-1 uppercase sm:grid-cols-[minmax(0,1fr)_7ch_12ch_12ch_9ch]">
-							<span className="truncate max-sm:col-span-3">{termName(c.name)}</span>
-							<span className="text-muted max-sm:order-first max-sm:hidden">[{scope === 'family' ? 'СЕМ' : 'ЛИЧН'}]</span>
-							<span className="text-right text-muted">{fmt(usual)}</span>
+						// Мобильный: имя и scope строкой, ниже обычный лимит, поле и разница
+						<li key={c.id} className="grid grid-cols-[minmax(0,1fr)_12ch_9ch] items-center gap-x-4 border-b border-dashed border-line2 py-1 uppercase sm:grid-cols-[minmax(0,1fr)_7ch_12ch_12ch_9ch]">
+							<span className="truncate max-sm:col-span-3 max-sm:pt-1">
+								{termName(c.name)}
+								<span className="text-muted sm:hidden"> [{scope === 'family' ? 'СЕМ' : 'ЛИЧН'}]</span>
+							</span>
+							<span className="text-muted max-sm:hidden">[{scope === 'family' ? 'СЕМ' : 'ЛИЧН'}]</span>
+							<span className="text-muted sm:text-right">{fmt(usual)}</span>
 							<CommitInput className="tfield w-full text-right" inputMode="decimal" sanitize={amountChars}
 								aria-label={`Лимит на ${name}, ${c.name}`} value={String(cur)}
 								onCommit={(v) => {

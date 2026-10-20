@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Траты",
-    short_name: "Траты",
+    name: "SPEND.LOG",
+    short_name: "SPEND.LOG",
     start_url: "/",
     display: "standalone",
     background_color: "#0B0B0B",

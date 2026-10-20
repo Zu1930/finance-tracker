@@ -12,6 +12,14 @@ export function Goals({ allocated, free, missing, empty }: { allocated: number; 
   const { data } = useTracker();
   const base = data.settings!.base;
   const goals = [...data.savings.goals.family, ...data.savings.goals.mine];
+  // Счетов ещё нет и копилок нет — распределять нечего
+  if (empty && goals.length === 0)
+    return (
+      <section className="mt-8 border-t border-dashed border-line pt-5">
+        <h2 className="sec">Копилки</h2>
+        <p className="mt-3 text-muted uppercase">Появятся после первой сверки</p>
+      </section>
+    );
   return (
     <section className="mt-8 border-t border-dashed border-line pt-5">
       <h2 className="sec">
@@ -78,11 +86,11 @@ function GoalCard({ g }: { g: Goal }) {
       </p>
       {last && <p className="text-muted2">// {last.amount > 0 ? "+" : "−"}{fmt(Math.abs(last.amount))} · {ddmm(last.date)}</p>}
       <div className="mt-3 flex flex-wrap items-end gap-x-4 gap-y-2">
-        <input className="tfield min-w-[10ch] flex-1" inputMode="decimal" placeholder="сумма" aria-label={`Сумма для ${g.name}`}
+        <input className="tfield min-w-[10ch] flex-1 max-sm:basis-full" inputMode="decimal" placeholder="сумма" aria-label={`Сумма для ${g.name}`}
           value={val} onChange={(e) => setVal(amountChars(e.target.value))} onKeyDown={(e) => e.key === "Enter" && void move(1)} />
-        <div className="flex gap-2">
-          <button className="tb" onClick={() => void move(1)}>+ Выделить</button>
-          <button className="tb" onClick={() => void move(-1)}>− Вернуть</button>
+        <div className="tgroup max-sm:w-full">
+          <button className="tb max-sm:h-11" onClick={() => void move(1)}>+ Выделить</button>
+          <button className="tb max-sm:h-11" onClick={() => void move(-1)}>− Вернуть</button>
         </div>
       </div>
     </section>
@@ -112,7 +120,7 @@ function NewGoal() {
     <section className="mt-6">
       <h2 className="sec">New goal</h2>
       <div className="mt-4 flex flex-wrap items-end gap-x-6 gap-y-4">
-        <div className="flex gap-2" role="group" aria-label="Чья копилка">
+        <div className="tgroup max-sm:w-full" role="group" aria-label="Чья копилка">
           <button className="tb" aria-pressed={scope === "family"} onClick={() => setScope("family")}>Семья</button>
           <button className="tb" aria-pressed={scope === "personal"} onClick={() => setScope("personal")}>Личное</button>
         </div>
@@ -126,12 +134,12 @@ function NewGoal() {
           <input id="goal-target" className="tfield flex-1" inputMode="decimal" placeholder={currency} value={target}
             onChange={(e) => setTarget(amountChars(e.target.value))} onKeyDown={(e) => e.key === "Enter" && void add()} />
         </div>
-        <div className="flex gap-2" role="group" aria-label="Валюта копилки">
+        <div className="tgroup max-sm:w-full" role="group" aria-label="Валюта копилки">
           {st.currencies.map((c) => (
             <button key={c} className="tb tb-tight" aria-pressed={currency === c} onClick={() => setCur(c)}>{c}</button>
           ))}
         </div>
-        <button className="tb" onClick={() => void add()}>Создать</button>
+        <button className="tb max-sm:h-12 max-sm:w-full" onClick={() => void add()}>Создать</button>
       </div>
     </section>
   );

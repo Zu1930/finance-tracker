@@ -6,9 +6,9 @@ import { ServiceWorker } from "@/components/ServiceWorker";
 const mono = JetBrains_Mono({ subsets: ["latin", "cyrillic"], weight: ["400", "500", "700"], variable: "--font-jetbrains" });
 
 export const metadata: Metadata = {
-  title: "Траты по лимитам",
+  title: "SPEND.LOG",
   // Иконки и манифест подключает Next по файлам app/icon.svg, app/apple-icon.png, app/manifest.ts
-  appleWebApp: { capable: true, title: "Траты", statusBarStyle: "black-translucent" },
+  appleWebApp: { capable: true, title: "SPEND.LOG", statusBarStyle: "black-translucent" },
   robots: { index: false, follow: false },
 };
 

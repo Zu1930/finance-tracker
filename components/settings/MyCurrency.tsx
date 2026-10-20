@@ -12,7 +12,7 @@ export function MyCurrency() {
 	return (
 		<div>
 			<div
-				className="flex flex-wrap gap-2"
+				className="tgroup"
 				role="group"
 				aria-label="Моя валюта для личных трат и доходов"
 			>

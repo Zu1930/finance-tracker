@@ -7,11 +7,11 @@ import { useNarrow } from "./AsciiBar";
 import { fmtPct, monthPlanned, monthlySeries, savingsRate } from "@/lib/metrics";
 import { limitsSum } from "@/lib/plan";
 import type { Expense } from "@/lib/types";
-import { MONTHS_SHORT, curMonthKey, fmt, monthTitle, shiftMonth, spentByCat, termName } from "@/lib/utils";
+import { MONTHS_SHORT, curMonthKey, fmt, monthTitle, shiftMonth, signed, spentByCat, termName } from "@/lib/utils";
 
 /** Цвет категории — токен cat-1…cat-8 по её индексу в списке категорий */
 const catColor = (i: number) => `var(--cat-${(i % 8) + 1})`;
-const H = 360, L = 70, T = 24, B = 40;
+const H = 360, T = 24, B = 40;
 /** Подписи сумм над столбцами только если столбец достаточно широк, иначе они наезжают друг на друга */
 const MIN_LABEL_SLOT = 64;
 /** Накопленный остаток рисуется по общей оси, если неотрицателен и не больше 1.5× её максимума */
@@ -25,8 +25,8 @@ const LAYERS: { id: Layer; label: string }[] = [
 ];
 
 /** Круглая шкала от lo до hi: шаг 1/2/5 × 10^n, около 4 делений */
-function niceScale(lo: number, hi: number) {
-  const raw = Math.max(hi - lo, 1) / 4, pow = 10 ** Math.floor(Math.log10(raw)), n = raw / pow;
+function niceScale(lo: number, hi: number, divisions = 4) {
+  const raw = Math.max(hi - lo, 1) / divisions, pow = 10 ** Math.floor(Math.log10(raw)), n = raw / pow;
   const step = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * pow;
   const min = Math.floor(lo / step) * step, max = Math.ceil(hi / step) * step;
   const ticks: number[] = [];
@@ -54,7 +54,10 @@ export function ChartView() {
   const [on, setOn] = useState<Record<Layer, boolean>>({ expense: true, income: true, cumulative: false });
   // На узком экране рисуем в меньшей системе координат, чтобы график влез без горизонтального скролла
   const narrow = useNarrow();
-  const W = narrow ? 420 : 900;
+  // Мобильный: своя система координат шириной 360 и шрифт 13 — на экране 360px это около 12px, не мельче 11
+  const W = narrow ? 360 : 900;
+  const fs = narrow ? 13 : 12;
+  const divisions = narrow ? 3 : 4;
   const st = data.settings!;
 
   const keys: string[] = [];
@@ -100,11 +103,13 @@ export function ChartView() {
   const cMin = Math.min(0, ...cums), cMax = Math.max(0, ...cums);
   const shared = cMin >= 0 && cMax <= leftMax * SHARED_AXIS_FACTOR;
   const rightAxis = on.cumulative && !shared;
-  const left = niceScale(0, on.cumulative && shared ? Math.max(leftMax, cMax) : leftMax);
-  const right = niceScale(cMin, cMax);
+  const left = niceScale(0, on.cumulative && shared ? Math.max(leftMax, cMax) : leftMax, divisions);
+  const right = niceScale(cMin, cMax, divisions);
+  // Левое поле под самую длинную подпись оси (≈0.6 шрифта на символ); на десктопе — как было
+  const L = narrow ? 14 + Math.max(...left.ticks.map((v) => fmt(v).length)) * 0.6 * fs : 70;
 
   // Правое поле под самую длинную подпись правой оси (≈7.2 единицы на символ при 12px)
-  const R = rightAxis ? 14 + Math.max(...right.ticks.map((v) => fmt(v).length)) * 7.2 : 16;
+  const R = rightAxis ? 14 + Math.max(...right.ticks.map((v) => fmt(v).length)) * 0.6 * fs : 16;
   const cw = W - L - R, ch = H - T - B, slot = cw / keys.length, bw = Math.min(64, slot * 0.58);
   const labels = slot >= MIN_LABEL_SLOT;
   const y = (v: number) => T + ch - (v / left.max) * ch;
@@ -124,15 +129,15 @@ export function ChartView() {
     <>
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         <h1 className="sec">Monthly spending</h1>
-        <div className="flex flex-wrap gap-2 sm:ml-auto">
-          <div className="flex flex-wrap gap-2" role="group" aria-label="Слои графика">
+        <div className="flex w-full flex-col gap-2 sm:ml-auto sm:w-auto sm:flex-row sm:flex-wrap">
+          <div className="tgroup" role="group" aria-label="Слои графика">
             {LAYERS.map((l) => (
-              <button key={l.id} className="tb" aria-pressed={on[l.id]} onClick={() => setOn((s) => ({ ...s, [l.id]: !s[l.id] }))}>
+              <button key={l.id} className="tb mbare max-sm:px-0" aria-pressed={on[l.id]} onClick={() => setOn((s) => ({ ...s, [l.id]: !s[l.id] }))}>
                 {l.label}
               </button>
             ))}
           </div>
-          <div className="flex gap-2" role="group" aria-label="Период">
+          <div className="tgroup" role="group" aria-label="Период">
             {[6, 12].map((r) => (
               <button key={r} className="tb tb-tight" aria-pressed={range === r} onClick={() => setRange(r)}>{r} мес.</button>
             ))}
@@ -145,13 +150,13 @@ export function ChartView() {
           {left.ticks.map((v) => (
             <g key={v}>
               <line x1={L} x2={W - R} y1={y(v)} y2={y(v)} stroke="var(--line2)" strokeDasharray="3 4" />
-              <text x={L - 10} y={y(v) + 4} textAnchor="end" fontSize="12" fill="var(--muted)">{fmt(v)}</text>
+              <text x={L - 10} y={y(v) + 4} textAnchor="end" fontSize={fs} fill="var(--muted)">{fmt(v)}</text>
             </g>
           ))}
           {rightAxis && right.ticks.map((v) => (
             <g key={v}>
               <line x1={W - R} x2={W - R + 4} y1={yR(v)} y2={yR(v)} stroke="var(--muted)" />
-              <text x={W - R + 8} y={yR(v) + 4} fontSize="12" fill="var(--muted)">{fmt(v)}</text>
+              <text x={W - R + 8} y={yR(v) + 4} fontSize={fs} fill="var(--muted)">{fmt(v)}</text>
             </g>
           ))}
           {rightAxis && <line x1={W - R} x2={W - R} y1={T} y2={T + ch} stroke="var(--line2)" />}
@@ -161,6 +166,7 @@ export function ChartView() {
             const x = L + i * slot + (slot - bw) / 2;
             let acc = 0;
             const [yy, mm] = k.split("-");
+            const showLabel = narrow ? k === curMonthKey() : labels;
             // Подписи расхода и дохода рядом — меньшая уходит под свою отметку, чтобы не наложиться
             const yE = y(p.expense), yI = y(p.income);
             const clash = on.expense && on.income && p.expense > 0 && p.income > 0 && Math.abs(yE - yI) < 16;
@@ -182,8 +188,8 @@ export function ChartView() {
                     </rect>
                   );
                 })}
-                {on.expense && labels && p.expense > 0 && (
-                  <text x={x + bw / 2} y={expenseLabelY} textAnchor="middle" fontSize="12" fontWeight="700" fill="var(--ink)">
+                {on.expense && showLabel && p.expense > 0 && (
+                  <text x={x + bw / 2} y={expenseLabelY} textAnchor="middle" fontSize={fs} fontWeight="700" fill="var(--ink)">
                     {fmt(p.expense)}
                   </text>
                 )}
@@ -192,14 +198,14 @@ export function ChartView() {
                     <line x1={x - 4} x2={x + bw + 4} y1={yI} y2={yI} stroke="var(--ink)" strokeWidth={2}>
                       <title>{`Доход: ${fmt(p.income)} ${st.base}`}</title>
                     </line>
-                    {labels && (
-                      <text x={x + bw / 2} y={incomeLabelY} textAnchor="middle" fontSize="12" fill="var(--ink)">
+                    {showLabel && (
+                      <text x={x + bw / 2} y={incomeLabelY} textAnchor="middle" fontSize={fs} fill="var(--ink)">
                         +{fmt(p.income)}
                       </text>
                     )}
                   </>
                 )}
-                <text x={x + bw / 2} y={H - B + 18} textAnchor="middle" fontSize="12"
+                <text x={x + bw / 2} y={H - B + 18} textAnchor="middle" fontSize={fs}
                   fill={k === curMonthKey() ? "var(--ink)" : "var(--muted)"}>
                   {MONTHS_SHORT[+mm - 1]}{mm === "01" || i === 0 ? ` ${yy.slice(2)}` : ""}
                 </text>
@@ -210,7 +216,7 @@ export function ChartView() {
           {on.expense && limits.some((v) => v > 0) && (
             <>
               <path d={limits.map((v, i) => `${i ? "V" : "M" + L} ${y(v)} H ${L + (i + 1) * slot}`).join(" ")} fill="none" stroke="var(--ink)" strokeDasharray="5 4" strokeWidth={1.5} />
-              <text x={W - R} y={y(limitSum) - 6} textAnchor="end" fontSize="12" fill="var(--ink)">СУММА ЛИМИТОВ {fmt(limitSum)}</text>
+              <text x={W - R} y={y(limitSum) - 6} textAnchor="end" fontSize={fs} fill="var(--ink)">СУММА ЛИМИТОВ {fmt(limitSum)}</text>
             </>
           )}
 
@@ -235,10 +241,10 @@ export function ChartView() {
         <span className="text-muted">Доход</span> {fmt(sumIncome)}
         <span className="text-muted"> // Расход</span> {fmt(sumExpense)}
         <span className="text-muted"> // Остаток</span>{" "}
-        <span className={sumBalance < 0 ? "text-bad" : ""}>{sumBalance < 0 ? "−" : "+"}{fmt(Math.abs(sumBalance))}</span>
+        <span className={sumBalance < 0 ? "text-bad" : ""}>{signed(sumBalance)}</span>
         <span className="text-muted"> // Норма</span> {fmtPct(savingsRate(sumIncome, sumExpense))}
       </p>
-      <ul className="mt-3 grid grid-cols-1 gap-x-12 sm:grid-cols-2">
+      <ul className="mt-3 grid grid-cols-2 gap-x-4 sm:gap-x-12">
         {used.map((c) => (
           <li key={c.id} className="flex items-baseline gap-2 py-0.5">
             {c.id === PLAN ? (
@@ -247,8 +253,8 @@ export function ChartView() {
               <span aria-hidden="true" style={{ color: color[c.id] }}>■</span>
             )}
             {/* Личные сегменты — не категории: имя человека без замены пробелов на _ */}
-            <span className="shrink-0 uppercase">{c.id.startsWith("personal:") || c.id === PLAN ? c.name : termName(c.name)}</span>
-            <span aria-hidden="true" className="min-w-4 flex-1 overflow-hidden whitespace-nowrap text-dim">{".".repeat(80)}</span>
+            <span className="min-w-0 flex-1 truncate uppercase sm:flex-none sm:shrink-0">{c.id.startsWith("personal:") || c.id === PLAN ? c.name : termName(c.name)}</span>
+            <span aria-hidden="true" className="min-w-4 flex-1 overflow-hidden whitespace-nowrap text-dim max-sm:hidden">{".".repeat(80)}</span>
             <b className="shrink-0">{fmt(periodTotal[c.id] ?? 0)}</b>
           </li>
         ))}

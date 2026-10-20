@@ -22,14 +22,21 @@ export function ExpenseSummary({ scope, cats, sel }: { scope: Scope; cats: Categ
 	const limit = (sel ? [sel] : cats).reduce((acc, c) => acc + monthLimit(c, key, ov), 0)
 	const used = [...ids].reduce((a, id) => a + (spent[id] ?? 0), 0)
 	const left = limit - used
+	// Мобильный: одна строка; WARNING (от 80%) и перерасход окрашивают её, как статус шкалы
+	const pct = limit > 0 ? used / limit : used > 0 ? Infinity : 0
+	const tone = pct > 1 ? 'text-bad' : pct >= 0.8 ? 'text-warn' : 'text-muted'
+	const title = sel ? termName(sel.name) : 'Все лимиты'
 
 	return (
-		<section className="mt-6 border-t border-dashed border-line pt-6" aria-live="polite">
-			<h2 className="sec">{sel ? termName(sel.name) : 'Все лимиты'}</h2>
-			<div className="mt-3">
+		<section className="mt-6 border-t border-dashed border-line pt-4 sm:pt-6" aria-live="polite">
+			<p className={`text-[13px] uppercase sm:hidden ${tone}`}>
+				{title} · {left < 0 ? `Перерасход ${fmt(-left)} из ${fmt(limit)}` : `Осталось ${fmt(left)} из ${fmt(limit)}`}
+			</p>
+			<h2 className="sec max-sm:hidden">{title}</h2>
+			<div className="mt-3 max-sm:hidden">
 				<AsciiBar value={used} max={limit} label={sel ? sel.name : 'Все лимиты'} />
 			</div>
-			<p className="mt-2 uppercase">
+			<p className="mt-2 uppercase max-sm:hidden">
 				<span className={left < 0 ? 'text-bad' : 'text-muted'}>
 					{left < 0 ? `Перерасход ${fmt(-left)} ${st.base}` : `Осталось ${fmt(left)} из ${fmt(limit)} ${st.base}`}
 				</span>

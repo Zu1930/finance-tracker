@@ -13,7 +13,7 @@ import { usePlan, withOverride } from "./plan/usePlan";
 import { byAuthor, fmtPct, monthIncome, savingsRate } from "@/lib/metrics";
 import { MAX_AHEAD, isMonth, itemStatus, linkedByItem, monthLimit, monthsAhead, planSpentByCat } from "@/lib/plan";
 import type { Category, Expense, PlanItem } from "@/lib/types";
-import { activeCats, amountChars, catsIn, curMonthKey, fmt, liveCats, monthName, monthTitle, parseAmount, setLimit, shiftMonth, signed, termName, uid } from "@/lib/utils";
+import { activeCats, amountChars, catsIn, curMonthKey, fmt, liveCats, monthName, monthTitle, minus, parseAmount, setLimit, shiftMonth, signed, termName, uid } from "@/lib/utils";
 
 export function LimitsView() {
   const { month, setMonth } = useTracker();
@@ -33,9 +33,16 @@ export function LimitsView() {
           <h1 className="min-w-[16ch] text-center text-lg font-bold uppercase">{monthTitle(month)}</h1>
           <button className="tb" aria-label="Следующий месяц" disabled={ahead >= MAX_AHEAD} onClick={() => setMonth(shiftMonth(month, 1))}>&gt;</button>
         </div>
-        {ahead > 0 && <span className="border border-dashed border-line2 px-1.5 py-0.5 text-muted uppercase">План</span>}
-        {month !== cur && (
-          <button className="tb sm:ml-auto" onClick={() => setMonth(cur)}>{ahead > 0 ? "← Текущий месяц" : "Текущий месяц →"}</button>
+        {/* Мобильный: метка и возврат — следующей строкой */}
+        {(ahead > 0 || month !== cur) && (
+          <div className="flex items-center gap-3 max-sm:w-full sm:contents">
+            {ahead > 0 && <span className="border border-dashed border-line2 px-1.5 py-0.5 text-muted uppercase">План</span>}
+            {month !== cur && (
+              <button className="tb max-sm:ml-auto sm:ml-auto" onClick={() => setMonth(cur)}>
+                {ahead > 0 ? "← " : ""}Текущий<span className="max-sm:hidden"> месяц</span>{ahead > 0 ? "" : " →"}
+              </button>
+            )}
+          </div>
         )}
       </div>
       {ahead > 0 ? (
@@ -81,23 +88,23 @@ function MonthLimits() {
       {month === cur && <CarryOver />}
       <section className="mt-6 border-t border-dashed border-line pt-5">
         <h2 className="sec">Итог</h2>
-        <dl className="mt-3 grid grid-cols-1 gap-x-6 uppercase sm:grid-cols-[12ch_minmax(0,1fr)] sm:gap-y-1">
-          <dt className="text-muted max-sm:mt-2">Доход</dt>
-          <dd>
+        <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 uppercase sm:grid-cols-[12ch_minmax(0,1fr)] sm:gap-y-1">
+          <dt className="text-muted">Доход</dt>
+          <dd className="max-sm:text-right">
             <b>{signed(income)} {st.base}</b>
-            <span className="text-muted"> // </span>
-            <Contribution sums={byAuthor(data.incomes[month] ?? [])} sign="+" />
+            <span className="text-muted max-sm:hidden"> // </span>
+            <span className="max-sm:block max-sm:text-xs"><Contribution sums={byAuthor(data.incomes[month] ?? [])} sign="+" /></span>
           </dd>
-          <dt className="text-muted max-sm:mt-2">Расход</dt>
-          <dd>
-            <b>−{fmt(expense)} {st.base}</b>
-            <span className="text-muted"> // семья {fmt(familyTotal)} · личное {fmt(personalTotal)}</span>
+          <dt className="text-muted">Расход</dt>
+          <dd className="max-sm:text-right">
+            <b>{minus(expense)} {st.base}</b>
+            <span className="text-muted max-sm:block max-sm:text-xs"><span className="max-sm:hidden"> // </span>семья {fmt(familyTotal)} · личное {fmt(personalTotal)}</span>
           </dd>
-          <dt className="text-muted max-sm:mt-2">Остаток</dt>
-          <dd>
+          <dt className="text-muted">Остаток</dt>
+          <dd className="max-sm:text-right">
             <b className={rest < 0 ? "text-bad" : ""}>{signed(rest)} {st.base}</b>
-            <span className="text-muted"> // сбережения </span>
-            {fmtPct(savingsRate(income, expense))}
+            <span className="max-sm:block max-sm:text-xs"><span className="text-muted"><span className="max-sm:hidden"> //</span> сбережения </span>
+            {fmtPct(savingsRate(income, expense))}</span>
           </dd>
         </dl>
       </section>
@@ -126,7 +133,7 @@ function MonthLimits() {
         </summary>
         <div className="max-w-3xl pt-3 pb-2">
           {month === cur && (
-            <div className="mb-4 flex gap-2" role="group" aria-label="Изменения лимитов">
+            <div className="tgroup mb-4" role="group" aria-label="Изменения лимитов">
               <button className="tb" aria-pressed={!onlyMonth} onClick={() => setOnlyMonth(false)}>Всегда</button>
               <button className="tb" aria-pressed={onlyMonth} onClick={() => setOnlyMonth(true)}>Только {monthName(cur)}</button>
             </div>
@@ -175,13 +182,13 @@ function LimitBlocks({ cats, spent, contribution, planned }: { cats: Category[];
               const status = itemStatus(it, linked[it.id] ?? 0);
               return (
                 <p key={it.id} className="mt-1 text-muted2 uppercase">
-                  План: {termName(it.name)} −{fmt(it.amount)}{status === "done" ? " ✓" : status === "partial" ? ` ~ ${fmt(linked[it.id])}` : ""}
+                  План: {termName(it.name)} {minus(it.amount)}{status === "done" ? " ✓" : status === "partial" ? ` ~ ${fmt(linked[it.id])}` : ""}
                 </p>
               );
             })}
             {contribution && (
               <p className="mt-1">
-                <Contribution sums={byAuthor(contribution, (e) => e.catId === c.id)} />
+                <span className="max-sm:text-xs"><Contribution sums={byAuthor(contribution, (e) => e.catId === c.id)} /></span>
               </p>
             )}
           </section>

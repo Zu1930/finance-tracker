@@ -57,19 +57,19 @@ export default function LoginPage() {
     <div className="px-4">
       <form className="mx-auto mt-[12vh] max-w-sm" onSubmit={submit}>
         <h1 className="sec">Auth</h1>
-        <div className="mt-6 flex flex-wrap gap-2" role="group" aria-label="Пользователь">
+        <div className="tgroup mt-6" role="group" aria-label="Пользователь">
           {users.map((u) => (
-            <button key={u.id} type="button" className="tb" aria-pressed={userId === u.id} onClick={() => pick(u.id)}>
+            <button key={u.id} type="button" className="tb h-12 sm:h-auto" aria-pressed={userId === u.id} onClick={() => pick(u.id)}>
               {u.name}
             </button>
           ))}
         </div>
-        <div className="mt-6 flex items-center gap-3">
+        <div className="mt-6 flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
           <label htmlFor="pw" className="lbl">Password</label>
           <input id="pw" className="tfield flex-1" type="password" autoFocus autoComplete="current-password"
             value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
-        <button className="tb mt-6 w-full font-bold" disabled={busy || !password || !userId}>{busy ? "Вхожу…" : "Войти"}</button>
+        <button className="tb mt-6 h-12 w-full font-bold sm:h-auto" disabled={busy || !password || !userId}>{busy ? "Вхожу…" : "Войти"}</button>
         <p className="mt-3 min-h-5 text-bad uppercase" role="alert">{error && `!! ${error.replace(/\.$/, "")}`}</p>
       </form>
     </div>

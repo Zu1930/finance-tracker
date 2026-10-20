@@ -27,15 +27,25 @@ export function SavingsView() {
   const months = runway(free, average(data, todayStr())?.expense);
   const change = monthChange(sv.recons, curMonthKey(), all);
   const currencies = Object.entries(byCurrency(mineAccounts)).sort(([a], [b]) => (a === st.base ? -1 : b === st.base ? 1 : a.localeCompare(b)));
+  // Ни одного счёта ни у кого — пустое состояние: вместо нулей приглашение завести первый счёт
   const empty = mineAccounts.every((a) => a.archived) && !sv.partner.lastUpdatedAt;
+  const [openFirst, setOpenFirst] = useState(false);
 
   return (
     <>
       {sv.migration && <MigrationBanner />}
       <section>
         <h1 className="sec">Всего</h1>
+        {empty ? (
+          <>
+            <p className="mt-3 text-lg font-bold uppercase">Счетов пока нет</p>
+            <p className="mt-1 text-muted uppercase">Добавьте счета и сделайте первую сверку — от неё пойдёт отсчёт.</p>
+            <button className="tb mt-4 h-12 w-full font-bold sm:w-auto sm:px-6" onClick={() => setOpenFirst(true)}>+ Первый счёт</button>
+          </>
+        ) : (
+        <>
         <p className="mt-2 flex flex-wrap items-baseline gap-x-4">
-          <b className="text-[44px] leading-tight">{fmt(Math.round(all))} {st.base}</b>
+          <b className="text-[36px] leading-tight sm:text-[44px]">{fmt(Math.round(all))} {st.base}</b>
           {change !== null && <span className={`uppercase ${change < 0 ? "text-bad" : "text-muted"}`}>{signed(Math.round(change))} за месяц</span>}
         </p>
         {t.missing.length > 0 && <p className="text-warn uppercase">!! Нет курса: {t.missing.join(", ")} — эти счета не входят в итог</p>}
@@ -52,9 +62,11 @@ export function SavingsView() {
             {months === null ? "—" : <><b className={months < 1 ? "text-warn" : ""}>{fmt(months)} мес расходов</b><span className="text-muted"> // свободными</span></>}
           </dd>
         </dl>
+        </>
+        )}
       </section>
 
-      <Accounts />
+      <Accounts openFamily={openFirst} />
       <Goals allocated={alloc} free={free} missing={goalsAlloc.missing} empty={empty} />
       <Dynamics current={all} />
     </>
@@ -78,14 +90,12 @@ function Dynamics({ current }: { current: number }) {
           const prev = series[i - 1]?.value;
           const diff = p.value !== null && prev !== null && prev !== undefined ? p.value - prev : null;
           return (
-            // На мобильном шкала уходит отдельной строкой под месяцем и суммой
-            <li key={p.key} className={`grid grid-cols-[6ch_minmax(0,1fr)_auto] items-baseline gap-x-4 max-sm:pb-1 sm:grid-cols-[6ch_auto_16ch_10ch] ${p.carried ? "text-muted" : ""}`}>
+            // Мобильный: месяц | шкала 14 символов | сумма; изменение к прошлому месяцу только на десктопе
+            <li key={p.key} className={`grid grid-cols-[5ch_auto_minmax(0,1fr)] items-baseline gap-x-3 sm:grid-cols-[6ch_auto_16ch_10ch] sm:gap-x-4 ${p.carried ? "text-muted" : ""}`}>
               <span className={p.carried ? "" : "text-muted"}>{abbr(p.key)}</span>
-              <div className="col-span-full max-sm:order-last sm:col-span-1">
-                <AsciiBar value={p.value ?? 0} max={max} bare label={`${abbr(p.key)}: остаток`} />
-              </div>
-              <b className={`text-right ${p.carried ? "font-normal" : ""}`}>{p.value === null ? "—" : `${p.carried ? "~" : ""}${fmt(Math.round(p.value))} ${base}`}</b>
-              <span className="text-right text-muted">{diff === null || p.carried ? "" : signed(Math.round(diff))}</span>
+              <AsciiBar value={p.value ?? 0} max={max} bare narrowWidth={14} label={`${abbr(p.key)}: остаток`} />
+              <b className={`text-right whitespace-nowrap ${p.carried ? "font-normal" : ""}`}>{p.value === null ? "—" : `${p.carried ? "~" : ""}${fmt(Math.round(p.value))} ${base}`}</b>
+              <span className="text-right text-muted max-sm:hidden">{diff === null || p.carried ? "" : signed(Math.round(diff))}</span>
             </li>
           );
         })}

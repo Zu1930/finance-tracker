@@ -5,7 +5,7 @@ import { useTracker } from '../TrackerProvider'
 import { usePlan } from './usePlan'
 import { MAX_AHEAD, itemStatus, monthsAhead } from '@/lib/plan'
 import type { PlanItem, Scope } from '@/lib/types'
-import { MONTHS_SHORT, aliveIn, amountChars, curMonthKey, fmt, parseAmount, shiftMonth, termName } from '@/lib/utils'
+import { MONTHS_SHORT, aliveIn, amountChars, curMonthKey, fmt, minus, parseAmount, shiftMonth, termName } from '@/lib/utils'
 
 const MARK = { done: '[✓]', partial: '[~]', planned: '[ ]' } as const
 
@@ -59,26 +59,30 @@ function ItemRow({ it, linked, cat, withStatus }: { it: PlanItem; linked: number
 	}
 
 	return (
-		<li className="flex min-h-11 flex-wrap items-center gap-x-4 border-b border-dashed border-line2 py-1 uppercase">
-			{withStatus && (
-				<span className={status === 'planned' ? 'text-muted' : ''} aria-label={{ done: 'куплено', partial: 'частично', planned: 'не куплено' }[status]}>
-					{MARK[status]}
-				</span>
-			)}
-			<span className="min-w-0 flex-1 max-sm:basis-[60%]">
+		// Мобильный: две строки, как в логах — имя | сумма, категория · scope | [→] [×]
+		<li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 border-b border-dashed border-line2 py-1 uppercase sm:flex sm:min-h-11 sm:flex-wrap">
+			<span className="min-w-0 truncate sm:flex-1">
+				{withStatus && (
+					<span className={`mr-4 ${status === 'planned' ? 'text-muted' : ''}`} aria-label={{ done: 'куплено', partial: 'частично', planned: 'не куплено' }[status]}>
+						{MARK[status]}
+					</span>
+				)}
 				<b>{termName(it.name)}</b>
-				<span className="text-muted"> // {cat}</span>
+				<span className="text-muted max-sm:hidden"> // {cat}</span>
 			</span>
-			<span className="text-muted">[{it.scope === 'family' ? 'СЕМ' : 'ЛИЧН'}]</span>
+			<span className="text-muted max-sm:hidden">[{it.scope === 'family' ? 'СЕМ' : 'ЛИЧН'}]</span>
 			<b className="text-right">
-				{withStatus && status === 'partial' ? `${fmt(linked)} из ${fmt(it.amount)}` : `−${fmt(it.amount)}`}
+				{withStatus && status === 'partial' ? `${fmt(linked)} из ${fmt(it.amount)}` : minus(it.amount)}
 			</b>
-			{canMove && (
-				<button className="tb" aria-label={`Перенести ${it.name} на следующий месяц`} onClick={() => void move()}>
-					→ {MONTHS_SHORT[Number(next.slice(5)) - 1]}
-				</button>
-			)}
-			<button className="xb -mr-2" aria-label={`Удалить покупку ${it.name}`} onClick={() => void remove()}>×</button>
+			<span className="truncate text-xs text-muted sm:hidden">{cat} · {it.scope === 'family' ? 'СЕМ' : 'ЛИЧН'}</span>
+			<span className="flex items-center justify-end gap-2 sm:contents">
+				{canMove && (
+					<button className="tb" aria-label={`Перенести ${it.name} на следующий месяц`} onClick={() => void move()}>
+						→<span className="max-sm:hidden"> {MONTHS_SHORT[Number(next.slice(5)) - 1]}</span>
+					</button>
+				)}
+				<button className="xb -mr-2" aria-label={`Удалить покупку ${it.name}`} onClick={() => void remove()}>×</button>
+			</span>
 		</li>
 	)
 }
@@ -117,7 +121,7 @@ function NewItem({ month }: { month: string }) {
 					<input id="item-sum" className="tfield flex-1 text-right" inputMode="decimal" placeholder={st.base} value={sum}
 						onChange={(e) => setSum(amountChars(e.target.value))} onKeyDown={onEnter} />
 				</div>
-				<div className="flex gap-2" role="group" aria-label="Чья покупка">
+				<div className="tgroup max-sm:w-full" role="group" aria-label="Чья покупка">
 					{(['family', 'personal'] as const).map((s) => (
 						<button key={s} className="tb" aria-pressed={scope === s} onClick={() => { setScope(s); setCatId(null) }}>
 							{s === 'family' ? 'Семья' : 'Личное'}
@@ -131,7 +135,7 @@ function NewItem({ month }: { month: string }) {
 				))}
 				{cats.length === 0 && <span className="text-muted uppercase">Нет категорий</span>}
 			</div>
-			<button className="tb mt-3" onClick={() => void add()}>+ Добавить</button>
+			<button className="tb mt-3 max-sm:h-12 max-sm:w-full" onClick={() => void add()}>+ Добавить</button>
 		</div>
 	)
 }

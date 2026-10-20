@@ -2,7 +2,21 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTracker } from '../TrackerProvider'
-import { amountChars, fmt, parseAmount, termName, todayStr } from '@/lib/utils'
+import { useNarrow } from '../AsciiBar'
+import { amountChars, ddmm, fmt, parseAmount, termName, todayStr } from '@/lib/utils'
+
+/** На мобильном фокус в сумму сам не переводим: выскочит клавиатура и закроет форму */
+const isDesktop = () => window.matchMedia('(min-width: 640px)').matches
+
+/** Подпись даты на кнопке записи: сегодня, вчера или 12.10 */
+function dateLabel(date: string) {
+	const today = todayStr()
+	if (!date || date === today) return 'Сегодня'
+	const y = new Date()
+	y.setDate(y.getDate() - 1)
+	const yesterday = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`
+	return date === yesterday ? 'Вчера' : ddmm(date)
+}
 
 type Option = { id: string; name: string }
 
@@ -43,9 +57,10 @@ export function useEntryForm(defaultCurrency: string) {
 	const [error, setError] = useState('')
 	const amountRef = useRef<HTMLInputElement>(null)
 
-	useEffect(() => {
-		amountRef.current?.focus()
-	}, [])
+	const focusAmount = () => {
+		if (isDesktop()) amountRef.current?.focus()
+	}
+	useEffect(focusAmount, [])
 
 	const currency = st.currencies.includes(cur) ? cur : st.base
 	const isForeign = currency !== st.base
@@ -98,7 +113,7 @@ export function useEntryForm(defaultCurrency: string) {
 		setAmount('')
 		setNote('')
 		setError('')
-		amountRef.current?.focus()
+		focusAmount()
 	}
 
 	return {
@@ -117,6 +132,7 @@ export function useEntryForm(defaultCurrency: string) {
 		error,
 		setError,
 		amountRef,
+		focusAmount,
 		conv,
 		collect,
 		reset
@@ -171,6 +187,18 @@ export function EntryForm({
 }: FormProps) {
 	const { st, currency, isForeign, amountRef } = form
 	const ui = MODE_UI[mode]
+	const narrow = useNarrow()
+	const dateRef = useRef<HTMLInputElement>(null)
+	// Мобильный: поле даты скрыто, «Другая дата» открывает системный выбор; без showPicker — показываем поле
+	const [showDate, setShowDate] = useState(false)
+	const pickDate = () => {
+		try {
+			dateRef.current!.showPicker()
+		} catch {
+			setShowDate(true)
+		}
+	}
+	const submitLabel = `Записать · ${dateLabel(form.date)}`
 
 	const onEnter = (e: React.KeyboardEvent) => {
 		if (e.key === 'Enter') {
@@ -185,14 +213,17 @@ export function EntryForm({
 				<div className="flex min-w-0 flex-[1_1_280px] items-baseline gap-4">
 					<label
 						htmlFor="amount"
-						className="lbl shrink-0 text-xl font-bold text-ink sm:text-[28px]"
+						className="lbl shrink-0 font-bold text-ink max-sm:sr-only sm:text-[28px]"
 					>
 						{ui.amountLabel}
 					</label>
+					<span aria-hidden="true" className="shrink-0 text-[26px] leading-none font-bold sm:hidden">
+						{mode === 'expense' ? '−' : '+'}
+					</span>
 					<input
 						id="amount"
 						ref={amountRef}
-						className="tfield min-h-0 w-0 flex-1 border-b-2 border-ink pt-0 pb-1 text-[34px] leading-none font-bold sm:text-[44px]"
+						className="tfield min-h-0 w-0 flex-1 border-b-2 border-ink pt-0 pb-1 text-[40px] leading-none font-bold sm:text-[44px]"
 						inputMode="decimal"
 						autoComplete="off"
 						placeholder="0"
@@ -206,14 +237,14 @@ export function EntryForm({
 					/>
 				</div>
 				<div
-					className="flex gap-2"
+					className="tgroup max-sm:w-full"
 					role="group"
 					aria-label="Валюта"
 				>
 					{st.currencies.map((c) => (
 						<button
 							key={c}
-							className="tb tb-tight"
+							className="tb tb-tight mbare h-11 sm:h-auto"
 							aria-pressed={c === currency}
 							onClick={() => form.setCur(c)}
 						>
@@ -261,15 +292,15 @@ export function EntryForm({
 						onClick={() => {
 							onPick(o.id)
 							form.setError('')
-							amountRef.current?.focus()
+							form.focusAmount()
 						}}
 					>
 						{i < 9 && (
 							<span
 								aria-hidden="true"
-								className="shrink-0"
-							>
-								[{i + 1}]
+									className="shrink-0 max-sm:hidden touch:hidden"
+								>
+									[{i + 1}]
 							</span>
 						)}
 						<span className="min-w-0 [overflow-wrap:anywhere]">
@@ -285,21 +316,21 @@ export function EntryForm({
 				<div className="flex min-w-[240px] flex-[2_1_240px] items-center gap-3">
 					<label
 						htmlFor="note"
-						className="lbl"
+						className="lbl max-sm:sr-only"
 					>
 						Note
 					</label>
 					<input
 						id="note"
 						className="tfield flex-1"
-						placeholder={ui.notePlaceholder}
+						placeholder={narrow ? 'Комментарий' : ui.notePlaceholder}
 						autoComplete="off"
 						value={form.note}
 						onChange={(e) => form.setNote(e.target.value)}
 						onKeyDown={onEnter}
 					/>
 				</div>
-				<div className="flex flex-[1_1_200px] items-center gap-3">
+				<div className={`flex-[1_1_200px] items-center gap-3 ${showDate ? 'flex' : 'max-sm:sr-only sm:flex'}`}>
 					<label
 						htmlFor="date"
 						className="lbl"
@@ -308,6 +339,7 @@ export function EntryForm({
 					</label>
 					<input
 						id="date"
+						ref={dateRef}
 						className="tfield flex-1"
 						type="date"
 						value={form.date}
@@ -315,15 +347,28 @@ export function EntryForm({
 						onKeyDown={onEnter}
 					/>
 				</div>
-				{/* На мобильном кнопка закреплена внизу экрана, на десктопе стоит в строке */}
-				<div className="max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:z-10 max-sm:border-t max-sm:border-dashed max-sm:border-line max-sm:bg-panel max-sm:px-4 max-sm:pt-3 max-sm:pb-[calc(12px+env(safe-area-inset-bottom,0px))]">
+				<div className="hidden sm:block">
 					<button
-						className="tb w-full py-3 text-base font-bold sm:w-auto sm:px-6"
+						className="tb px-6 py-3 text-base font-bold"
 						onClick={onSubmit}
 					>
 						Enter ↵ Записать
 					</button>
 				</div>
+			</div>
+			{/* Мобильный: кнопка с датой прилипает над нижней панелью, пока видна форма */}
+			<div className="sticky bottom-[calc(52px+env(safe-area-inset-bottom,0px))] z-[5] -mx-4 mt-4 bg-panel px-4 pt-1 pb-3 sm:hidden">
+				<div className="flex justify-end">
+					<button className="min-h-11 text-xs text-muted uppercase underline underline-offset-4" onClick={pickDate}>
+						Другая дата
+					</button>
+				</div>
+				<button
+					className="tb h-[52px] w-full text-base font-bold"
+					onClick={onSubmit}
+				>
+					{submitLabel}
+				</button>
 			</div>
 			<p
 				className="mt-3 min-h-5 text-bad uppercase"

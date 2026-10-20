@@ -4,7 +4,7 @@ import { useSyncExternalStore } from 'react'
 
 const NARROW = '(max-width: 639px)'
 /** На узких экранах шкала короче, чтобы влезть в 360px без горизонтального скролла */
-const NARROW_WIDTH = 16
+const NARROW_WIDTH = 20
 
 const subscribe = (cb: () => void) => {
 	const mq = window.matchMedia(NARROW)
@@ -21,6 +21,8 @@ type Props = {
 	max: number
 	/** Ширина шкалы в символах на широких экранах */
 	width?: number
+	/** Ширина на экранах уже 640px */
+	narrowWidth?: number
 	/** limit: STABLE / WARNING / OVERLOAD; goal: COLLECTING / COMPLETE */
 	variant?: 'limit' | 'goal'
 	/** Только шкала, без процента и статуса */
@@ -33,12 +35,13 @@ export function AsciiBar({
 	value,
 	max,
 	width = 32,
+	narrowWidth = NARROW_WIDTH,
 	variant = 'limit',
 	bare = false,
 	label
 }: Props) {
 	const narrow = useNarrow()
-	const w = narrow ? Math.min(width, NARROW_WIDTH) : width
+	const w = narrow ? Math.min(width, narrowWidth) : width
 	const pct = max > 0 ? (value / max) * 100 : value > 0 ? Infinity : 0
 	const shown = Number.isFinite(pct) ? Math.round(pct) : 100
 	const filled = Math.round((Math.min(100, Math.max(0, pct)) / 100) * w)

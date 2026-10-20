@@ -18,11 +18,11 @@ import { fmt, todayStr } from '@/lib/utils'
 /** Рост расходов выше этого порога подсвечивается как предупреждение */
 const WARN_GROWTH = 0.1
 
-/** Прогнозы приблизительны: от сотни округляем до целых, мелкие суммы (EUR) оставляем с копейками */
-const money = (n: number) => fmt(Math.abs(n) >= 100 ? Math.round(n) : n)
-/** «−211 000 RSD», «+55 120 RSD», «0 RSD» */
-const signed = (n: number, base: string) =>
-	`${n < 0 ? '−' : n > 0 ? '+' : ''}${money(Math.abs(n))} ${base}`
+/** «−211 000 RSD», «+55 120 RSD», «0 RSD». Прогнозы приблизительны: от сотни — до целых, мелкие суммы (EUR) с копейками */
+const signed = (n: number, base: string) => {
+	const v = Math.abs(n) >= 100 ? Math.round(n) : Math.round(n * 100) / 100
+	return `${v < 0 ? '−' : v > 0 ? '+' : ''}${fmt(Math.abs(v))} ${base}`
+}
 
 /** Таблица сравнения под балансом месяца. Пустые значения — «—», строки не исчезают */
 export function Comparison() {
@@ -62,7 +62,7 @@ export function Comparison() {
 							<span className="text-muted">
 								{' '}
 								// среднее 3 мес{' '}
-								{f.averageExpense === null ? '—' : `−${money(f.averageExpense)}`}
+								{f.averageExpense === null ? '—' : signed(-f.averageExpense, '').trim()}
 								{f.vsAverage !== null && ` (${fmtChange(f.vsAverage)})`}
 							</span>
 						</>

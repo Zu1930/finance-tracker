@@ -8,9 +8,9 @@ import { Setup } from './Setup'
 import { Migration } from './Migration'
 import { useDailyRates } from './useDailyRates'
 import { ThemeToggle } from './settings/ThemeSwitch'
-import { catsIn, curMonthKey, fmt, monthTitle } from '@/lib/utils'
+import { catsIn, curMonthKey, fmt, minus, monthTitle } from '@/lib/utils'
 import type { Category, Expense, PlanItem, TrackerData } from '@/lib/types'
-import { monthExpense } from '@/lib/metrics'
+import { abbr, monthExpense } from '@/lib/metrics'
 import { planSpentByCat } from '@/lib/plan'
 
 const TABS = [
@@ -35,8 +35,9 @@ function MetricsBar({ data }: { data: TrackerData }) {
 	const now = new Date()
 	const day = now.getDate()
 	const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-	// Темп — по всей семье: семейные, мои личные и личные суммы партнёра
-	const pace = monthExpense(data, key) / day
+	// Темп — по всей семье: семейные, мои личные и личные суммы партнёра. Первые 3 дня — мало данных, как у прогноза
+	const pace = day > 3 ? monthExpense(data, key) / day : null
+	const paceText = pace === null ? '—' : fmt(Math.abs(pace) >= 100 ? Math.round(pace) : pace)
 	const val = (n: number) => (
 		<b className={n < 0 ? 'text-bad' : 'text-ink'}>
 			{fmt(n)} {st.base}
@@ -44,21 +45,35 @@ function MetricsBar({ data }: { data: TrackerData }) {
 	)
 
 	return (
-		<div className="flex flex-wrap justify-between gap-x-6 gap-y-1 border-y border-dashed border-line py-3 text-muted uppercase">
-			<span>
-				[ Остаток: семья {val(family)} // моё {val(mine)} ]
-			</span>
-			<span>
-				[ ТЕМП:{' '}
-				<b className="text-ink">
-					−{fmt(Math.abs(pace) >= 100 ? Math.round(pace) : pace)} {st.base}/ДЕНЬ
-				</b>{' '}
-				]
-			</span>
-			<span>
-				[ {monthTitle(key)} // ДЕНЬ {day}/{days} ]
-			</span>
-		</div>
+		<>
+			{/* Мобильный: два числа крупно, ниже одна строка — месяц, темп и валюта один раз */}
+			<div className="border-y border-dashed border-line py-3 uppercase sm:hidden">
+				<dl className="grid grid-cols-2 gap-x-4">
+					{[['Остаток · семья', family], ['Остаток · моё', mine]].map(([label, n]) => (
+						<div key={label as string} className="min-w-0">
+							<dt className="text-xs text-muted">{label}</dt>
+							<dd className={`text-xl font-bold whitespace-nowrap ${(n as number) < 0 ? 'text-bad' : ''}`}>{fmt(n as number)}</dd>
+						</div>
+					))}
+				</dl>
+				<p className="mt-2 text-xs text-muted">
+					{abbr(key)} {day}/{days} · Темп {paceText}{pace !== null && '/день'} · {st.base}
+				</p>
+			</div>
+			<div className="hidden flex-wrap justify-between gap-x-6 gap-y-1 border-y border-dashed border-line py-3 text-muted uppercase sm:flex">
+				<span>
+					[ Остаток: семья {val(family)} // моё {val(mine)} ]
+				</span>
+				<span>
+					[ ТЕМП:{' '}
+					<b className="text-ink">{pace === null ? '—' : `${minus(Math.abs(pace) >= 100 ? Math.round(pace) : pace)} ${st.base}/ДЕНЬ`}</b>{' '}
+					]
+				</span>
+				<span>
+					[ {monthTitle(key)} // ДЕНЬ {day}/{days} ]
+				</span>
+			</div>
+		</>
 	)
 }
 
@@ -102,42 +117,45 @@ export function Shell({ children }: { children: ReactNode }) {
 	else if (!data.settings) body = data.migration ? <Migration /> : <Setup />
 	else body = children
 
+	const tabs = (mobile: boolean) =>
+		TABS.map((t) => (
+			<Link
+				key={t.href}
+				href={t.href}
+				className={mobile ? 'mbare tbox h-[52px] justify-center border-0 px-0 text-xs not-first:border-l not-first:border-line aria-[current=page]:border-ink' : 'tb'}
+				aria-current={pathname === t.href ? 'page' : undefined}
+			>
+				{t.label}
+			</Link>
+		))
+
 	return (
-		<div className="mx-auto max-w-280">
-			<div className="px-4 pt-3 pb-6 sm:px-12 sm:pt-5 sm:pb-10">
-				<header className="flex flex-wrap items-center gap-x-6 gap-y-3 pb-4">
-					<div className="mr-auto flex items-center gap-4">
-						<div className="lbl">
-							SPEND.LOG // BASE:{' '}
-							<b className="text-ink">{data.settings?.base ?? '—'}</b>
+		// Мобильный: колонка на всю высоту экрана, нижняя панель вкладок прилипает к низу
+		<div className="mx-auto flex min-h-dvh max-w-280 flex-col sm:block sm:min-h-0">
+			<div className="flex-1 px-4 pt-5 pb-6 sm:px-12 sm:pb-10">
+				<header className="flex flex-nowrap items-center gap-x-6 gap-y-3 pb-4 sm:flex-wrap">
+					<div className="mr-auto min-w-0">
+						<b className="lowercase sm:hidden">&gt; spend.log</b>
+						<div className="lbl hidden sm:block">
+							SPEND.LOG // BASE: <b className="text-ink">{data.settings?.base ?? '—'}</b>
 						</div>
-						<ThemeToggle />
 					</div>
-					{/* На мобильном вкладки уходят на вторую строку, а ⚙ остаётся в первой */}
-					<nav
-						className="flex flex-wrap gap-2 max-sm:order-last max-sm:w-full"
-						aria-label="Разделы"
-					>
-						{TABS.map((t) => (
-							<Link
-								key={t.href}
-								href={t.href}
-								className="tb"
-								aria-current={pathname === t.href ? 'page' : undefined}
-							>
-								{t.label}
-							</Link>
-						))}
+					<nav className="hidden flex-wrap gap-2 sm:flex" aria-label="Разделы">
+						{tabs(false)}
 					</nav>
-					<Link
-						href="/settings"
-						className="tb text-muted"
-						aria-label="Настройки"
-						title="Настройки (Ctrl + ,)"
-						aria-current={pathname === '/settings' ? 'page' : undefined}
-					>
-						CFG
-					</Link>
+					{/* Тема и настройки — отдельно от вкладок, справа */}
+					<div className="flex shrink-0 items-center gap-2">
+						<ThemeToggle />
+						<Link
+							href="/settings"
+							className="tb h-10 text-muted sm:h-auto"
+							aria-label="Настройки"
+							title="Настройки (Ctrl + ,)"
+							aria-current={pathname === '/settings' ? 'page' : undefined}
+						>
+							CFG
+						</Link>
+					</div>
 				</header>
 				{status === 'ready' && data.settings ? (
 					<MetricsBar data={data} />
@@ -153,11 +171,18 @@ export function Shell({ children }: { children: ReactNode }) {
 				)}
 				<main className="pt-6">{body}</main>
 			</div>
+			<nav
+				className="sticky bottom-0 z-10 grid grid-cols-4 border-t border-line bg-panel pb-[env(safe-area-inset-bottom,0px)] sm:hidden"
+				aria-label="Разделы"
+			>
+				{tabs(true)}
+			</nav>
 			{toastState && (
 				<div
 					role="status"
 					key={toastState.id}
-					className="fixed bottom-[calc(16px+env(safe-area-inset-bottom,0px))] left-1/2 z-20 max-sm:bottom-[calc(88px+env(safe-area-inset-bottom,0px))] flex w-max max-w-[calc(100%-32px)] -translate-x-1/2 flex-wrap items-center gap-x-6 gap-y-1 bg-ink px-4 py-2 text-panel uppercase"
+					// Мобильный: над нижней панелью (52px + 12px + safe-area), на всю ширину минус поля
+					className="fixed inset-x-4 bottom-[calc(64px+env(safe-area-inset-bottom,0px))] z-20 flex flex-wrap items-center gap-x-6 gap-y-1 bg-ink px-4 py-2 text-panel uppercase sm:inset-x-auto sm:bottom-[calc(16px+env(safe-area-inset-bottom,0px))] sm:left-1/2 sm:w-max sm:max-w-[calc(100%-32px)] sm:-translate-x-1/2"
 				>
 					<span>&gt; {toastState.msg}</span>
 					{toastState.actionLabel && (

@@ -107,7 +107,7 @@ export function EntryPage() {
 			form.setCur(st.base)
 			form.setAmount(String(itemLeft(it, linked[it.id] ?? 0)))
 		}
-		form.amountRef.current?.focus()
+		form.focusAmount()
 	}
 
 	const recorded = (what: string, undo: () => void) => {
@@ -134,7 +134,8 @@ export function EntryPage() {
 		}
 	}
 
-	const seg = 'tb min-h-11 px-4 not-first:-ml-px aria-[pressed=false]:text-muted'
+	// Мобильный: две равные ячейки 48px на всю ширину
+	const seg = 'tb h-12 px-4 not-first:-ml-px aria-[pressed=false]:text-muted sm:h-auto sm:min-h-11'
 
 	return (
 		<>
@@ -143,7 +144,7 @@ export function EntryPage() {
 					{mode === 'income' ? 'Новый доход' : scope === 'personal' ? 'Новый личный расход' : 'Новый семейный расход'}
 				</h1>
 				<div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-					<div className="flex" role="group" aria-label="Тип записи">
+					<div className="grid grid-cols-2 max-sm:w-full sm:flex" role="group" aria-label="Тип записи">
 						{(['expense', 'income'] as const).map((m) => (
 							<button key={m} className={seg} aria-pressed={mode === m} onClick={() => go(m, scope, true)}>
 								{m === 'expense' ? '− Расход' : '+ Доход'}
@@ -151,7 +152,7 @@ export function EntryPage() {
 						))}
 					</div>
 					{mode === 'expense' && (
-						<div className="flex" role="group" aria-label="Чей расход">
+						<div className="grid grid-cols-2 max-sm:w-full sm:flex" role="group" aria-label="Чей расход">
 							{(['family', 'personal'] as const).map((sc) => (
 								<button key={sc} className={seg} aria-pressed={scope === sc} onClick={() => go('expense', sc, true)}>
 									{sc === 'family' ? 'Семья' : 'Личное'}
@@ -159,7 +160,7 @@ export function EntryPage() {
 							))}
 						</div>
 					)}
-					<p className="text-muted2 uppercase sm:ml-auto">Alt + {mode === 'expense' ? '← → ↑ ↓' : '← →'}</p>
+					<p className="hidden text-muted2 uppercase sm:ml-auto sm:block touch:hidden">Alt + {mode === 'expense' ? '← → ↑ ↓' : '← →'}</p>
 				</div>
 				<EntryForm
 					mode={mode}

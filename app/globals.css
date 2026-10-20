@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Устройства без мыши: подсказки горячих клавиш там не нужны — touch:hidden */
+@custom-variant touch (@media (hover: none));
+
 /* Сырые токены. Тёмная тема по умолчанию; светлая — по системе или через data-theme="light" на <html> */
 :root{
   --page:#0B0B0B;--panel:#141414;--ink:#E8E8E8;--muted:#9A9A9A;
@@ -56,7 +59,9 @@
 @layer base {
   :root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
   html{scroll-padding-top:env(safe-area-inset-top,0px)}
-  body{@apply bg-panel text-ink font-mono text-sm leading-normal tabular-nums min-h-full antialiased}
+  body{@apply bg-panel text-ink font-mono text-sm leading-[1.55] sm:leading-normal tabular-nums min-h-full antialiased}
+  /* iOS Safari зумит страницу при фокусе в поле мельче 16px. Утилиты (крупная сумма) перекрывают базовый слой */
+  @media (width < 40rem) { input, select, textarea { font-size: 16px; } }
   :focus-visible{@apply outline-1 outline-offset-2 outline-ink}
   button:not(:disabled){@apply cursor-pointer}
 }
@@ -84,3 +89,7 @@
 /* > МЕТКА */
 @utility lbl { @apply uppercase text-muted; &::before { content: "> "; content: "> " / ""; } }
 @utility dash { @apply border-0 border-t border-dashed border-line; }
+/* Группа переключателей: на мобильном — равные ячейки на всю ширину, на десктопе — в строку */
+@utility tgroup { @apply grid auto-cols-fr grid-flow-col gap-2 sm:flex sm:flex-wrap; }
+/* Кнопка без квадратных скобок на мобильном (ячейки нижней панели, валюты, категории) */
+@utility mbare { @media (width < 40rem) { &::before, &::after { content: none; } } }

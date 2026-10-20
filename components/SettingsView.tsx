@@ -45,7 +45,7 @@ export function SettingsView() {
 				<Notifications />
 			</Section>
 			<Section title="Данные">
-				<div className="flex flex-wrap gap-2">
+				<div className="tgroup">
 					<ExportButton />
 				</div>
 			</Section>

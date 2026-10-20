@@ -76,7 +76,8 @@ export function Notifications() {
 			{state === 'denied' && <p className="text-muted">Запрещены в настройках браузера</p>}
 			{(state === 'on' || state === 'off') && (
 				<div className="flex flex-wrap items-center gap-2">
-					<span className="mr-2">{state === 'on' ? 'Включены на этом устройстве' : 'Выключены'}</span>
+					<span className="mr-2 max-sm:w-full">{state === 'on' ? 'Включены на этом устройстве' : 'Выключены'}</span>
+					<div className="tgroup max-sm:w-full">
 					{state === 'off' && <button className="tb" disabled={busy || !!offline} onClick={() => void enable()}>Включить</button>}
 					{state === 'on' && (
 						<>
@@ -84,6 +85,7 @@ export function Notifications() {
 							<button className="tb" disabled={busy || !!offline} onClick={() => void disable()}>Выключить</button>
 						</>
 					)}
+					</div>
 				</div>
 			)}
 			<p className="mt-2 text-muted2">// Обновления приложения, план на следующий месяц за 2 дня до конца, по воскресеньям — внести траты</p>

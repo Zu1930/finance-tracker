@@ -33,7 +33,7 @@ export function HoldLogout() {
 
 	return (
 		<button
-			className="tb relative overflow-hidden select-none [-webkit-touch-callout:none]"
+			className="tb relative overflow-hidden select-none [-webkit-touch-callout:none] max-sm:h-12 max-sm:w-full"
 			aria-label="Выйти, удерживайте"
 			onPointerDown={(e) => {
 				if (e.button === 0) start()
