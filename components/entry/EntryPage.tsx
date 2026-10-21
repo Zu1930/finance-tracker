@@ -173,7 +173,7 @@ export function EntryPage() {
 	return (
 		<>
 						<DueBlock />
-			{mode === 'expense' && <QuickEntry familyCats={familyCats} personalCats={personalCats} onEdit={editParsed} />}
+			{mode === 'expense' && !data.mySettings.hideQuickEntry && <QuickEntry familyCats={familyCats} personalCats={personalCats} onEdit={editParsed} />}
 			<div ref={rootRef}>
 				<h1 className="sr-only">
 					{mode === 'income' ? 'Новый доход' : scope === 'personal' ? 'Новый личный расход' : 'Новый семейный расход'}

@@ -187,12 +187,13 @@ export function QuickEntry({ familyCats, personalCats, onEdit }: Props) {
 		<section className="mb-6" aria-label="Голосовой ввод">
 			<div className="flex items-center gap-3">
 				<button
-					className={`tb mbare h-[52px] w-[52px] shrink-0 sm:h-auto sm:min-h-11 sm:w-auto ${listening ? 'text-warn' : ''}`}
-					aria-pressed={listening}
+					// Без aria-pressed: tbox инвертирует нажатую кнопку, а запись должна быть красной
+					className={`tb mbare h-[52px] w-[52px] shrink-0 sm:h-auto sm:min-h-11 sm:w-auto ${listening ? 'border-bad text-bad hover:bg-transparent' : ''}`}
 					aria-label={listening ? 'Остановить запись' : 'Голосовой ввод'}
 					onClick={toggleMic}
 				>
-					{listening ? '■' : '●'}
+					{/* REC: точка мигает, пока идёт запись; при «уменьшить движение» — просто красная */}
+					<span aria-hidden="true" className={listening ? 'motion-safe:animate-[rec_1.2s_ease-in-out_infinite]' : ''}>●</span>
 					<span className="max-sm:hidden">&nbsp;{listening ? 'Слушаю…' : 'Голос'}</span>
 				</button>
 				<span aria-hidden="true" className="text-muted">&gt;</span>

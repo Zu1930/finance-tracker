@@ -93,3 +93,6 @@
 @utility tgroup { @apply grid auto-cols-fr grid-flow-col gap-2 sm:flex sm:flex-wrap; }
 /* Кнопка без квадратных скобок на мобильном (ячейки нижней панели, валюты, категории) */
 @utility mbare { @media (width < 40rem) { &::before, &::after { content: none; } } }
+
+/* Индикатор записи голосового ввода: мягкое мигание точки */
+@keyframes rec { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }

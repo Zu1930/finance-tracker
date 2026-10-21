@@ -9,6 +9,23 @@ type Item = { id: string; name: string; createdAt: string; lastUsedAt: string | 
 const when = (iso: string | null) =>
 	iso ? new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'
 
+/** Показывать ли строку голосового ввода на странице ввода — мне, на всех моих устройствах */
+export function QuickEntrySwitch() {
+	const { data, setMySettings } = useTracker()
+	const hidden = !!data.mySettings.hideQuickEntry
+	const set = (hide: boolean) =>
+		setMySettings(({ version: _, hideQuickEntry: __, ...rest }) => ({ ...rest, ...(hide ? { hideQuickEntry: true } : {}) }))
+	return (
+		<div className="uppercase">
+			<div className="tgroup" role="group" aria-label="Голосовой ввод">
+				<button className="tb" aria-pressed={!hidden} onClick={() => set(false)}>Показывать</button>
+				<button className="tb" aria-pressed={hidden} onClick={() => set(true)}>Скрыть</button>
+			</div>
+			<p className="mt-2 text-muted2">// Строка «● Голос» над переключателем расход / доход. Siri работает и при скрытой строке</p>
+		</div>
+	)
+}
+
 /** Токены для Siri / Быстрых команд: создать (показывается один раз), список, отозвать */
 export function QuickTokens() {
 	const { toast, offline } = useTracker()

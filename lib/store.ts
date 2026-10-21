@@ -228,7 +228,8 @@ export const isSettingsData = (v: unknown): v is Omit<Settings, "version"> =>
   isObj(v) && typeof v.base === "string" && Array.isArray(v.currencies) && isObj(v.rates) && isCategories(v.familyCategories);
 const isCode = (v: unknown) => typeof v === "string" && /^[A-Z]{3,5}$/.test(v);
 export const isUserSettingsData = (v: unknown): v is Omit<UserSettings, "version"> =>
-  isObj(v) && isCategories(v.personalCategories) && (v.preferredCurrency === undefined || isCode(v.preferredCurrency));
+  isObj(v) && isCategories(v.personalCategories) && (v.preferredCurrency === undefined || isCode(v.preferredCurrency)) &&
+  (v.hideQuickEntry === undefined || typeof v.hideQuickEntry === "boolean");
 
 /** Ответ API на конфликт версий: клиент перечитывает данные и просит проверить и повторить */
 export const CONFLICT_MESSAGE = "Настройки изменил другой пользователь, проверьте и повторите.";

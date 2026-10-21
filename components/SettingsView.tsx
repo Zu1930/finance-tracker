@@ -10,7 +10,7 @@ import { MyCurrency } from './settings/MyCurrency'
 import { ThemeSwitch } from './settings/ThemeSwitch'
 import { HoldLogout } from './settings/HoldLogout'
 import { Notifications } from './settings/Notifications'
-import { QuickTokens } from './settings/QuickTokens'
+import { QuickEntrySwitch, QuickTokens } from './settings/QuickTokens'
 
 /** Настройки: валюты, основная валюта, оформление, данные, аккаунт */
 export function SettingsView() {
@@ -44,6 +44,9 @@ export function SettingsView() {
 			</Section>
 			<Section title="Уведомления">
 				<Notifications />
+			</Section>
+			<Section title="Голосовой ввод">
+				<QuickEntrySwitch />
 			</Section>
 			<Section title="Быстрые команды">
 				<QuickTokens />

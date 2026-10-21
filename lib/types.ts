@@ -37,6 +37,8 @@ export type UserSettings = {
   personalCategories: Category[];
   /** Валюта по умолчанию для моих личных трат и доходов; нет — общая base */
   preferredCurrency?: string;
+  /** Скрыть строку голосового ввода на странице ввода */
+  hideQuickEntry?: boolean;
   version: number;
 };
 
