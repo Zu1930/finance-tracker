@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser, unauthorized } from "@/lib/auth";
-import { createSignupCode, isAdmin, listSignupCodes, revokeSignupCode } from "@/lib/codes";
+import { betaUsers, createSignupCode, isAdmin, listSignupCodes, revokeSignupCode } from "@/lib/codes";
 import { getDb } from "@/lib/data";
 import { fail } from "@/lib/records";
 
@@ -14,11 +14,12 @@ async function admin(req: Request) {
   return { ctx };
 }
 
-/** Коды закрытой регистрации: список с использованием (сами коды не хранятся) */
+/** Коды закрытой регистрации: список с использованием (сами коды не хранятся); пользователи и их устройства с push */
 export async function GET(req: Request) {
   const a = await admin(req);
   if (a.error) return a.error;
-  return NextResponse.json({ items: await listSignupCodes(getDb()) }, { headers: { "Cache-Control": "no-store" } });
+  const [items, users] = await Promise.all([listSignupCodes(getDb()), betaUsers(getDb())]);
+  return NextResponse.json({ items, users }, { headers: { "Cache-Control": "no-store" } });
 }
 
 /** Новый код: { uses: 1…100, days: 1…90 }. Код в ответе — единственный раз, когда его видно */

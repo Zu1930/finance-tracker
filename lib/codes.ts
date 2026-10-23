@@ -3,7 +3,7 @@
  * В базе только SHA-256 кода: сам код показывается один раз при создании
  */
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, count, desc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 import * as s from "./data/postgres/schema.ts";
 import type { Db } from "./data/postgres/repos.ts";
 
@@ -40,6 +40,13 @@ const view = (r: typeof s.signupCodes.$inferSelect): SignupCodeView => ({
 });
 
 export const listSignupCodes = async (db: Db) => (await db.select().from(s.signupCodes).orderBy(desc(s.signupCodes.createdAt))).map(view);
+
+/** Для админа: зарегистрированные (удалённые — без email — не в счёт) и сколько устройств с push у каждого */
+export const betaUsers = async (db: Db) =>
+  (await db.select({ id: s.users.id, name: s.users.name, verified: s.users.emailVerified, createdAt: s.users.createdAt, devices: count(s.pushSubscriptions.endpoint) })
+    .from(s.users).leftJoin(s.pushSubscriptions, eq(s.pushSubscriptions.userId, s.users.id))
+    .where(isNotNull(s.users.email)).groupBy(s.users.id).orderBy(desc(s.users.createdAt)))
+    .map((u) => ({ ...u, createdAt: u.createdAt.toISOString() }));
 
 export const revokeSignupCode = async (db: Db, id: string) =>
   (await db.update(s.signupCodes).set({ revokedAt: new Date() }).where(and(eq(s.signupCodes.id, id), isNull(s.signupCodes.revokedAt))).returning({ id: s.signupCodes.id })).length > 0;
