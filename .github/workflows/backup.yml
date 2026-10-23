@@ -1,0 +1,84 @@
+# Ежедневный зашифрованный бэкап Postgres в приватный репозиторий бэкапов. Восстановление — docs/restore.md
+#
+# Секреты репозитория (Settings → Secrets and variables → Actions):
+#   DATABASE_URL_UNPOOLED  — прямая (не pooled) строка подключения к production-базе Neon
+#   BACKUP_AGE_RECIPIENT   — публичный ключ age (age1…); приватный хранится только офлайн
+#   BACKUP_DEPLOY_KEY      — приватный SSH-ключ deploy key репозитория бэкапов с правом записи
+# Переменная (Variables):
+#   BACKUP_REPO            — git@github.com:<owner>/<repo>.git, приватный, с первым коммитом
+#
+# Незашифрованный дамп нигде не сохраняется: pg_dump | gzip | age пишет на диск только шифротекст.
+# Сторонних actions нет — только shell, чтобы чужой код не видел секреты.
+name: Backup
+
+on:
+  schedule:
+    # 01:15 UTC — 02:15 зимой и 03:15 летом по Белграду
+    - cron: "15 1 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: pg_dump версии сервера и age
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_UNPOOLED }}
+        run: |
+          set -euo pipefail
+          test -n "$DATABASE_URL" || { echo "Нет секрета DATABASE_URL_UNPOOLED"; exit 1; }
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common age >/dev/null
+          # Репозиторий PGDG: pg_dump той же основной версии, что и сервер
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y >/dev/null
+          sudo apt-get install -y -qq postgresql-client-16 >/dev/null
+          major=$(/usr/lib/postgresql/16/bin/psql "$DATABASE_URL" -tAc "show server_version_num" | cut -c1-2)
+          sudo apt-get install -y -qq "postgresql-client-$major" >/dev/null
+          echo "PG_BIN=/usr/lib/postgresql/$major/bin" >> "$GITHUB_ENV"
+          echo "Сервер Postgres $major"
+
+      - name: Дамп → gzip → age
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          RECIPIENT: ${{ secrets.BACKUP_AGE_RECIPIENT }}
+        run: |
+          set -euo pipefail
+          umask 077
+          case "$RECIPIENT" in age1*) ;; *) echo "BACKUP_AGE_RECIPIENT — не публичный ключ age"; exit 1 ;; esac
+          file="spendlog-$(date -u +%Y-%m-%dT%H%MZ).sql.gz.age"
+          "$PG_BIN/pg_dump" --no-owner --no-privileges --format=plain "$DATABASE_URL" | gzip -9 | age -r "$RECIPIENT" -o "$RUNNER_TEMP/$file"
+          size=$(stat -c%s "$RUNNER_TEMP/$file")
+          test "$size" -gt 1024 || { echo "Подозрительно маленький бэкап: $size байт"; exit 1; }
+          head -c 21 "$RUNNER_TEMP/$file" | grep -q "age-encryption.org/v1"
+          echo "FILE=$file" >> "$GITHUB_ENV"
+          echo "Бэкап $file: $size байт"
+
+      - name: Коммит в репозиторий бэкапов, хранятся последние 30
+        env:
+          DEPLOY_KEY: ${{ secrets.BACKUP_DEPLOY_KEY }}
+          REPO: ${{ vars.BACKUP_REPO }}
+        run: |
+          set -euo pipefail
+          test -n "$REPO" || { echo "Нет переменной BACKUP_REPO"; exit 1; }
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/backup_key
+          chmod 600 ~/.ssh/backup_key
+          # Ключ хоста GitHub закреплён (https://api.github.com/meta), без доверия первому подключению
+          echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" > ~/.ssh/known_hosts
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/backup_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+          git clone -q --depth 1 "$REPO" backups
+          cd backups
+          mkdir -p daily
+          mv "$RUNNER_TEMP/$FILE" daily/
+          ls -1 daily/*.sql.gz.age | sort -r | tail -n +31 | xargs -r git rm -q --
+          git add daily
+          git -c user.name="spendlog-backup" -c user.email="spendlog-backup@users.noreply.github.com" commit -qm "backup $FILE"
+          git push -q origin HEAD
+          echo "В репозитории бэкапов: $(ls daily | wc -l) файлов"

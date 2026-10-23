@@ -1,14 +1,14 @@
 import "server-only";
 import {
   addEntry, casHashes, casUpdate, casWrite, getRedis, readLegacyDocs, readStore, readTrash, removeEntry, restoreEntry, writeStoreAtomic,
-} from "./client";
-import { DEFAULT_HOUSEHOLD, type Change, type Ctx, type Done, type Repos, type StoredSubscription, type Updated } from "../types";
-import { planLinkError } from "../../plan";
-import { payLinkError, paymentOf, shiftMonth } from "../../recurring";
-import { K, entryKey, parseMonthKey, planItemsKey, recordKey, recurringKey } from "../../store";
-import { listUsers } from "../../users";
-import type { TokenRecord } from "../../quick-entry/api";
-import type { Expense, Goal, Income, PlanItem, RecurringPayment, Scope, Settings, UserSettings } from "../../types";
+} from "./client.ts";
+import { DEFAULT_HOUSEHOLD, type Change, type Ctx, type Done, type Repos, type StoredSubscription, type Updated } from "../types.ts";
+import { planLinkError } from "../../plan.ts";
+import { payLinkError, paymentOf, shiftMonth } from "../../recurring.ts";
+import { K, entryKey, parseMonthKey, planItemsKey, recordKey, recurringKey } from "../../store.ts";
+import { listUsers } from "../../users.ts";
+import type { TokenRecord } from "../../quick-entry/api.ts";
+import type { Expense, Goal, Income, PlanItem, RecurringPayment, Scope, Settings, UserSettings } from "../../types.ts";
 
 /** Пользователь контекста; в Redis один бюджет — любой другой household отклоняется, а не читается как default */
 function me(ctx: Ctx): string {
@@ -178,11 +178,13 @@ export function redisRepos(): Repos {
     recons: {
       async add(ctx, recon, seen, changed, count) {
         const userId = me(ctx);
+        // Сверка меняет только семейные и свои личные счета
+        if (changed.some((a) => a.scope === "personal" && a.ownerId !== userId)) throw new Error("Сверка не может менять чужой личный счёт");
         const next = new Map(changed.map((a) => [a.id, a]));
         // Версии всех счетов проверяются, изменённые записываются: снимок не должен смешать старые и новые остатки
         const ops = seen.map((a) => {
           const doc = next.get(a.id);
-          const key = recordKey("accounts", a.scope, a.ownerId ?? userId);
+          const key = recordKey("accounts", a.scope, doc ? userId : a.ownerId ?? userId);
           return doc ? { key, id: a.id, expected: a.version, op: "set" as const, doc } : { key, id: a.id, expected: a.version, op: "check" as const };
         });
         return casHashes(ops, { key: K.recons, score: Date.parse(recon.at), member: recon, count });

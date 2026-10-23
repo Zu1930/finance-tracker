@@ -7,11 +7,16 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "node --test lib/*.test.mjs lib/quick-entry/*.test.mjs"
+    "test": "node --conditions=react-server --test lib/*.test.mjs lib/quick-entry/*.test.mjs lib/data/*.test.mjs lib/data/postgres/*.test.mjs",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/db-migrate.ts",
+    "db:migrate-redis": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --conditions=react-server scripts/migrate-redis-to-pg.ts",
+    "db:verify": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --conditions=react-server scripts/verify-migration.ts"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^1.2.0",
+    "@neondatabase/serverless": "1.2.0",
     "@upstash/redis": "1.39.0",
+    "drizzle-orm": "0.45.4",
     "next": "16.3.6",
     "react": "19.3.0",
     "react-dom": "19.3.0",
@@ -20,11 +25,13 @@
     "web-push": "3.6.7"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "22.20.4",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@types/web-push": "3.6.4",
+    "drizzle-kit": "0.31.11",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3"
   }
