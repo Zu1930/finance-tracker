@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useTracker } from "./TrackerProvider";
 import { AsciiBar } from "./AsciiBar";
+import { Hint } from "./onboarding/Hint";
 import { Accounts } from "./savings/Accounts";
 import { Goals } from "./savings/Goals";
 import { abbr, average } from "@/lib/metrics";
@@ -68,6 +69,7 @@ export function SavingsView() {
         )}
       </section>
 
+      <Hint id="savings" className="mt-6" />
       <Accounts openFamily={openFirst} />
       <Goals allocated={alloc} free={free} missing={goalsAlloc.missing} empty={empty} />
       <Dynamics current={all} />

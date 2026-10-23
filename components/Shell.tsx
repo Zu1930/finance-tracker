@@ -12,6 +12,8 @@ import type { Category, Expense, PlanItem, TrackerData } from '@/lib/types'
 import { abbr, monthExpense } from '@/lib/metrics'
 import { planSpentByCat } from '@/lib/plan'
 import { dueRows } from './recurring/DueBlock'
+import { needsWelcome } from '@/lib/onboarding'
+import { HintsProvider } from './onboarding/Hint'
 
 const TABS = [
 	{ href: '/', label: 'Ввод' },
@@ -95,7 +97,7 @@ function MetricsBar({ data }: { data: TrackerData }) {
 
 export function Shell({ children }: { children: ReactNode }) {
 	const pathname = usePathname()
-	const { status, data, reload, toastState, dismissToast, offline, queued } = useTracker()
+	const { status, data, reload, toastState, dismissToast, offline, queued, patchOnboarding } = useTracker()
 	useDailyRates()
 	const router = useRouter()
 	// Семья распущена, разбор ещё не пройден — экран «Общий бюджет больше не активен» (его можно пропустить)
@@ -103,15 +105,29 @@ export function Shell({ children }: { children: ReactNode }) {
 	useEffect(() => {
 		if (review && !data.readonly) router.replace(`/review/${review}`)
 	}, [review, data.readonly, router])
+	// Открыто с экрана «Домой» (standalone) — пункт «Приложение на телефоне» в карточке «Настройка» выполнен
+	const pwaSeen = data.onboarding?.pwaSeen
+	useEffect(() => {
+		if (status !== 'ready' || pwaSeen !== false) return
+		const standalone = matchMedia('(display-mode: standalone)').matches || !!(navigator as Navigator & { standalone?: boolean }).standalone
+		if (standalone) patchOnboarding({ pwa: true })
+	}, [status, pwaSeen, patchOnboarding])
 
-	// Ctrl + , (⌘ + , на macOS) — настройки. В полях ввода не перехватываем
+	// Опрос-настройка ещё не пройден — на /welcome
+	const welcome = needsWelcome(data, pathname)
+	useEffect(() => {
+		if (status === 'ready' && welcome) window.location.replace('/welcome')
+	}, [status, welcome])
+
+	// Ctrl + , (⌘ + , на macOS) — настройки, ? — помощь. В полях ввода не перехватываем
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
-			if (!(e.ctrlKey || e.metaKey) || e.key !== ',') return
+			const help = e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey
+			if (!help && (!(e.ctrlKey || e.metaKey) || e.key !== ',')) return
 			const el = e.target as HTMLElement | null
 			if (el?.closest('input, textarea, select, [contenteditable="true"]')) return
 			e.preventDefault()
-			router.push('/settings')
+			router.push(help ? '/help' : '/settings')
 		}
 		document.addEventListener('keydown', onKey)
 		return () => document.removeEventListener('keydown', onKey)
@@ -134,7 +150,8 @@ export function Shell({ children }: { children: ReactNode }) {
 				</button>
 			</div>
 		)
-	else if (!data.settings) body = <Setup />
+	else if (welcome) body = <p className="py-16 text-center text-muted">&gt; НАСТРОЙКА…</p>
+	else if (!data.settings && !pathname.startsWith('/help')) body = <Setup />
 	else body = children
 
 	// Архив: свои вкладки внутри /archive/<id>, только чтение
@@ -174,6 +191,15 @@ export function Shell({ children }: { children: ReactNode }) {
 					</nav>
 					{/* Тема и настройки — отдельно от вкладок, справа */}
 					<div className="flex shrink-0 items-center gap-2">
+						<Link
+							href="/help"
+							className="tb h-10 text-muted sm:h-auto"
+							aria-label="Помощь"
+							title="Помощь (?)"
+							aria-current={pathname.startsWith('/help') ? 'page' : undefined}
+						>
+							?
+						</Link>
 						<ThemeToggle />
 						<Link
 							href="/settings"
@@ -198,7 +224,7 @@ export function Shell({ children }: { children: ReactNode }) {
 						{queued > 0 && ` // в очереди: ${queued}`}
 					</p>
 				)}
-				<main className="pt-6">{body}</main>
+				<main className="pt-6"><HintsProvider>{body}</HintsProvider></main>
 			</div>
 			<nav
 				className="sticky bottom-0 z-10 grid grid-cols-4 border-t border-line bg-panel sm:hidden"

@@ -1,8 +1,9 @@
 /**
  * Смоук-тесты по HTTP на настоящей сборке (npm run build) и пустой базе:
- *   1. регистрация с кодом → подтверждение email → онбординг → первая трата;
- *   2. приглашение → регистрация по ссылке → принятие → семейная трата видна обоим;
- *   3. выход → разбор (забрать счёт) → архив только для чтения.
+ *   1. регистрация с кодом → подтверждение email → опрос /welcome целиком → первая трата → карточка «Настройка» 3/6;
+ *   2. приглашение → регистрация по ссылке → принятие → короткий опрос → семейная трата видна обоим;
+ *   3. выход → разбор (забрать счёт) → архив только для чтения;
+ *   4. «Настрою сам»: solo с категориями по умолчанию, статус skipped.
  * Запуск: DATABASE_URL=<пустая база с миграциями> [NEON_WSPROXY=…] npm run smoke
  * Сервер стартует сам на SMOKE_PORT (3125) без RESEND_API_KEY: письма он печатает в консоль, ссылки берутся оттуда
  */
@@ -84,23 +85,37 @@ async function signUpAndVerify(go, u, extra) {
 }
 
 try {
-  // 1. Регистрация с кодом → онбординг → первая трата
+  // 1. Регистрация с кодом → опрос целиком → первая трата → карточка 3/6
   const a = client("10.50.0.1");
   assert.equal((await a("/api/auth/sign-up/email", { method: "POST", body: { ...A } })).json?.code, "SIGNUP_CODE_INVALID", "без кода — отказ");
   const { code } = await createSignupCode(db, null, 1, 1);
   await signUpAndVerify(a, A, { signupCode: code });
   let data = await a("/api/data");
   ok(data, "данные после подтверждения");
+  assert.equal(data.json.onboarding.status, "pending", "впереди опрос /welcome");
+  assert.equal(data.json.settings, null);
+  ok(await a("/welcome"), "/welcome открывается");
+  const welcome = await a("/api/onboarding");
+  assert.equal(welcome.json.invited, false);
+  for (const [step, action] of [["intro", "view"], ["currency", "next"], ["who", "next"], ["cats", "next"], ["payments", "skip"], ["accounts", "finish"]]) {
+    assert.equal((await a("/api/onboarding/events", { method: "POST", body: { step, action } })).status, 204, "событие шага");
+  }
+  const done = await a("/api/onboarding/complete", { method: "POST", body: { currency: "RSD", who: "solo", cats: [{ key: "food", name: "Продукты", scope: "personal" }, { key: "cafe", name: "Кафе", scope: "personal" }, { key: "transport", name: "Транспорт", scope: "personal" }], accounts: [] } });
+  ok(done, "опрос целиком");
+  assert.equal((await a("/api/onboarding/complete", { method: "POST", body: { currency: "RSD" } })).status, 409, "повтор — 409");
+  data = await a("/api/data");
+  assert.equal(data.json.onboarding.status, "done");
   assert.equal(data.json.solo, true, "solo-бюджет");
-  assert.equal(data.json.settings, null, "экран :: НАСТРОЙКА");
-  ok(await a("/api/settings", { method: "PUT", body: { version: 0, data: { base: "RSD", currencies: ["RSD"], rates: {}, schemaVersion: 3, familyCategories: [] } } }), "настройка");
-  ok(await a("/api/my-settings", { method: "PUT", body: { version: 0, data: { personalCategories: [{ id: "food", name: "Еда", limit: 30000 }] } } }), "стартовые категории");
+  const food = data.json.mySettings.personalCategories.find((c) => c.name === "Продукты");
+  assert.equal(food.limit, 40000);
   const first = expense("personal", "первая трата");
-  first.entry.catId = "food";
+  first.entry.catId = food.id;
   ok(await a("/api/entries", { method: "POST", body: first }), "первая трата");
   data = await a("/api/data");
   assert.ok(Object.values(data.json.myExpenses).flat().some((e) => e.note === "первая трата"));
-  console.log("✓ 1. регистрация с кодом → онбординг → первая трата");
+  const card = (await a("/api/onboarding")).json.checklist;
+  assert.equal(card.filter((i) => i.done || i.hidden).length, 3, `карточка 3/6: ${JSON.stringify(card)}`);
+  console.log("✓ 1. регистрация с кодом → опрос → первая трата → карточка 3/6");
 
   // 2. Приглашение → регистрация по ссылке → принятие → семейная трата
   const inv = await a("/api/family/invites", { method: "POST" });
@@ -113,6 +128,13 @@ try {
   assert.equal(preview.json.inviter, A.name);
   ok(await b(`/api/join/${inv.json.code}`, { method: "POST", body: {} }), "принять");
   assert.equal((await b(`/api/join/${inv.json.code}`, { method: "POST", body: {} })).status, 404, "повторно — недействительно");
+  const bWelcome = await b("/api/onboarding");
+  assert.equal(bWelcome.json.status, "pending");
+  assert.equal(bWelcome.json.invited, true, "приглашённый — короткий опрос");
+  ok(await b("/api/onboarding/complete", { method: "POST", body: { cats: [{ key: "clothes", name: "Одежда", scope: "personal" }], payments: [{ key: "phone", amount: 1990, day: 28 }] } }), "короткий опрос");
+  const bData = (await b("/api/data")).json;
+  assert.deepEqual(bData.mySettings.personalCategories.map((c) => c.name), ["Одежда", "Прочее"]);
+  assert.deepEqual(bData.recurring.mine.map((p) => p.name), ["Телефон"], "платёж — личный");
   ok(await b("/api/settings", { method: "PUT", body: { version: (await b("/api/data")).json.settings.version, data: { base: "RSD", currencies: ["RSD"], rates: {}, schemaVersion: 3, familyCategories: [{ id: "home", name: "Дом", limit: 1000 }] } } }), "семейная категория");
   const fam = expense("family", "семейная трата");
   fam.entry.catId = "home";
@@ -145,6 +167,17 @@ try {
   assert.ok((await b("/api/data")).json.savings.accounts.mine.some((x) => x.name === "Общий"), "забранный счёт — у Бориса");
   assert.ok(!JSON.stringify((await a("/api/data")).json).includes("семейная трата"), "в solo Анны семейного нет");
   console.log("✓ 3. выход → разбор → архив");
+
+  // 4. «Настрою сам»
+  const c = client("10.50.0.3");
+  const C = { email: `smoke-c-${tag}@example.test`, password: "смоук-пароль-3", name: "Вера" };
+  await signUpAndVerify(c, C, { signupCode: (await createSignupCode(db, null, 1, 1)).code });
+  ok(await c("/api/onboarding/skip", { method: "POST", body: { currency: "EUR" } }), "настрою сам");
+  const cData = (await c("/api/data")).json;
+  assert.equal(cData.onboarding.status, "skipped");
+  assert.equal(cData.settings.base, "EUR");
+  assert.equal(cData.mySettings.personalCategories.length, 8, "категории по умолчанию");
+  console.log("✓ 4. «Настрою сам» → solo по умолчанию");
   console.log("Смоук пройден");
 } catch (e) {
   console.error(e);

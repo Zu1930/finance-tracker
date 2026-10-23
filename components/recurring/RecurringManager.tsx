@@ -8,6 +8,13 @@ import { aliveIn, amountChars, curMonthKey, fmt, limitIn, MONTHS, numIn, parseAm
 
 const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
 
+/** Ссылка /limits#categories или #recurring (карточка «Настройка»): раскрыть свёрнутый раздел и показать его */
+export const openOnHash = (el: HTMLDetailsElement | null) => {
+	if (!el || window.location.hash !== `#${el.id}`) return
+	el.open = true
+	el.scrollIntoView({ block: 'start' })
+}
+
 /** :: РЕГУЛЯРНЫЕ ПЛАТЕЖИ — управление: список с правкой, пауза, удаление, форма создания */
 export function RecurringManager() {
 	const { data, api, scopeTag } = useTracker()
@@ -23,7 +30,7 @@ export function RecurringManager() {
 	const remove = (p: RecurringPayment) => void api(`/api/recurring/${p.id}?scope=${p.scope}&today=${todayStr()}`, 'DELETE')
 
 	return (
-		<details className="group mt-2 border-t border-dashed border-line">
+		<details id="recurring" ref={openOnHash} className="group mt-2 border-t border-dashed border-line">
 			<summary className="sec flex min-h-11 cursor-pointer list-none items-center gap-2 py-3 [&::-webkit-details-marker]:hidden">
 				↻ Регулярные платежи<span aria-hidden="true" className="group-open:hidden">[+]</span><span aria-hidden="true" className="hidden group-open:inline">[−]</span>
 			</summary>

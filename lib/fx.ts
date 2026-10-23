@@ -8,3 +8,18 @@ export function invertRates(apiRates: Record<string, number>, symbols: string[])
   }
   return out;
 }
+
+/**
+ * Сколько RSD стоит 1 единица каждой валюты (ExchangeRate-API, кеш 6 часов); сервис недоступен — запасная таблица.
+ * Для пресетов опроса: суммы в RSD пересчитываются в валюту бюджета
+ */
+export async function rsdPerUnit(fallback: Record<string, number>): Promise<Record<string, number>> {
+  try {
+    const res = await fetch("https://open.er-api.com/v6/latest/RSD", { next: { revalidate: 6 * 60 * 60 }, signal: AbortSignal.timeout(3000) } as RequestInit);
+    const json = (await res.json()) as { result?: string; rates?: Record<string, number> };
+    if (!res.ok || json.result !== "success" || !json.rates) return fallback;
+    return { ...fallback, ...invertRates(json.rates, Object.keys(fallback)) };
+  } catch {
+    return fallback;
+  }
+}

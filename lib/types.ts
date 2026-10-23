@@ -249,8 +249,25 @@ export type User = { id: string; name: string };
 export type MonthKey = string;
 
 /** Ответ GET /api/data: только то, что видно текущему пользователю */
+/** Знакомство с приложением (lib/onboarding.ts): опрос, карточка «Настройка», подсказки */
+export type OnboardingState = {
+  status: "pending" | "done" | "skipped";
+  completedAt: string | null;
+  /** Карточка скрыта крестиком или уже показала «Готово» */
+  dismissed: boolean;
+  /** Пункты карточки «не нужно» */
+  hidden: string[];
+  hintsSeen: string[];
+  pwaSeen: boolean;
+  /** Токенов Siri — для пункта «Голос и Siri» */
+  tokens: number;
+  /** В семье не владельцем (пришёл по приглашению): короткий опрос, всё своё — личное */
+  invited: boolean;
+};
+
 export type TrackerData = {
   me: User;
+  onboarding?: OnboardingState;
   /** Админ закрытой беты (ADMIN_USER_IDS): в настройках раздел кодов регистрации */
   admin?: true;
   /** Бюджет одного человека: партнёра нет, весь интерфейс без семейных частей (isSolo в TrackerProvider) */

@@ -49,7 +49,7 @@ export async function deleteAccount(db: Db, userId: string, password: string): P
       await tx.delete(s.userSettings).where(eq(s.userSettings.householdId, id));
       await tx.delete(s.households).where(eq(s.households.id, id));
     }
-    for (const t of [s.authSessions, s.authAccounts, s.apiTokens, s.pushSubscriptions] as const) await tx.delete(t).where(eq(t.userId, userId));
+    for (const t of [s.authSessions, s.authAccounts, s.apiTokens, s.pushSubscriptions, s.userOnboarding, s.onboardingEvents] as const) await tx.delete(t).where(eq(t.userId, userId));
     if (u?.email) await tx.delete(s.authVerifications).where(eq(s.authVerifications.identifier, u.email));
     await tx.update(s.householdInvites).set({ revokedAt: new Date() }).where(and(eq(s.householdInvites.createdBy, userId), isNull(s.householdInvites.usedAt), isNull(s.householdInvites.revokedAt)));
     await tx.update(s.users).set({ name: DELETED_NAME, email: null, emailVerified: false, image: null, updatedAt: new Date() }).where(eq(s.users.id, userId));

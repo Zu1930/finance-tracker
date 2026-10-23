@@ -15,6 +15,8 @@ import { monthOccurrences } from '@/lib/metrics'
 import { matchPayment } from '@/lib/recurring'
 import { DueBlock } from '../recurring/DueBlock'
 import { QuickEntry } from './QuickEntry'
+import { WithSetupCard } from '../onboarding/SetupCard'
+import { Hint } from '../onboarding/Hint'
 import type { ParsedEntry } from '@/lib/quick-entry/parse'
 
 /**
@@ -159,13 +161,31 @@ export function EntryPage() {
 		}
 	}
 
+	// Подсказка про сложение сумм — после первой своей траты
+	const hasMine = Object.values(data.myExpenses).some((l) => l.length > 0) || Object.values(data.familyExpenses).some((l) => l.some((e) => e.authorId === data.me.id))
+
+	// /?focus=amount — из опроса и карточки «Настройка»: фокус в сумму и на телефоне
+	const focus = params.get('focus') === 'amount'
+	useEffect(() => {
+		if (!focus) return
+		form.amountRef.current?.focus()
+		window.history.replaceState(null, '', window.location.pathname)
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [focus])
+
 	// Мобильный: две равные ячейки 48px на всю ширину
 	const seg = 'tb h-12 px-4 not-first:-ml-px aria-[pressed=false]:text-muted sm:h-auto sm:min-h-11'
 
 	return (
-		<>
+		<WithSetupCard>
 						<DueBlock />
-			{mode === 'expense' && !data.mySettings.hideQuickEntry && <QuickEntry familyCats={isSolo ? [] : familyCats} personalCats={personalCats} onEdit={editParsed} />}
+			{mode === 'expense' && !data.mySettings.hideQuickEntry && (
+				<>
+					<QuickEntry familyCats={isSolo ? [] : familyCats} personalCats={personalCats} onEdit={editParsed} />
+					<Hint id="voice" className="mb-4" />
+				</>
+			)}
+			{!isSolo && <Hint id="family" className="mb-4" />}
 			<div ref={rootRef}>
 				<h1 className="sr-only">
 					{mode === 'income' ? 'Новый доход' : isSolo ? 'Новый расход' : scope === 'personal' ? 'Новый личный расход' : 'Новый семейный расход'}
@@ -224,12 +244,13 @@ export function EntryPage() {
 				/>
 			</div>
 
+			{mode === 'expense' && hasMine && <Hint id="entry" className="mt-4" />}
 			{mode === 'expense' ? (
 				<ExpenseSummary scope={scope} cats={cats} sel={cats.find((c) => c.id === catId)} />
 			) : (
 				<IncomeBalance />
 			)}
 			<RecentLogs />
-		</>
+		</WithSetupCard>
 	)
 }

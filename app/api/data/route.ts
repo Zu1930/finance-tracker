@@ -5,6 +5,9 @@ import { getDb, getRepos } from "@/lib/data";
 import { pendingReview } from "@/lib/archive";
 import { householdNames } from "@/lib/family";
 import { isAdmin } from "@/lib/codes";
+import { onboardingState } from "@/lib/onboarding-server";
+import { eq } from "drizzle-orm";
+import * as s from "@/lib/data/postgres/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +23,10 @@ export async function GET(req: Request) {
     view.names = await householdNames(getDb(), ctx.householdId);
     const review = await pendingReview(getDb(), ctx.userId);
     if (review) view.pendingReview = review;
+    view.onboarding = await onboardingState(getDb(), ctx);
+    // Семья, где второй ещё не принял приглашение: интерфейс семейный, а не solo
+    const [h] = await getDb().select({ kind: s.households.kind }).from(s.households).where(eq(s.households.id, ctx.householdId));
+    if (h?.kind === "family") delete view.solo;
     return NextResponse.json(view, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     console.error(e);

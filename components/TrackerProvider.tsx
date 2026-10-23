@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { Expense, Settings, TrackerData, UserSettings } from "@/lib/types";
 import { applyQueue, readQueue, withEntry, writeQueue, type Entry, type Kind, type Queued } from "@/lib/offline";
 import { curMonthKey } from "@/lib/utils";
+import { applyPatch, type OnboardingPatch } from "@/lib/onboarding";
 
 export type { Kind } from "@/lib/offline";
 
@@ -37,6 +38,8 @@ type Ctx = {
   /** Курсы сливаются на сервере без проверки версии: курс — «последний известный» */
   /** base — к какой базе посчитаны курсы: если её успели сменить, курсы отбрасываются */
   updateRates: (rates: Record<string, number>, ratesUpdatedAt?: string, base?: string) => void;
+  /** Знакомство: скрыть карточку или пункт, подсказка увидена, открыто с экрана «Домой». Сразу на экране, запрос — без ожидания */
+  patchOnboarding: (p: OnboardingPatch) => void;
   month: string;
   setMonth: (m: string) => void;
   toast: (msg: string, actionLabel?: string, action?: () => void) => void;
@@ -57,6 +60,7 @@ function readonlyGuard(data: TrackerData, toast: Ctx["toast"], ctx: Ctx): Ctx {
     setMySettings: no,
     api: async () => (no(), null),
     updateRates: () => {},
+    patchOnboarding: () => {},
   };
 }
 
@@ -389,6 +393,12 @@ export function TrackerProvider({ children, source = "/api/data" }: { children: 
         }
         return true;
       });
+    },
+    patchOnboarding: (p) => {
+      const o = ref.current.onboarding;
+      if (!o) return;
+      commit({ ...ref.current, onboarding: applyPatch(o, p) });
+      void send("/api/onboarding", "PATCH", p).catch(() => {});
     },
   }), [data, status, offline, queued, reload, month, toast, toastState, dismissToast, commit, track, saveVersioned, blocked, enqueue, saveQueue, setOffline]);
 

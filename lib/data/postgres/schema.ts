@@ -515,3 +515,29 @@ export const appMeta = pgTable("app_meta", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
 });
+
+/** Знакомство с приложением: опрос /welcome, карточка «Настройка» на вводе, одноразовые подсказки. Нет строки — как done */
+export const userOnboarding = pgTable("user_onboarding", {
+  userId: text("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  status: text("status", { enum: ["pending", "done", "skipped"] }).notNull().default("pending"),
+  completedAt: moment("completed_at"),
+  checklistDismissedAt: moment("checklist_dismissed_at"),
+  checklistHiddenItems: text("checklist_hidden_items").array().notNull().default(sql`'{}'::text[]`),
+  hintsSeen: text("hints_seen").array().notNull().default(sql`'{}'::text[]`),
+  /** Первый запуск в режиме standalone (приложение с экрана «Домой») */
+  pwaSeenAt: moment("pwa_seen_at"),
+  version: integer("version").notNull().default(0),
+});
+
+/** Шаги опроса для анализа беты: пишутся без ожидания ответа клиентом */
+export const onboardingEvents = pgTable(
+  "onboarding_events",
+  {
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    step: text("step").notNull(),
+    action: text("action", { enum: ["view", "next", "skip", "back", "finish"] }).notNull(),
+    at: moment("at").notNull().defaultNow(),
+  },
+  (t) => [index("onboarding_events_user").on(t.userId)],
+);

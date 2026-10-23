@@ -13,6 +13,7 @@ import { APIError, createAuthMiddleware } from "better-auth/api";
 import { captcha } from "better-auth/plugins";
 import { consumeSignupCode, findInvite, registrationMode } from "./codes.ts";
 import { mails, sendMail } from "./mail.ts";
+import { startOnboarding } from "./onboarding-server.ts";
 import { getDb, getRepos } from "./data/index.ts";
 import * as s from "./data/postgres/schema.ts";
 import type { Db } from "./data/postgres/repos.ts";
@@ -58,6 +59,8 @@ export function createAuth(db: Db) {
             // Один ответ на любой неверный код: без подсказок, существует ли он
             if (!ok) throw APIError.from("BAD_REQUEST", { code: "SIGNUP_CODE_INVALID", message: "Регистрация недоступна" });
           },
+          // Новый пользователь — опрос /welcome впереди (у прежних строки done ставит миграция 0004)
+          after: async (user) => void (await startOnboarding(db, user.id)),
         },
       },
     },

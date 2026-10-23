@@ -11,7 +11,8 @@ import { PlanItems } from "./plan/PlanItems";
 import { PlanLimits, PlanSummary } from "./plan/MonthPlan";
 import { usePlan, withOverride } from "./plan/usePlan";
 import { RecurringSection } from "./recurring/RecurringSection";
-import { RecurringManager } from "./recurring/RecurringManager";
+import { RecurringManager, openOnHash } from "./recurring/RecurringManager";
+import { Hint } from "./onboarding/Hint";
 import { byAuthor, fmtPct, monthIncome, monthOccurrences, savingsRate } from "@/lib/metrics";
 import { MAX_AHEAD, isMonth, itemStatus, linkedByItem, monthLimit, monthsAhead, planSpentByCat } from "@/lib/plan";
 import type { Category, Expense, PlanItem } from "@/lib/types";
@@ -49,6 +50,7 @@ export function LimitsView() {
       </div>
       {ahead > 0 ? (
         <>
+          <Hint id="plan" className="mt-6" />
           <PlanSummary month={month} />
           <RecurringSection month={month} future />
           <PlanItems month={month} withStatus={false} />
@@ -117,7 +119,9 @@ function MonthLimits() {
       </section>
 
       {month === cur && !data.readonly && <PlanSummary month={month} />}
+      {!data.readonly && data.recurring.family.length + data.recurring.mine.length > 0 && <Hint id="recurring" className="mt-6" />}
       <RecurringSection month={month} future={false} />
+      {!data.readonly && <Hint id="limits" className="mt-6" />}
       {items.length > 0 && <PlanItems month={month} withStatus form={false} />}
 
       {!isSolo && (
@@ -140,7 +144,7 @@ function MonthLimits() {
       </section>
 
       {!data.readonly && (<>
-      <details className="group mt-4 border-t border-dashed border-line">
+      <details id="categories" ref={openOnHash} className="group mt-4 border-t border-dashed border-line">
         <summary className="sec flex min-h-11 cursor-pointer list-none items-center gap-2 py-3 [&::-webkit-details-marker]:hidden">
           Категории и лимиты<span aria-hidden="true" className="group-open:hidden">[+]</span><span aria-hidden="true" className="hidden group-open:inline">[−]</span>
         </summary>
