@@ -1,14 +1,7 @@
 import "server-only";
 import webpush, { type PushSubscription } from "web-push";
-import { getRedis } from "./redis";
+import { getRepos, type Ctx } from "./data";
 import { updateMessage, type PushMessage } from "./push";
-
-/** Подписки всех устройств: поле — endpoint, значение — { userId, subscription } */
-const SUBS = "ft:push";
-/** Версия, о которой уже сообщили пушем */
-const VERSION = "ft:push:version";
-
-type Stored = { userId: string; subscription: PushSubscription; at: string };
 
 /** VAPID из окружения; без ключей пуши выключены, приложение работает как раньше */
 export function vapid(): { publicKey: string } | null {
@@ -23,18 +16,10 @@ export const isSubscription = (v: unknown): v is PushSubscription => {
   return !!s && typeof s.endpoint === "string" && /^https:\/\//.test(s.endpoint) && typeof s.keys?.p256dh === "string" && typeof s.keys?.auth === "string";
 };
 
-export const saveSubscription = (userId: string, subscription: PushSubscription) =>
-  getRedis().hset(SUBS, { [subscription.endpoint]: { userId, subscription, at: new Date().toISOString() } satisfies Stored });
-
+export const saveSubscription = (ctx: Ctx, subscription: PushSubscription) => getRepos().push.save(ctx, subscription);
 /** Удалить подписку можно только свою */
-export async function removeSubscription(userId: string, endpoint: string): Promise<void> {
-  const s = await getRedis().hget<Stored>(SUBS, endpoint);
-  if (s?.userId === userId) await getRedis().hdel(SUBS, endpoint);
-}
-
-export async function hasSubscription(userId: string, endpoint: string): Promise<boolean> {
-  return (await getRedis().hget<Stored>(SUBS, endpoint))?.userId === userId;
-}
+export const removeSubscription = (ctx: Ctx, endpoint: string) => getRepos().push.remove(ctx, endpoint);
+export const hasSubscription = (ctx: Ctx, endpoint: string) => getRepos().push.has(ctx, endpoint);
 
 /**
  * Отправить пользователям (или всем). Подписка, которую push-сервис больше не знает (404/410), удаляется.
@@ -42,8 +27,7 @@ export async function hasSubscription(userId: string, endpoint: string): Promise
  */
 export async function sendPush(msg: PushMessage, userIds?: string[]): Promise<number> {
   if (!vapid()) return 0;
-  const all = Object.values((await getRedis().hgetall<Record<string, Stored>>(SUBS)) ?? {});
-  const targets = all.filter((s) => !userIds || userIds.includes(s.userId));
+  const targets = await getRepos().system.subscriptions(userIds);
   let ok = 0;
   await Promise.all(
     targets.map(async (s) => {
@@ -52,7 +36,7 @@ export async function sendPush(msg: PushMessage, userIds?: string[]): Promise<nu
         ok++;
       } catch (e) {
         const code = (e as { statusCode?: number }).statusCode;
-        if (code === 404 || code === 410) await getRedis().hdel(SUBS, s.subscription.endpoint);
+        if (code === 404 || code === 410) await getRepos().system.dropSubscription(s.subscription.endpoint);
         else console.error("push", code, (e as Error).message);
       }
     }),
@@ -62,12 +46,12 @@ export async function sendPush(msg: PushMessage, userIds?: string[]): Promise<nu
 
 /**
  * Пуш «приложение обновилось»: при первом старте сервера с новым коммитом (только production на Vercel).
- * SET … GET атомарно меняет версию и возвращает прежнюю — из нескольких инстансов пуш уйдёт один раз
+ * Версия меняется атомарно с возвратом прежней — из нескольких инстансов пуш уйдёт один раз
  */
 export async function notifyUpdate(): Promise<void> {
   const sha = process.env.VERCEL_GIT_COMMIT_SHA;
   if (process.env.VERCEL_ENV !== "production" || !sha || !vapid()) return;
-  const previous = await getRedis().set<string>(VERSION, sha, { get: true });
+  const previous = await getRepos().system.swapAppVersion(sha);
   const msg = updateMessage(previous, sha, process.env.VERCEL_GIT_COMMIT_MESSAGE);
   if (msg) await sendPush(msg);
 }

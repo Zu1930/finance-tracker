@@ -1,8 +1,7 @@
 import { requireUser, unauthorized } from "@/lib/session";
-import { fail, updateRecord } from "@/lib/records";
+import { ctxOf, getRepos } from "@/lib/data";
+import { fail, updated } from "@/lib/records";
 import { isMonth } from "@/lib/recurring";
-import { recurringKey } from "@/lib/store";
-import type { RecurringPayment } from "@/lib/types";
 
 /** Пропустить месяц: в плане и к оплате его не будет. { scope, month } */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -13,8 +12,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!isMonth(b?.month)) return fail(400, "Неверный месяц.");
   const month = b.month;
   try {
-    return await updateRecord<RecurringPayment>(recurringKey(b.scope === "personal" ? "personal" : "family", user.id), id, undefined,
-      (p) => ({ ...p, skips: [...p.skips.filter((m) => m !== month), month].sort() }),
+    return updated(await getRepos().recurring.update(ctxOf(user), b.scope === "personal" ? "personal" : "family", id, undefined,
+      (p) => ({ ...p, skips: [...p.skips.filter((m) => m !== month), month].sort() })),
       "Платёж изменил другой пользователь, проверьте и повторите.");
   } catch (e) {
     console.error(e);

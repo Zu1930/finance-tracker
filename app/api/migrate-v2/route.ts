@@ -1,20 +1,19 @@
 import { NextResponse } from "next/server";
 import { requireUser, unauthorized } from "@/lib/session";
-import { getRedis, readLegacyDocs, writeStoreAtomic } from "@/lib/redis";
+import { ctxOf, getRepos } from "@/lib/data";
 import { migrateLegacy, needsMigration } from "@/lib/migrate";
-import { K } from "@/lib/store";
 import { listUsers, migrationOwner } from "@/lib/users";
-import type { Settings } from "@/lib/types";
 
 /** Проверки, общие для скачивания копии и запуска: только MIGRATION_OWNER и только до миграции */
 async function guard(req: Request) {
   const user = await requireUser(req);
   if (!user) return { error: unauthorized() };
   if (user.id !== migrationOwner().id) return { error: NextResponse.json({ error: "Перенос запускает другой пользователь." }, { status: 403 }) };
-  const current = await getRedis().get<Settings>(K.settings);
-  const legacy = await readLegacyDocs();
+  const ctx = ctxOf(user);
+  const current = await getRepos().settings.get(ctx);
+  const legacy = await getRepos().legacy.docs(ctx);
   if (!needsMigration(current, legacy)) return { error: NextResponse.json({ error: "Переносить нечего: данные уже в семейном формате." }, { status: 409 }) };
-  return { legacy };
+  return { legacy, ctx };
 }
 
 /** Резервная копия старых данных перед переносом — скачивается автоматически */
@@ -30,7 +29,7 @@ export async function POST(req: Request) {
   if (g.error) return g.error;
   try {
     const raw = migrateLegacy(g.legacy, migrationOwner().id, listUsers().map((u) => u.id));
-    await writeStoreAtomic(raw);
+    await getRepos().store.replace(g.ctx, raw);
     return NextResponse.json({ ok: true, months: Object.keys(raw.hashes).length });
   } catch (e) {
     console.error(e);

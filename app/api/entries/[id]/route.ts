@@ -1,14 +1,12 @@
 import { NextResponse } from "next/server";
 import { requireUser, unauthorized } from "@/lib/session";
-import { removeEntry } from "@/lib/redis";
-import { setPlanLink } from "@/lib/records";
-import { MONTH, entryKey } from "@/lib/store";
-import type { Expense } from "@/lib/types";
+import { ctxOf, getRepos } from "@/lib/data";
+import { MONTH } from "@/lib/store";
 
 /**
  * Удаление: ?kind=expense|income&scope=family|personal&month=YYYY-MM.
- * Личная трата ищется только в хеше текущего пользователя — чужую удалить нельзя.
- * Семейные траты и доходы может удалить любой из двоих: бюджет общий
+ * Личная трата ищется только у текущего пользователя — чужую удалить нельзя.
+ * Семейные траты и доходы может удалить любой из двоих: бюджет общий. Связь с пунктом плана снимается
  */
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser(req);
@@ -20,10 +18,11 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     return NextResponse.json({ error: "Неверные параметры." }, { status: 400 });
   }
   try {
-    const entry = await removeEntry(entryKey(kind, scope === "personal" ? "personal" : "family", user.id, month), id);
+    const ctx = ctxOf(user);
+    const entry = kind === "income"
+      ? await getRepos().incomes.remove(ctx, month, id)
+      : await getRepos().expenses.remove(ctx, scope === "personal" ? "personal" : "family", month, id);
     if (!entry) return NextResponse.json({ error: "Запись не найдена." }, { status: 404 });
-    // Трата по плану: убрать её id из пункта (пункта может уже не быть)
-    if ((entry as Expense).planItemId) await setPlanLink(entry as Expense, false);
     return NextResponse.json({ entry });
   } catch (e) {
     console.error(e);

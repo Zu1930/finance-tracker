@@ -1,11 +1,10 @@
 import { requireUser, unauthorized } from "@/lib/session";
-import { fail, isVersion, updateRecord } from "@/lib/records";
+import { ctxOf, getRepos } from "@/lib/data";
+import { fail, isVersion, updated } from "@/lib/records";
 import { goalDeleteError } from "@/lib/savings";
-import { recordKey } from "@/lib/store";
-import type { Goal } from "@/lib/types";
 
 const CONFLICT = "Копилку изменил другой пользователь, проверьте и повторите.";
-const keyOf = (scope: unknown, userId: string) => recordKey("goals", scope === "personal" ? "personal" : "family", userId);
+const scopeOf = (v: unknown) => (v === "personal" ? "personal" : "family");
 
 /** Имя и цель: { scope, version, name?, target? }. Права как у счетов */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -19,7 +18,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return fail(400, "Неверные данные.");
   }
   try {
-    return await updateRecord<Goal>(keyOf(b.scope, user.id), id, b.version, (g) => ({ ...g, ...(name && { name }), ...(typeof target === "number" && { target }) }), CONFLICT);
+    return updated(await getRepos().goals.update(ctxOf(user), scopeOf(b.scope), id, b.version, (g) => ({ ...g, ...(name && { name }), ...(typeof target === "number" && { target }) })), CONFLICT);
   } catch (e) {
     console.error(e);
     return fail(500, "Не удалось сохранить.");
@@ -32,10 +31,10 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (!user) return unauthorized();
   const { id } = await params;
   try {
-    return await updateRecord<Goal>(keyOf(new URL(req.url).searchParams.get("scope"), user.id), id, undefined, (g) => {
+    return updated(await getRepos().goals.update(ctxOf(user), scopeOf(new URL(req.url).searchParams.get("scope")), id, undefined, (g) => {
       const err = goalDeleteError(g);
       return err ? { status: 409, error: err } : null;
-    }, CONFLICT);
+    }), CONFLICT);
   } catch (e) {
     console.error(e);
     return fail(500, "Не удалось удалить.");

@@ -1,9 +1,8 @@
 import { requireUser, unauthorized } from "@/lib/session";
-import { getRedis } from "@/lib/redis";
-import { fail, isVersion, updateRecord } from "@/lib/records";
+import { ctxOf, getRepos } from "@/lib/data";
+import { fail, isVersion, updated } from "@/lib/records";
 import { endMonthOnDelete, isMonth, withAmount } from "@/lib/recurring";
-import { K, entryKey, recurringKey } from "@/lib/store";
-import type { Expense, RecurringPayment, Settings, UserSettings } from "@/lib/types";
+import type { RecurringPayment } from "@/lib/types";
 import { todayStr } from "@/lib/utils";
 
 const CONFLICT = "Платёж изменил другой пользователь, проверьте и повторите.";
@@ -32,13 +31,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     (amount !== undefined && !(typeof amount === "number" && Number.isFinite(amount) && amount > 0 && isMonth(b.fromMonth)))
   ) return fail(400, "Неверные данные.");
   try {
+    const ctx = ctxOf(user);
     if (b.categoryId !== undefined) {
-      const cats = scope === "personal"
-        ? (await getRedis().get<UserSettings>(K.userSettings(user.id)))?.personalCategories
-        : (await getRedis().get<Settings>(K.settings))?.familyCategories;
-      if (!cats?.some((c) => c.id === b.categoryId && !c.archived)) return fail(400, "Нет такой категории.");
+      const cats = await getRepos().categories.list(ctx);
+      if (!(scope === "personal" ? cats.mine : cats.family).some((c) => c.id === b.categoryId && !c.archived)) return fail(400, "Нет такой категории.");
     }
-    return await updateRecord<RecurringPayment>(recurringKey(scope, user.id), id, b.version, (p) => {
+    return updated(await getRepos().recurring.update(ctx, scope, id, b.version, (p) => {
       let next: RecurringPayment = {
         ...p,
         ...(name && { name }),
@@ -50,7 +48,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       };
       if (typeof amount === "number") next = withAmount(next, amount, b.fromMonth as string);
       return next;
-    }, CONFLICT);
+    }), CONFLICT);
   } catch (e) {
     console.error(e);
     return fail(500, "Не удалось сохранить.");
@@ -69,8 +67,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const scope = q.get("scope") === "personal" ? "personal" : "family";
   const today = DAY.test(q.get("today") ?? "") ? q.get("today")! : todayStr();
   try {
-    const expenses = Object.values((await getRedis().hgetall<Record<string, Expense>>(entryKey("expense", scope, user.id, today.slice(0, 7)))) ?? {});
-    return await updateRecord<RecurringPayment>(recurringKey(scope, user.id), id, undefined, (p) => ({ ...p, endMonth: endMonthOnDelete(p, today, expenses) }), CONFLICT);
+    const ctx = ctxOf(user);
+    const expenses = await getRepos().expenses.inMonth(ctx, scope, today.slice(0, 7));
+    return updated(await getRepos().recurring.update(ctx, scope, id, undefined, (p) => ({ ...p, endMonth: endMonthOnDelete(p, today, expenses) })), CONFLICT);
   } catch (e) {
     console.error(e);
     return fail(500, "Не удалось удалить.");

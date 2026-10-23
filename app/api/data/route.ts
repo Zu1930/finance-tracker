@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireUser, unauthorized } from "@/lib/session";
-import { readStore } from "@/lib/redis";
 import { buildView } from "@/lib/store";
+import { ctxOf, getRepos } from "@/lib/data";
 import { migrationOwner, partnerOf } from "@/lib/users";
-import { getRedis } from "@/lib/redis";
 import { needsGoalsMigration } from "@/lib/migrate";
 
 export const dynamic = "force-dynamic";
@@ -14,10 +13,11 @@ export async function GET(req: Request) {
   if (!me) return unauthorized();
   try {
     const partner = partnerOf(me.id);
-    const raw = await readStore([me.id, partner.id]);
+    const ctx = ctxOf(me);
+    const raw = await getRepos().store.snapshot(ctx);
     const view = buildView(raw, me, partner);
     // До переноса новых настроек нет, а старые лежат в ft:doc:settings — показать экран миграции вместо первой настройки
-    if (!raw.settings && (await getRedis().exists("ft:doc:settings"))) view.migration = { pending: true, owner: migrationOwner() };
+    if (!raw.settings && (await getRepos().legacy.hasDocs(ctx))) view.migration = { pending: true, owner: migrationOwner() };
     // Старые копилки ещё не перенесены в «Сбережения»
     if (needsGoalsMigration(raw.settings, raw.goals)) view.savings.migration = { goals: raw.goals!.items.length, owner: migrationOwner() };
     return NextResponse.json(view, { headers: { "Cache-Control": "no-store" } });

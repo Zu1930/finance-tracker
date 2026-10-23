@@ -1,10 +1,8 @@
 import { requireUser, unauthorized } from "@/lib/session";
-import { getRedis } from "@/lib/redis";
-import { fail } from "@/lib/records";
+import { ctxOf, getRepos } from "@/lib/data";
+import { fail, written } from "@/lib/records";
 import { activeIn, amountIn, isMonth } from "@/lib/recurring";
-import { recordRecurringPayment } from "@/lib/recurring-server";
-import { K, recurringKey } from "@/lib/store";
-import type { Expense, RecurringPayment, Settings } from "@/lib/types";
+import type { Expense } from "@/lib/types";
 import { todayStr } from "@/lib/utils";
 
 const DAY = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
@@ -21,7 +19,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!isMonth(b?.month)) return fail(400, "Неверный месяц.");
   const scope = b.scope === "personal" ? "personal" : "family";
   try {
-    const [p, settings] = await Promise.all([getRedis().hget<RecurringPayment>(recurringKey(scope, user.id), id), getRedis().get<Settings>(K.settings)]);
+    const ctx = ctxOf(user);
+    const [p, settings] = await Promise.all([getRepos().recurring.get(ctx, scope, id), getRepos().settings.get(ctx)]);
     if (!p) return fail(403, "Платёж не найден.");
     if (!activeIn(p, b.month)) return fail(400, "В этом месяце платежа нет.");
     const amount = p.approx ? b.amount : (b.amount ?? amountIn(p, b.month));
@@ -33,7 +32,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       id: crypto.randomUUID(), amount, currency: p.currency, rate, base: Math.round(amount * rate * 100) / 100,
       catId: p.categoryId, note: p.name, date, ts: Date.now(), scope, authorId: user.id, recurringId: p.id, recurringMonth: b.month,
     };
-    return await recordRecurringPayment(user.id, e);
+    return written(await getRepos().expenses.addForRecurring(ctx, e), e, "Платёж изменил другой пользователь, проверьте и повторите.");
   } catch (e) {
     console.error(e);
     return fail(500, "Не удалось сохранить.");

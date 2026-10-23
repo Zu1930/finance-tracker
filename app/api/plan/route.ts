@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser, unauthorized } from "@/lib/session";
-import { readStore } from "@/lib/redis";
+import { ctxOf, getRepos } from "@/lib/data";
 import { fail } from "@/lib/records";
 import { average, recurringPlanPart } from "@/lib/metrics";
 import { isMonth, planResponse } from "@/lib/plan";
@@ -18,7 +18,7 @@ export async function GET(req: Request) {
   if (!isMonth(month)) return fail(400, "Неверный месяц.");
   try {
     const partner = partnerOf(me.id);
-    const view = buildView(await readStore([me.id, partner.id]), me, partner, month);
+    const view = buildView(await getRepos().store.snapshot(ctxOf(me)), me, partner, month);
     const today = todayStr();
     const plan = planResponse(view, month, average(view, today)?.income ?? null);
     const rec = recurringPlanPart(view, month, today);

@@ -1,8 +1,7 @@
 import { requireUser, unauthorized } from "@/lib/session";
-import { fail, updateRecord } from "@/lib/records";
+import { ctxOf, getRepos } from "@/lib/data";
+import { fail, updated } from "@/lib/records";
 import { applyGoalOp } from "@/lib/savings";
-import { recordKey } from "@/lib/store";
-import type { Goal } from "@/lib/types";
 
 const DAY = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
@@ -18,16 +17,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!b || typeof b.amount !== "number" || typeof b.date !== "string" || !DAY.test(b.date)) return fail(400, "Неверные данные.");
   const opId = crypto.randomUUID();
   try {
-    return await updateRecord<Goal>(
-      recordKey("goals", b.scope === "personal" ? "personal" : "family", user.id),
+    const r = await getRepos().goals.update(
+      ctxOf(user),
+      b.scope === "personal" ? "personal" : "family",
       id,
       undefined,
       (g) => {
         const next = applyGoalOp(g, b.amount as number, user.id, b.date as string, Date.now(), opId);
         return typeof next === "string" ? { status: 409, error: next } : next;
       },
-      "Не удалось сохранить: слишком много одновременных изменений.",
     );
+    return updated(r, "Не удалось сохранить: слишком много одновременных изменений.");
   } catch (e) {
     console.error(e);
     return fail(500, "Не удалось сохранить.");

@@ -1,28 +1,24 @@
 import { NextResponse } from "next/server";
-import { addEntry, getRedis, readStore } from "@/lib/redis";
-import { buildView, entryKey, K } from "@/lib/store";
+import { ctxOf, getRepos } from "@/lib/data";
+import { buildView } from "@/lib/store";
 import { getUser, partnerOf } from "@/lib/users";
 import { localDate } from "@/lib/push";
-import { handleQuick, type QuickStore, type TokenRecord } from "@/lib/quick-entry/api";
+import { handleQuick, type QuickStore } from "@/lib/quick-entry/api";
 import { visibleExpenses } from "@/lib/quick-entry/dictionary";
 
 export const dynamic = "force-dynamic";
 
 const store: QuickStore = {
-  tokens: async (userId) => (getUser(userId) ? ((await getRedis().hgetall<Record<string, TokenRecord>>(K.tokens(userId))) ?? {}) : {}),
-  touch: async (userId, id, rec) => void (await getRedis().hset(K.tokens(userId), { [id]: rec })),
-  hit: async (id) => {
-    const key = K.quickRate(id, Math.floor(Date.now() / 60_000));
-    const [count] = (await getRedis().multi().incr(key).expire(key, 60).exec()) as [number, number];
-    return count;
-  },
+  tokens: (userId) => getRepos().system.tokensOf(userId),
+  touch: (userId, id, rec) => getRepos().system.touchToken(userId, id, rec),
+  hit: (id) => getRepos().system.hitToken(id),
   context: async (userId) => {
     const me = getUser(userId)!;
     const partner = partnerOf(userId);
-    const view = buildView(await readStore([me.id, partner.id]), me, partner);
+    const view = buildView(await getRepos().store.snapshot(ctxOf(me)), me, partner);
     return { settings: view.settings, personalCategories: view.mySettings.personalCategories, expenses: visibleExpenses(view) };
   },
-  write: (userId, e) => addEntry(entryKey("expense", e.scope, userId, e.date.slice(0, 7)), e),
+  write: (userId, e) => getRepos().expenses.add(ctxOf({ id: userId }), e),
 };
 
 /**
