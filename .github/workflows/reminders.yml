@@ -1,0 +1,30 @@
+# Каждый час — напоминания тем, у кого сейчас выбранный час, и удаление истёкших архивов (/api/cron/daily).
+# Vercel Cron на Hobby — только раз в день, поэтому расписание здесь. GitHub может запустить с опозданием до ~15 минут.
+#
+# Секрет репозитория (Settings → Secrets and variables → Actions): CRON_SECRET — тот же, что в Vercel
+# Переменная (Variables): APP_URL — https://<домен приложения>, без слэша в конце
+name: Reminders
+
+on:
+  schedule:
+    - cron: "5 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: reminders
+  cancel-in-progress: false
+
+jobs:
+  cron:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$CRON_SECRET" -a -n "$APP_URL" || { echo "Нет секрета CRON_SECRET или переменной APP_URL"; exit 1; }
+          curl -fsS --max-time 120 --retry 2 -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/daily"

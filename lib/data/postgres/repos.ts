@@ -160,7 +160,7 @@ export function postgresRepos(db: Db): Repos {
       .where(and(eq(s.categories.householdId, householdId), eq(s.categories.ownerId, userId))).orderBy(asc(s.categories.sort));
     return {
       personalCategories: cats.map(toCategory), ...(row.preferredCurrency && { preferredCurrency: row.preferredCurrency }),
-      ...(row.hideQuickEntry && { hideQuickEntry: true }), version: row.version,
+      ...(row.hideQuickEntry && { hideQuickEntry: true }), ...(row.reminders && { reminders: row.reminders }), version: row.version,
     };
   }
 
@@ -272,7 +272,7 @@ export function postgresRepos(db: Db): Repos {
     }
   }
   async function putUserSettings(tx: Db, ctx: Ctx, data: Omit<UserSettings, "version">, version: number) {
-    const row = { householdId: ctx.householdId, userId: ctx.userId, preferredCurrency: data.preferredCurrency ?? null, hideQuickEntry: !!data.hideQuickEntry, version };
+    const row = { householdId: ctx.householdId, userId: ctx.userId, preferredCurrency: data.preferredCurrency ?? null, hideQuickEntry: !!data.hideQuickEntry, reminders: data.reminders ?? null, version };
     await tx.insert(s.userSettings).values(row).onConflictDoUpdate({ target: [s.userSettings.householdId, s.userSettings.userId], set: row });
     await tx.delete(s.categories).where(and(eq(s.categories.householdId, ctx.householdId), eq(s.categories.ownerId, ctx.userId)));
     if (data.personalCategories.length) await tx.insert(s.categories).values(categoryRows(ctx, data.personalCategories, ctx.userId));

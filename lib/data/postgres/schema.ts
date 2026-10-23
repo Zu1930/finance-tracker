@@ -8,6 +8,7 @@ import { sql } from "drizzle-orm";
 import {
   bigint, boolean, char, check, date, foreignKey, index, integer, jsonb, numeric, pgTable, primaryKey, text, timestamp, uniqueIndex,
 } from "drizzle-orm/pg-core";
+import type { Reminders } from "../../types.ts";
 
 const money = (name: string) => numeric(name, { precision: 14, scale: 2, mode: "number" });
 const rate = (name: string) => numeric(name, { mode: "number" });
@@ -189,6 +190,7 @@ export const userSettings = pgTable(
     userId: text("user_id").notNull(),
     preferredCurrency: text("preferred_currency"),
     hideQuickEntry: boolean("hide_quick_entry").notNull().default(false),
+    reminders: jsonb("reminders").$type<Reminders>(),
     version: integer("version").notNull().default(0),
   },
   (t) => [primaryKey({ columns: [t.householdId, t.userId] }), foreignKey({ name: "user_settings_member", columns: [t.householdId, t.userId], foreignColumns: [memberships.householdId, memberships.userId] })],

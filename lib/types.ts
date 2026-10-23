@@ -39,8 +39,14 @@ export type UserSettings = {
   preferredCurrency?: string;
   /** Скрыть строку голосового ввода на странице ввода */
   hideQuickEntry?: boolean;
+  /** Когда присылать напоминания; нет — DEFAULT_REMINDERS (lib/push.ts) */
+  reminders?: Reminders;
   version: number;
 };
+
+/** Час (0–23), день недели для «внести траты» (0 — воскресенье), за сколько дней до конца месяца — план;
+ *  tz — часовой пояс устройства, с которого сохранили (IANA); нет — APP_TZ */
+export type Reminders = { hour: number; weekday: number; planDays: number; tz?: string };
 
 export type Expense = {
   id: string;

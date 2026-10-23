@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useTracker } from '../TrackerProvider'
 import { SettingsRow } from './Kit'
+import { DEFAULT_REMINDERS } from '@/lib/push'
+import type { Reminders } from '@/lib/types'
 
 type State = 'loading' | 'unsupported' | 'ios-install' | 'off-server' | 'denied' | 'on' | 'off'
 
@@ -11,7 +13,7 @@ const keyBytes = (b64: string) => Uint8Array.from(atob(b64.replace(/-/g, '+').re
 
 /** Push на этом устройстве: включить, проверить, выключить. На iPhone — только у приложения с экрана «Домой» */
 export function Notifications() {
-	const { toast, offline } = useTracker()
+	const { toast, offline, data, setMySettings } = useTracker()
 	const [state, setState] = useState<State>('loading')
 	const [busy, setBusy] = useState(false)
 
@@ -43,6 +45,10 @@ export function Notifications() {
 			const res = await fetch('/api/push', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: sub.toJSON() }) })
 			if (!res.ok) throw new Error()
 			setState('on')
+			// Напоминания — по времени этого устройства, даже если расписание не меняли
+			const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+			const r = data.mySettings.reminders ?? DEFAULT_REMINDERS
+			if (r.tz !== tz) setMySettings(({ version: _, ...rest }) => ({ ...rest, reminders: { ...r, tz } }))
 			toast('Уведомления включены')
 		} catch {
 			toast('Не удалось включить уведомления.')
@@ -92,7 +98,39 @@ export function Notifications() {
 			}>
 				<span className={state === 'on' ? '' : 'text-muted'}>{status}</span>
 			</SettingsRow>
-			<p className="mt-2 text-xs text-muted2">Обновления приложения, план на следующий месяц за 2 дня до конца, по воскресеньям — внести траты.</p>
+			<ReminderTimes />
+		</div>
+	)
+}
+
+const DAYS = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота']
+const WEEK = [1, 2, 3, 4, 5, 6, 0]
+
+/** Когда присылать напоминания — для всех устройств пользователя (личные настройки) */
+function ReminderTimes() {
+	const { data, setMySettings } = useTracker()
+	const r = data.mySettings.reminders ?? DEFAULT_REMINDERS
+	const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+	// Любое изменение запоминает пояс этого устройства: в нём сервер и считает час и день
+	const set = (patch: Partial<Reminders>) => setMySettings(({ version: _, ...rest }) => ({ ...rest, reminders: { ...r, ...patch, tz } }))
+	const pick = (label: string, value: number, options: [number, string][], onChange: (v: number) => void) => (
+		<SettingsRow end={
+			<select className="tfield cursor-pointer bg-panel" aria-label={label} value={value} onChange={(e) => onChange(Number(e.target.value))}>
+				{options.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+			</select>
+		}>
+			{label}
+		</SettingsRow>
+	)
+	return (
+		<div className="mt-4">
+			{pick('Время', r.hour, Array.from({ length: 24 }, (_, h) => [h, `${String(h).padStart(2, '0')}:00`]), (hour) => set({ hour }))}
+			{pick('Внести траты', r.weekday, WEEK.map((d) => [d, DAYS[d]]), (weekday) => set({ weekday }))}
+			{pick('План месяца', r.planDays, [1, 2, 3, 4, 5].map((n) => [n, `за ${n} ${n === 1 ? 'день' : n < 5 ? 'дня' : 'дней'}`]), (planDays) => set({ planDays }))}
+			<SettingsRow end={r.tz !== tz ? <button className="tb" onClick={() => set({})}>Взять с устройства</button> : undefined}>
+				Часовой пояс <span className="text-muted">{r.tz ?? 'Europe/Belgrade'}</span>
+			</SettingsRow>
+			<p className="mt-2 text-xs text-muted2">План — до конца месяца, если его ещё нет. Расписание общее для всех ваших устройств; о новой версии приложения — сразу после обновления.</p>
 		</div>
 	)
 }

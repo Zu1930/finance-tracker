@@ -55,7 +55,7 @@ API:
 - `POST /api/plan-items`, `PATCH|DELETE /api/plan-items/:id` — покупки; `POST /api/entries` принимает `planItemId`
 - `GET|POST|DELETE /api/push`, `POST /api/push/test` — подписка устройства и тестовый пуш
 - `POST /api/quick` — `{ text, commit }` для Siri, доступ по `Authorization: Bearer <токен>` (без cookie); `GET|POST|DELETE /api/quick/tokens` — мои токены
-- `GET /api/cron/daily` — напоминания (Vercel Cron, `Authorization: Bearer CRON_SECRET`)
+- `GET /api/cron/daily` — напоминания, раз в час (GitHub Actions, `Authorization: Bearer CRON_SECRET`)
 - `PATCH /api/settings/rates` — слияние курсов без 409
 - `POST /api/rebase` — смена базовой валюты, пересчитывает данные обоих одной транзакцией
 - `GET /api/rates` — курсы ExchangeRate-API
@@ -134,10 +134,11 @@ npm run reset-password -- masha@example.com --production
 - Без связи открывается последняя копия данных (`public/sw.js`). Можно только записывать траты и доходы — они ждут
   в очереди и уходят при появлении сети. Удаление, настройки, план и сверка без связи недоступны.
 - Push-уведомления: «приложение обновилось» (первый старт нового коммита в production), план на следующий месяц
-  за 2 дня до конца (если плана ещё нет), по воскресеньям — внести траты. Включаются в «Настройках» на каждом
-  устройстве; на iPhone — только у приложения, открытого с экрана «Домой» (iOS 16.4+).
+  за 1–5 дней до конца (если плана ещё нет), в выбранный день недели — внести траты; час, день и срок каждый выбирает
+  в «Настройки → Это устройство» (по умолчанию 19:00, воскресенье, за 2 дня) по часовому поясу своего устройства. Включаются на каждом устройстве; на iPhone — только у приложения, открытого с экрана «Домой» (iOS 16.4+).
 - Для уведомлений задайте `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` (`npx web-push generate-vapid-keys`),
-  `VAPID_SUBJECT` и `CRON_SECRET`. Расписание — `vercel.json`, раз в день в 17:00 UTC (19:00 летом / 18:00 зимой по Белграду).
+  `VAPID_SUBJECT` и `CRON_SECRET`. Расписание — `.github/workflows/reminders.yml`, каждый час
+  (Vercel Cron на Hobby — только раз в день): секрет `CRON_SECRET` и переменная `APP_URL` в настройках репозитория.
   Для пуша об обновлении в настройках проекта Vercel должны быть включены системные переменные (включены по умолчанию).
 
 ## Голосовой ввод

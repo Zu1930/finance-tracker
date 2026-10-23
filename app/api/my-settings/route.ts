@@ -3,12 +3,12 @@ import { casResponse } from "@/lib/cas-route";
 import { getRepos } from "@/lib/data";
 import { isUserSettingsData } from "@/lib/store";
 
-/** Личные настройки текущего пользователя (категории, валюта по умолчанию, скрытый голосовой ввод): { version, data } с проверкой версии */
+/** Личные настройки текущего пользователя (категории, валюта по умолчанию, скрытый голосовой ввод, время напоминаний): { version, data } с проверкой версии */
 export async function PUT(req: Request) {
   const ctx = await requireUser(req);
   if (!ctx) return unauthorized();
   const body = (await req.json().catch(() => null)) as { version?: unknown; data?: unknown } | null;
   const d = body?.data;
-  const data = isUserSettingsData(d) ? { personalCategories: d.personalCategories, ...(d.preferredCurrency ? { preferredCurrency: d.preferredCurrency } : {}), ...(d.hideQuickEntry ? { hideQuickEntry: true } : {}) } : null;
+  const data = isUserSettingsData(d) ? { personalCategories: d.personalCategories, ...(d.preferredCurrency ? { preferredCurrency: d.preferredCurrency } : {}), ...(d.hideQuickEntry ? { hideQuickEntry: true } : {}), ...(d.reminders ? { reminders: { hour: d.reminders.hour, weekday: d.reminders.weekday, planDays: d.reminders.planDays, ...(d.reminders.tz && { tz: d.reminders.tz }) } } : {}) } : null;
   return casResponse(body?.version, data, (v, d) => getRepos().userSettings.put(ctx, v, d));
 }

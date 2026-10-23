@@ -2,7 +2,7 @@
  * Семейное хранилище без Redis: ключи, сборка ответа GET /api/data с учётом приватности, подготовка записей.
  * Чистые функции — их вызывают route handlers и тесты (lib/store.test.mjs).
  */
-import type { Expense, GoalsDoc, Income, MonthKey, RecurringPayment, Scope, Settings, TrackerData, User, UserSettings } from "./types.ts";
+import type { Expense, GoalsDoc, Income, MonthKey, RecurringPayment, Reminders, Scope, Settings, TrackerData, User, UserSettings } from "./types.ts";
 import { buildSavings, type RawSavings } from "./savings.ts";
 import { EMPTY_PLANS, buildPlans, plannedDaily, type RawPlans } from "./plan.ts";
 import { occurrences, recurringTotal } from "./recurring.ts";
@@ -233,7 +233,16 @@ export const isSettingsData = (v: unknown): v is Omit<Settings, "version"> =>
 const isCode = (v: unknown) => typeof v === "string" && /^[A-Z]{3,5}$/.test(v);
 export const isUserSettingsData = (v: unknown): v is Omit<UserSettings, "version"> =>
   isObj(v) && isCategories(v.personalCategories) && (v.preferredCurrency === undefined || isCode(v.preferredCurrency)) &&
-  (v.hideQuickEntry === undefined || typeof v.hideQuickEntry === "boolean");
+  (v.hideQuickEntry === undefined || typeof v.hideQuickEntry === "boolean") && (v.reminders === undefined || isReminders(v.reminders));
+
+const int = (v: unknown, min: number, max: number) => Number.isInteger(v) && (v as number) >= min && (v as number) <= max;
+export const isReminders = (v: unknown): v is Reminders =>
+  isObj(v) && int(v.hour, 0, 23) && int(v.weekday, 0, 6) && int(v.planDays, 1, 5) && (v.tz === undefined || isTimeZone(v.tz));
+/** Пояс IANA, который знает Intl (как Europe/Belgrade) */
+export const isTimeZone = (v: unknown): v is string => {
+  if (typeof v !== "string" || v.length > 64) return false;
+  try { return !!new Intl.DateTimeFormat("en", { timeZone: v }); } catch { return false; }
+};
 
 /** Ответ API на конфликт версий: клиент перечитывает данные и просит проверить и повторить */
 export const CONFLICT_MESSAGE = "Настройки изменил другой пользователь, проверьте и повторите.";
