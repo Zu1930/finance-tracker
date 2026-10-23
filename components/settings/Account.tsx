@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useTracker } from '../TrackerProvider'
 import { HoldLogout } from './HoldLogout'
 
@@ -103,6 +104,12 @@ export function Account() {
 					Выйти везде, кроме этого
 				</button>
 				<HoldLogout />
+			</div>
+
+			<div className="mt-6 flex flex-wrap gap-3 border-t border-dashed border-line2 pt-4">
+				<a href="/api/account/export" className="tb max-sm:h-12 max-sm:w-full">Экспорт всех моих данных</a>
+				<Link href="/delete-account" className="tb text-bad max-sm:h-12 max-sm:w-full">Удалить аккаунт</Link>
+				<Link href="/privacy" className="tb max-sm:h-12 max-sm:w-full">Конфиденциальность</Link>
 			</div>
 		</div>
 	)

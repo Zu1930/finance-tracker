@@ -265,7 +265,14 @@ export function redisRepos(users: User[]): Repos {
 
     system: {
       households: async () => [{ id: DEFAULT_HOUSEHOLD, userIds: members() }],
+      familySnapshot: async () => {
+        throw new Error("Архивов в Redis нет");
+      },
       householdOf: async (userId) => (members().includes(userId) ? DEFAULT_HOUSEHOLD : null),
+      async ensureHousehold(userId) {
+        if (members().includes(userId)) return DEFAULT_HOUSEHOLD;
+        throw new Error("Redis хранит только бюджет default");
+      },
       members: async (householdId) => (householdId === DEFAULT_HOUSEHOLD ? users : []),
       tokensOf: async (userId) => (members().includes(userId) ? ((await redis().hgetall<Record<string, TokenRecord>>(K.tokens(userId))) ?? {}) : {}),
       touchToken: async (userId, id, rec) => void (await redis().hset(K.tokens(userId), { [id]: rec })),

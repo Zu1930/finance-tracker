@@ -44,7 +44,7 @@ export function Goals({ allocated, free, missing, empty }: { allocated: number; 
 }
 
 function GoalCard({ g }: { g: Goal }) {
-  const { data, api, toast } = useTracker();
+  const { data, isSolo, api, toast } = useTracker();
   const st = data.settings!;
   const [val, setVal] = useState("");
   const inBase = g.currency === st.base ? null : toBase(g.allocated, g.currency, st.base, st.rates);
@@ -75,7 +75,7 @@ function GoalCard({ g }: { g: Goal }) {
     <section className="border-b border-dashed border-line2 py-4">
       <div className="flex items-start justify-between gap-3">
         <h3 className="pt-3 font-bold uppercase">
-          {termName(g.name)} <span className="font-normal text-muted">[{g.scope === "family" ? "СЕМ" : "ЛИЧН"}]</span>
+          {termName(g.name)} {!isSolo && <span className="font-normal text-muted">[{g.scope === "family" ? "СЕМ" : "ЛИЧН"}]</span>}
         </h3>
         <button className="xb -mr-2" aria-label={`Удалить копилку ${g.name}`} onClick={() => void remove()}>×</button>
       </div>
@@ -98,9 +98,10 @@ function GoalCard({ g }: { g: Goal }) {
 }
 
 function NewGoal() {
-  const { data, api, toast } = useTracker();
+  const { data, isSolo, api, toast } = useTracker();
   const st = data.settings!;
-  const [scope, setScope] = useState<Scope>("family");
+  const [picked, setScope] = useState<Scope>("family");
+  const scope: Scope = isSolo ? "personal" : picked;
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
   const [cur, setCur] = useState(st.base);
@@ -120,10 +121,12 @@ function NewGoal() {
     <section className="mt-6">
       <h2 className="sec">New goal</h2>
       <div className="mt-4 flex flex-wrap items-end gap-x-6 gap-y-4">
-        <div className="tgroup max-sm:w-full" role="group" aria-label="Чья копилка">
-          <button className="tb" aria-pressed={scope === "family"} onClick={() => setScope("family")}>Семья</button>
-          <button className="tb" aria-pressed={scope === "personal"} onClick={() => setScope("personal")}>Личное</button>
-        </div>
+        {!isSolo && (
+          <div className="tgroup max-sm:w-full" role="group" aria-label="Чья копилка">
+            <button className="tb" aria-pressed={scope === "family"} onClick={() => setScope("family")}>Семья</button>
+            <button className="tb" aria-pressed={scope === "personal"} onClick={() => setScope("personal")}>Личное</button>
+          </div>
+        )}
         <div className="flex min-w-[220px] flex-[2_1_220px] items-center gap-3">
           <label htmlFor="goal-name" className="lbl">Name</label>
           <input id="goal-name" className="tfield flex-1" placeholder="например, отпуск" value={name}

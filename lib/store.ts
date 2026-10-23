@@ -133,15 +133,19 @@ export const EMPTY_SAVINGS: RawSavings = { accounts: {}, userAccounts: {}, goals
 
 const byDate = <T extends { date: string; ts: number }>(a: T, b: T) => a.date.localeCompare(b.date) || a.ts - b.ts;
 const EMPTY_USER: UserSettings = { personalCategories: [], version: 0 };
+const NOBODY: User = { id: "", name: "" };
 
 /**
  * Данные для пользователя me. Личные записи и категории партнёра не попадают в ответ ни в каком виде:
  * от них остаются только суммы за месяц и по дням
  */
-export function buildView(raw: RawStore, me: User, partner: User, curMonth = new Date().toISOString().slice(0, 7)): TrackerData {
+export function buildView(raw: RawStore, me: User, partnerOrNull: User | null, curMonth = new Date().toISOString().slice(0, 7)): TrackerData {
+  // Бюджет одного человека: партнёра нет — подставляется никто (id "" не совпадает ни с одной записью)
+  const partner = partnerOrNull ?? NOBODY;
   const view: TrackerData = {
     me,
-    partner,
+    partner: partnerOrNull,
+    ...(!partnerOrNull && { solo: true as const }),
     settings: raw.settings,
     mySettings: raw.userSettings[me.id] ?? EMPTY_USER,
     savings: buildSavings(raw.savings ?? EMPTY_SAVINGS, me, partner, raw.settings?.base ?? "", raw.settings?.rates ?? {}),

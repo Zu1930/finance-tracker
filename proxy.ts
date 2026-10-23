@@ -3,12 +3,14 @@ import { getSessionCookie } from "better-auth/cookies";
 
 // /api/auth/* — Better Auth (вход, выход, сессии; без сессии отвечает сам), /api/cron/* проверяет CRON_SECRET,
 // /api/quick — токен Быстрой команды (Bearer)
-const PUBLIC = new Set(["/login", "/api/cron/daily", "/api/quick"]);
+const PUBLIC = new Set(["/login", "/signup", "/check-email", "/forgot-password", "/reset-password", "/privacy", "/api/cron/daily", "/api/quick"]);
 
 /** Быстрая проверка: есть ли cookie сессии. Подпись и срок проверяют route handlers (requireUser) */
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (PUBLIC.has(pathname) || pathname.startsWith("/api/auth/") || getSessionCookie(req)) return NextResponse.next();
+  // Приглашение без входа — на вход с возвратом: там же ссылка на регистрацию по этому приглашению
+  if (pathname.startsWith("/join/")) return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent(pathname)}`, req.url));
   if (pathname.startsWith("/api/")) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   return NextResponse.redirect(new URL("/login", req.url));
 }

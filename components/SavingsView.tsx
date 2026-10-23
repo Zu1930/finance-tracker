@@ -48,12 +48,16 @@ export function SavingsView() {
         </p>
         {t.missing.length > 0 && <p className="text-warn uppercase">!! Нет курса: {t.missing.join(", ")} — эти счета не входят в итог</p>}
         <dl className="mt-3 grid grid-cols-1 gap-x-6 uppercase sm:grid-cols-[12ch_minmax(0,1fr)] sm:gap-y-1">
-          <dt className="text-muted max-sm:mt-2">Чьи</dt>
-          <dd>Семья {fmt(Math.round(t.family))} · Моё {fmt(Math.round(mine))} · {data.partner.name} {fmt(Math.round(partner))}</dd>
+          {data.partner && (
+            <>
+              <dt className="text-muted max-sm:mt-2">Чьи</dt>
+              <dd>Семья {fmt(Math.round(t.family))} · Моё {fmt(Math.round(mine))} · {data.partner.name} {fmt(Math.round(partner))}</dd>
+            </>
+          )}
           <dt className="text-muted max-sm:mt-2">Валюты</dt>
           <dd>
             {currencies.length ? currencies.map(([c, v]) => `${c} ${fmt(v)}`).join(" · ") : "—"}
-            <span className="text-muted"> · {data.partner.name} ≈ {fmt(Math.round(partner))} {st.base}</span>
+            {data.partner && <span className="text-muted"> · {data.partner.name} ≈ {fmt(Math.round(partner))} {st.base}</span>}
           </dd>
           <dt className="text-muted max-sm:mt-2">Запас</dt>
           <dd>

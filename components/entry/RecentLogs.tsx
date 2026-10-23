@@ -12,13 +12,13 @@ type Row = { kind: 'expense'; e: Expense } | { kind: 'income'; e: Income }
 
 /** Семейные траты обоих, мои личные и доходы обоих — новые сверху */
 export function RecentLogs() {
-	const { data, removeEntry, restoreEntry, toast } = useTracker()
+	const { data, isSolo, removeEntry, restoreEntry, toast } = useTracker()
 	const st = data.settings!
 	const [shown, setShown] = useState(PAGE)
 
 	const cats = new Map([...st.familyCategories, ...data.mySettings.personalCategories].map((c) => [c.id, c.name]))
 	const sources = new Map(incomeSources(st).map((s) => [s.id, s.name]))
-	const names = new Map([data.me, data.partner].map((u) => [u.id, u.name]))
+	const names = new Map([...Object.entries(data.names ?? {}), ...[data.me, ...(data.partner ? [data.partner] : [])].map((u) => [u.id, u.name] as const)])
 
 	const rows: Row[] = [
 		...Object.values(data.familyExpenses).flat().map((e) => ({ kind: 'expense' as const, e })),
@@ -46,8 +46,8 @@ export function RecentLogs() {
 							const what = income ? sources.get((e as Income).sourceId) : cats.get((e as Expense).catId)
 							const meta = [
 								ddmm(e.date),
-								names.get(e.authorId) ?? '—',
-								...(income ? [] : [(e as Expense).scope === 'personal' ? 'ЛИЧН' : 'СЕМ']),
+								...(isSolo ? [] : [names.get(e.authorId) ?? '—']),
+								...(income || isSolo ? [] : [(e as Expense).scope === 'personal' ? 'ЛИЧН' : 'СЕМ']),
 								...(e.currency !== st.base ? [`${fmt(e.amount)} ${e.currency}`] : []),
 								...(e.note ? [e.note] : []),
 							]
@@ -56,7 +56,7 @@ export function RecentLogs() {
 									<span className="truncate">{termName(what ?? (income ? 'Удалённый источник' : 'Удалённая категория'))}</span>
 									<b className="text-right">{income ? '+' : '−'}{fmt(e.base)}</b>
 									<span className="truncate text-xs text-muted">{meta.join(' · ')}</span>
-									<button className="xb -mr-3 justify-self-end" aria-label={income ? 'Удалить доход' : 'Удалить трату'} onClick={() => remove(r)}>
+									<button className={`xb -mr-3 justify-self-end ${data.readonly ? 'invisible' : ''}`} aria-label={income ? 'Удалить доход' : 'Удалить трату'} onClick={() => remove(r)}>
 										×
 									</button>
 								</li>
@@ -73,7 +73,7 @@ export function RecentLogs() {
 									<li key={`${r.kind}-${e.id}`} className="col-span-7 grid grid-cols-subgrid items-center border-b border-dashed border-line2 py-1 whitespace-nowrap">
 										<span className="text-muted">{e.date}</span>
 										<span className="text-muted">{income ? '[REV]' : '[EXP]'}</span>
-										<span className="text-muted">{income ? '' : (e as Expense).scope === 'personal' ? '[ЛИЧН]' : '[СЕМ]'}</span>
+										<span className="text-muted">{income || isSolo ? '' : (e as Expense).scope === 'personal' ? '[ЛИЧН]' : '[СЕМ]'}</span>
 										<span className="text-right font-bold">
 											{income ? '+' : '−'}
 											{fmt(e.amount)} {e.currency}
@@ -83,8 +83,8 @@ export function RecentLogs() {
 											// {termName(what ?? (income ? 'Удалённый источник' : 'Удалённая категория'))}
 											{e.note && <span className="ml-2 text-muted">{e.note}</span>}
 										</span>
-										<span className="text-muted uppercase">{names.get(e.authorId) ?? '—'}</span>
-										<button className="xb" aria-label={income ? 'Удалить доход' : 'Удалить трату'} onClick={() => remove(r)}>
+										<span className="text-muted uppercase">{isSolo ? '' : (names.get(e.authorId) ?? '—')}</span>
+										<button className={`xb ${data.readonly ? 'invisible' : ''}`} aria-label={income ? 'Удалить доход' : 'Удалить трату'} onClick={() => remove(r)}>
 											×
 										</button>
 									</li>

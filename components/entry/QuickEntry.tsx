@@ -48,7 +48,7 @@ type Props = {
  * Разбор всегда показывается перед записью; доходы, регулярные и плановые здесь не вводятся
  */
 export function QuickEntry({ familyCats, personalCats, onEdit }: Props) {
-	const { data, addEntry, removeEntry, toast } = useTracker()
+	const { data, isSolo, addEntry, removeEntry, toast } = useTracker()
 	const st = data.settings!
 	const [text, setText] = useState('')
 	const [phrase, setPhrase] = useState('')
@@ -234,7 +234,7 @@ export function QuickEntry({ familyCats, personalCats, onEdit }: Props) {
 								</span>
 							)
 							const amount = problem === 'Нет суммы' ? '—' : `−${fmt(p.amount ?? 0)} ${p.currency}`
-							const meta = [p.scope === 'personal' ? 'Личное' : 'Семья', dateLabel(p.date)]
+							const meta = [...(isSolo ? [] : [p.scope === 'personal' ? 'Личное' : 'Семья']), dateLabel(p.date)]
 							const err = problem ?? rowErr[i]
 							const cats = p.scope === 'personal' ? personalCats : familyCats
 							return (

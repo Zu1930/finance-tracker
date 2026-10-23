@@ -10,7 +10,7 @@ const MONTHS_GEN = ['января', 'февраля', 'марта', 'апрел�
 
 /** :: РЕГУЛЯРНЫЕ ПЛАТЕЖИ — управление: список с правкой, пауза, удаление, форма создания */
 export function RecurringManager() {
-	const { data, api } = useTracker()
+	const { data, api, scopeTag } = useTracker()
 	const st = data.settings!
 	const live = [...data.recurring.family, ...data.recurring.mine].filter((p) => !p.endMonth)
 	const [edit, setEdit] = useState<string | null>(null)
@@ -43,7 +43,7 @@ export function RecurringManager() {
 									{p.approx && '≈ '}{fmt(amountIn(p, cur))} {p.currency}
 								</span>
 								<span className="truncate text-xs text-muted sm:text-sm">
-									{when(p)} · {p.scope === 'family' ? 'СЕМ' : 'ЛИЧН'}{p.paused && <b className="text-warn"> · Пауза</b>}
+									{when(p)}{scopeTag(p.scope) && ` · ${scopeTag(p.scope)}`}{p.paused && <b className="text-warn"> · Пауза</b>}
 								</span>
 								<span className="flex items-center justify-end gap-2">
 									{p.paused && <button className="tb" onClick={() => void api(`/api/recurring/${p.id}`, 'PATCH', { scope: p.scope, version: p.version, paused: false })}>Возобновить</button>}
@@ -122,7 +122,7 @@ function Field({ label, id, grow, children }: { label: string; id: string; grow?
 
 /** Форма нового платежа. После ежемесячного — предложение уменьшить лимит категории на его сумму */
 function NewPayment({ cats }: { cats: (s: Scope) => Category[] }) {
-	const { data, api, toast, setSettings, setMySettings } = useTracker()
+	const { data, isSolo, api, toast, setSettings, setMySettings } = useTracker()
 	const st = data.settings!
 	const cur = curMonthKey()
 	const [name, setName] = useState('')
@@ -132,7 +132,8 @@ function NewPayment({ cats }: { cats: (s: Scope) => Category[] }) {
 	const [yearly, setYearly] = useState(false)
 	const [day, setDay] = useState('1')
 	const [month, setMonth] = useState(Number(cur.slice(5)))
-	const [scope, setScope] = useState<Scope>('family')
+	const [picked, setScope] = useState<Scope>('family')
+	const scope: Scope = isSolo ? 'personal' : picked
 	const [catId, setCatId] = useState<string | null>(null)
 	const [offer, setOffer] = useState<{ cat: Category; scope: Scope; from: number; to: number; name: string } | null>(null)
 	const list = cats(scope).filter((c) => aliveIn(c, cur))
@@ -204,10 +205,12 @@ function NewPayment({ cats }: { cats: (s: Scope) => Category[] }) {
 					</Field>
 				)}
 			</div>
-			<div className="tgroup max-sm:w-full sm:w-max" role="group" aria-label="Чей платёж">
-				<button className="tb" aria-pressed={scope === 'family'} onClick={() => { setScope('family'); setCatId(null) }}>Семья</button>
-				<button className="tb" aria-pressed={scope === 'personal'} onClick={() => { setScope('personal'); setCatId(null) }}>Личное</button>
-			</div>
+			{!isSolo && (
+				<div className="tgroup max-sm:w-full sm:w-max" role="group" aria-label="Чей платёж">
+					<button className="tb" aria-pressed={scope === 'family'} onClick={() => { setScope('family'); setCatId(null) }}>Семья</button>
+					<button className="tb" aria-pressed={scope === 'personal'} onClick={() => { setScope('personal'); setCatId(null) }}>Личное</button>
+				</div>
+			)}
 			<div className="flex flex-wrap gap-2" role="group" aria-label="Категория платежа">
 				{list.map((c) => <button key={c.id} className="tb tb-tight" aria-pressed={catId === c.id} onClick={() => setCatId(c.id)}>{termName(c.name)}</button>)}
 				{list.length === 0 && <span className="text-muted uppercase">Нет категорий</span>}

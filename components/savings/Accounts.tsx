@@ -10,7 +10,7 @@ const STALE_DAYS = 14;
 
 /** Счета семьи и мои, режим сверки, блок расхождения по последнему снимку */
 export function Accounts({ openFamily = false }: { openFamily?: boolean }) {
-  const { data, api, toast } = useTracker();
+  const { data, isSolo, api, toast } = useTracker();
   const st = data.settings!;
   const sv = data.savings;
   const family = sv.accounts.family.filter((a) => !a.archived);
@@ -105,7 +105,7 @@ export function Accounts({ openFamily = false }: { openFamily?: boolean }) {
             );
           })}
         </ul>
-        {!editing && <NewAccount key={scope === "family" ? String(openFamily) : scope} scope={scope} defaultOpen={scope === "family" && openFamily} />}
+        {!editing && <NewAccount key={scope === (isSolo ? "personal" : "family") ? String(openFamily) : scope} scope={scope} defaultOpen={scope === (isSolo ? "personal" : "family") && openFamily} />}
       </div>
     );
   };
@@ -119,8 +119,8 @@ export function Accounts({ openFamily = false }: { openFamily?: boolean }) {
         {!editing && list.length > 0 && <button className="tb" onClick={start}>Сверка</button>}
       </div>
       {editing && <p className="mt-2 text-muted2">// Впишите остатки. Enter — к следующему счёту, на последнем — сохранить</p>}
-      {group("family", "Семья", family)}
-      {group("personal", "Личное", mine)}
+      {!isSolo && group("family", "Семья", family)}
+      {group("personal", isSolo ? "Мои счета" : "Личное", mine)}
       {editing && (
         <div className="tgroup mt-4">
           <button className="tb max-sm:h-12" onClick={() => setEditing(false)}>Отмена</button>
@@ -128,9 +128,9 @@ export function Accounts({ openFamily = false }: { openFamily?: boolean }) {
         </div>
       )}
       <ReconBlock recons={sv.recons} base={st.base} />
-      {sv.partner.lastUpdatedAt && Date.now() - Date.parse(sv.partner.lastUpdatedAt) > STALE_DAYS * 864e5 && (
+      {data.partner && sv.partner.lastUpdatedAt && Date.now() - Date.parse(sv.partner.lastUpdatedAt) > STALE_DAYS * 864e5 && (
         <p className="mt-2 text-muted2 uppercase">
-          Счета {data.partner.name} обновлены {ddmm(localDay(sv.partner.lastUpdatedAt))} — расхождение может быть неточным
+          Счета {data.partner?.name} обновлены {ddmm(localDay(sv.partner.lastUpdatedAt))} — расхождение может быть неточным
         </p>
       )}
     </section>

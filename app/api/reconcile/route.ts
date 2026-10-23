@@ -28,7 +28,7 @@ export async function POST(req: Request) {
     const seen = [...Object.values(raw.savings.accounts), ...Object.values(raw.savings.userAccounts).flatMap((h) => Object.values(h))];
     const ok = await getRepos().recons.add(ctx, res.recon, seen, res.changed, raw.savings.recons.length);
     if (!ok) return fail(409, "Счета изменил другой пользователь, проверьте и повторите.");
-    return NextResponse.json({ recon: reconView(res.recon, ctx.userId, (await people(ctx)).partner.id) });
+    return NextResponse.json({ recon: reconView(res.recon, ctx.userId, (await people(ctx)).partner?.id ?? "") });
   } catch (e) {
     console.error(e);
     return fail(500, "Не удалось сохранить сверку.");

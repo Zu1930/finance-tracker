@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { people, requireUser, unauthorized } from "@/lib/auth";
 import { buildView } from "@/lib/store";
-import { getRepos } from "@/lib/data";
+import { getDb, getRepos } from "@/lib/data";
+import { pendingReview } from "@/lib/archive";
+import { householdNames } from "@/lib/family";
+import { isAdmin } from "@/lib/codes";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +15,11 @@ export async function GET(req: Request) {
   try {
     const { me, partner } = await people(ctx);
     const view = buildView(await getRepos().store.snapshot(ctx), me, partner);
+    if (isAdmin(ctx.userId)) view.admin = true;
+    // Авторы записей — и ушедшие, и удалённые участники
+    view.names = await householdNames(getDb(), ctx.householdId);
+    const review = await pendingReview(getDb(), ctx.userId);
+    if (review) view.pendingReview = review;
     return NextResponse.json(view, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     console.error(e);

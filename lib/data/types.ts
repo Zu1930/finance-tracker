@@ -142,6 +142,10 @@ export interface SystemRepo {
   households(): Promise<{ id: string; userIds: string[] }[]>;
   /** Бюджет пользователя; null — ни в одном не состоит */
   householdOf(userId: string): Promise<string | null>;
+  /** Действующий бюджет пользователя; если его нет — создаётся бюджет одного человека (solo, он owner) */
+  ensureHousehold(userId: string): Promise<string>;
+  /** Хранилище бюджета целиком, без проверки членства — только для архива (доступ проверяет lib/archive.ts) */
+  familySnapshot(householdId: string): Promise<RawStore>;
   /** Участники бюджета в порядке вступления */
   members(householdId: string): Promise<{ id: string; name: string }[]>;
   tokensOf(userId: string): Promise<Record<string, TokenRecord>>;

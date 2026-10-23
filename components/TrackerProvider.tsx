@@ -12,6 +12,10 @@ type ToastState = { id: number; msg: string; actionLabel?: string; action?: () =
 type Ctx = {
   data: TrackerData;
   status: "loading" | "ready" | "error";
+  /** Бюджет одного человека: семейные разделы, переключатель СЕМЬЯ/ЛИЧНОЕ, метки и разбивка по людям скрыты; всё — личное */
+  isSolo: boolean;
+  /** Метка «СЕМ» / «ЛИЧН»; в solo — пустая строка */
+  scopeTag: (scope: "family" | "personal") => string;
   /** Нет связи: данные из офлайн-копии на savedAt (ISO; null — время неизвестно) */
   offline: { savedAt: string | null } | null;
   /** Записи без связи, ждут отправки */
@@ -40,7 +44,24 @@ type Ctx = {
   dismissToast: () => void;
 };
 
-const TrackerContext = createContext<Ctx | null>(null);
+/** Архив только для чтения: любые изменения — тост вместо записи (сервер и так не пишет в архив: мутации идут в действующий бюджет) */
+function readonlyGuard(data: TrackerData, toast: Ctx["toast"], ctx: Ctx): Ctx {
+  if (!data.readonly) return ctx;
+  const no = () => toast("Архив только для чтения");
+  return {
+    ...ctx,
+    addEntry: async () => (no(), "Архив только для чтения"),
+    removeEntry: no,
+    restoreEntry: no,
+    setSettings: no,
+    setMySettings: no,
+    api: async () => (no(), null),
+    updateRates: () => {},
+  };
+}
+
+/** Экспорт — для компонентных тестов (lib/solo-ui.test.mjs) */
+export const TrackerContext = createContext<Ctx | null>(null);
 
 export function useTracker() {
   const ctx = useContext(TrackerContext);
@@ -84,7 +105,8 @@ async function send(url: string, method: string, body?: unknown): Promise<Respon
   return res;
 }
 
-export function TrackerProvider({ children }: { children: ReactNode }) {
+/** source — откуда данные: /api/data или архив бывшей семьи (/api/archive/<id>, только чтение) */
+export function TrackerProvider({ children, source = "/api/data" }: { children: ReactNode; source?: string }) {
   const [data, setData] = useState<TrackerData>(EMPTY);
   const [status, setStatus] = useState<Ctx["status"]>("loading");
   const [offline, setOfflineState] = useState<Ctx["offline"]>(null);
@@ -153,14 +175,16 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
 
   const reload = useCallback(async (force = false) => {
     try {
-      const res = await fetch("/api/data", { cache: "no-store" });
+      const res = await fetch(source, { cache: "no-store" });
       if (res.status === 401) {
         window.location.href = "/login";
         return;
       }
       if (!res.ok) throw new Error(String(res.status));
       const next = (await res.json()) as TrackerData;
-      if (queue.current.length === 0 && next.me.id) {
+      // Архив открывается на месяце выхода
+      if (next.readonly && !ref.current.me.id) setMonth(next.readonly.leftAt.slice(0, 7));
+      if (!next.readonly && queue.current.length === 0 && next.me.id) {
         queue.current = readQueue(next.me.id);
         setQueued(queue.current.length);
       }
@@ -171,13 +195,13 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
       if (res.headers.get("x-ft-offline")) setOffline({ savedAt: res.headers.get("x-ft-saved-at") });
       else {
         setOffline(null);
-        void flush();
+        if (!next.readonly) void flush();
       }
     } catch {
       if (ref.current.me.id) setOffline(offlineRef.current ?? { savedAt: null });
       setStatus((s) => (s === "ready" ? s : "error"));
     }
-  }, [commit, flush, setOffline]);
+  }, [commit, flush, setOffline, source]);
 
   useEffect(() => {
     void reload();
@@ -247,8 +271,10 @@ export function TrackerProvider({ children }: { children: ReactNode }) {
     saveQueue([...queue.current.filter((x) => x.entry.id !== e.id), { kind, entry: e }]);
   }, [saveQueue]);
 
-  const value = useMemo<Ctx>(() => ({
+  const value = useMemo<Ctx>(() => readonlyGuard(data, toast, {
     data,
+    isSolo: !!data.solo,
+    scopeTag: (sc) => (data.solo ? "" : sc === "family" ? "СЕМ" : "ЛИЧН"),
     status,
     offline,
     queued,

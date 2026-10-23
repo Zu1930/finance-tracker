@@ -164,9 +164,10 @@ export function postgresRepos(db: Db): Repos {
     };
   }
 
+  /** Действующие участники: личное ушедших не читается и не пишется */
   async function members(tx: Db, householdId: string): Promise<string[]> {
     const rows = await tx.select({ userId: s.memberships.userId }).from(s.memberships)
-      .where(eq(s.memberships.householdId, householdId)).orderBy(asc(s.memberships.joinedAt), asc(s.memberships.userId));
+      .where(and(eq(s.memberships.householdId, householdId), eq(s.memberships.status, "active"))).orderBy(asc(s.memberships.joinedAt), asc(s.memberships.userId));
     return rows.map((r) => r.userId);
   }
 
@@ -287,6 +288,56 @@ export function postgresRepos(db: Db): Repos {
     const [row] = await tx.select({ v: s.monthPlans.version }).from(s.monthPlans)
       .where(and(eq(s.monthPlans.householdId, ctx.householdId), eq(s.monthPlans.month, month), ownerId ? eq(s.monthPlans.ownerId, ownerId) : isNull(s.monthPlans.ownerId)));
     return row?.v ?? 0;
+  }
+
+  /** Хранилище бюджета в форме RawStore (ключи Redis — так его понимает buildView) */
+  async function readRaw(tx: Db, ctx: Ctx, userIds: string[]): Promise<RawStore> {
+    const h = ctx.householdId;
+    const [settings, userSettings, expenses, incomes, accounts, goals, recons, plans, items, payments] = await Promise.all([
+      readSettings(tx, ctx),
+      Promise.all(userIds.map((u) => readUserSettings(tx, h, u))),
+      tx.select().from(s.expenses).where(eq(s.expenses.householdId, h)),
+      tx.select().from(s.incomes).where(eq(s.incomes.householdId, h)),
+      tx.select().from(s.accounts).where(eq(s.accounts.householdId, h)),
+      tx.select().from(s.goals).where(eq(s.goals.householdId, h)).then((rows) => goalsWithOps(tx, rows, h)),
+      tx.select().from(s.recons).where(eq(s.recons.householdId, h)).orderBy(asc(s.recons.at), asc(s.recons.id)),
+      tx.select().from(s.monthPlans).where(eq(s.monthPlans.householdId, h)),
+      tx.select().from(s.planItems).where(eq(s.planItems.householdId, h)),
+      tx.select().from(s.recurringPayments).where(eq(s.recurringPayments.householdId, h)).then((rows) => paymentsWithAmounts(tx, rows, h)),
+    ]);
+    // Хеши месяцев под ключами Redis: так их понимает buildView
+    const hashes: RawStore["hashes"] = {};
+    const put = (key: string, x: Expense | Income) => ((hashes[key] ??= {})[x.id] = x);
+    for (const r of expenses) put(r.ownerId ? K.personal(r.ownerId, r.date.slice(0, 7)) : K.family(r.date.slice(0, 7)), toExpense(r));
+    for (const r of incomes) put(K.incomes(r.date.slice(0, 7)), toIncome(r));
+
+    const byUser = <T>(f: () => T) => Object.fromEntries(userIds.map((u) => [u, f()])) as Record<string, T>;
+    const savings: RawSavings = { accounts: {}, goals: {}, userAccounts: byUser(() => ({})), userGoals: byUser(() => ({})), recons: recons.map((r) => r.snapshot as Recon) };
+    for (const r of accounts) (r.ownerId ? (savings.userAccounts[r.ownerId] ??= {}) : savings.accounts)[r.id] = toAccount(r);
+    for (const g of goals) (g.ownerId ? (savings.userGoals[g.ownerId] ??= {}) : savings.goals)[g.id] = g;
+
+    const raw: RawPlans = { family: {}, byUser: {}, familyItems: {}, userItems: {} };
+    for (const p of plans) {
+      if (!p.ownerId) raw.family[p.month] = { month: p.month, incomeOverride: p.incomeOverride, limitOverrides: p.limitOverrides, version: p.version } satisfies MonthPlan;
+      else (raw.byUser[p.ownerId] ??= {})[p.month] = { month: p.month, limitOverrides: p.limitOverrides, version: p.version } satisfies MyMonthPlan;
+    }
+    for (const r of items) {
+      const it = toPlanItem(r);
+      if (!r.ownerId) (raw.familyItems[r.month] ??= {})[r.id] = it;
+      else ((raw.userItems[r.ownerId] ??= {})[r.month] ??= {})[r.id] = it;
+    }
+    const recurring = { family: {} as Record<string, RecurringPayment>, byUser: byUser(() => ({}) as Record<string, RecurringPayment>) };
+    for (const p of payments) (p.ownerId ? (recurring.byUser[p.ownerId] ??= {}) : recurring.family)[p.id] = p;
+
+    return {
+      settings: settings?.settings ?? null,
+      goals: null,
+      userSettings: Object.fromEntries(userIds.map((u, i) => [u, userSettings[i]])),
+      hashes,
+      savings,
+      plans: raw,
+      recurring,
+    } satisfies RawStore;
   }
 
   const repos: Repos = {
@@ -550,54 +601,9 @@ export function postgresRepos(db: Db): Repos {
     store: {
       snapshot: (ctx) =>
         db.transaction(async (tx) => {
-          const h = ctx.householdId;
-          const userIds = await members(tx, h);
-          if (!userIds.includes(ctx.userId)) throw new Error(`Пользователь «${ctx.userId}» не участник бюджета «${h}»`);
-          const [settings, userSettings, expenses, incomes, accounts, goals, recons, plans, items, payments] = await Promise.all([
-            readSettings(tx, ctx),
-            Promise.all(userIds.map((u) => readUserSettings(tx, h, u))),
-            tx.select().from(s.expenses).where(eq(s.expenses.householdId, h)),
-            tx.select().from(s.incomes).where(eq(s.incomes.householdId, h)),
-            tx.select().from(s.accounts).where(eq(s.accounts.householdId, h)),
-            tx.select().from(s.goals).where(eq(s.goals.householdId, h)).then((rows) => goalsWithOps(tx, rows, h)),
-            tx.select().from(s.recons).where(eq(s.recons.householdId, h)).orderBy(asc(s.recons.at), asc(s.recons.id)),
-            tx.select().from(s.monthPlans).where(eq(s.monthPlans.householdId, h)),
-            tx.select().from(s.planItems).where(eq(s.planItems.householdId, h)),
-            tx.select().from(s.recurringPayments).where(eq(s.recurringPayments.householdId, h)).then((rows) => paymentsWithAmounts(tx, rows, h)),
-          ]);
-          // Хеши месяцев под ключами Redis: так их понимает buildView
-          const hashes: RawStore["hashes"] = {};
-          const put = (key: string, x: Expense | Income) => ((hashes[key] ??= {})[x.id] = x);
-          for (const r of expenses) put(r.ownerId ? K.personal(r.ownerId, r.date.slice(0, 7)) : K.family(r.date.slice(0, 7)), toExpense(r));
-          for (const r of incomes) put(K.incomes(r.date.slice(0, 7)), toIncome(r));
-
-          const byUser = <T>(f: () => T) => Object.fromEntries(userIds.map((u) => [u, f()])) as Record<string, T>;
-          const savings: RawSavings = { accounts: {}, goals: {}, userAccounts: byUser(() => ({})), userGoals: byUser(() => ({})), recons: recons.map((r) => r.snapshot as Recon) };
-          for (const r of accounts) (r.ownerId ? (savings.userAccounts[r.ownerId] ??= {}) : savings.accounts)[r.id] = toAccount(r);
-          for (const g of goals) (g.ownerId ? (savings.userGoals[g.ownerId] ??= {}) : savings.goals)[g.id] = g;
-
-          const raw: RawPlans = { family: {}, byUser: {}, familyItems: {}, userItems: {} };
-          for (const p of plans) {
-            if (!p.ownerId) raw.family[p.month] = { month: p.month, incomeOverride: p.incomeOverride, limitOverrides: p.limitOverrides, version: p.version } satisfies MonthPlan;
-            else (raw.byUser[p.ownerId] ??= {})[p.month] = { month: p.month, limitOverrides: p.limitOverrides, version: p.version } satisfies MyMonthPlan;
-          }
-          for (const r of items) {
-            const it = toPlanItem(r);
-            if (!r.ownerId) (raw.familyItems[r.month] ??= {})[r.id] = it;
-            else ((raw.userItems[r.ownerId] ??= {})[r.month] ??= {})[r.id] = it;
-          }
-          const recurring = { family: {} as Record<string, RecurringPayment>, byUser: byUser(() => ({}) as Record<string, RecurringPayment>) };
-          for (const p of payments) (p.ownerId ? (recurring.byUser[p.ownerId] ??= {}) : recurring.family)[p.id] = p;
-
-          return {
-            settings: settings?.settings ?? null,
-            goals: null,
-            userSettings: Object.fromEntries(userIds.map((u, i) => [u, userSettings[i]])),
-            hashes,
-            savings,
-            plans: raw,
-            recurring,
-          } satisfies RawStore;
+          const userIds = await members(tx, ctx.householdId);
+          if (!userIds.includes(ctx.userId)) throw new Error(`Пользователь «${ctx.userId}» не участник бюджета «${ctx.householdId}»`);
+          return readRaw(tx, ctx, userIds);
         }),
 
       /** Смена базы и перенос старого формата: всё одной транзакцией; версии документов растут на 1, как в Redis */
@@ -660,20 +666,41 @@ export function postgresRepos(db: Db): Repos {
     system: {
       async households() {
         const rows = await db.select({ id: s.memberships.householdId, userId: s.memberships.userId }).from(s.memberships)
+          .innerJoin(s.households, eq(s.households.id, s.memberships.householdId))
+          .where(and(eq(s.memberships.status, "active"), eq(s.households.status, "active")))
           .orderBy(asc(s.memberships.householdId), asc(s.memberships.joinedAt), asc(s.memberships.userId));
         const out = new Map<string, string[]>();
         for (const r of rows) out.set(r.id, [...(out.get(r.id) ?? []), r.userId]);
         return [...out].map(([id, userIds]) => ({ id, userIds }));
       },
       async householdOf(userId) {
-        // ponytail: последний вступивший бюджет; выбор бюджета пользователем — вместе с приглашениями
-        const [row] = await db.select({ id: s.memberships.householdId }).from(s.memberships).where(eq(s.memberships.userId, userId))
-          .orderBy(desc(s.memberships.joinedAt)).limit(1);
+        // Действующее членство одно (уникальный индекс memberships_one_active); архивы — отдельно
+        const [row] = await db.select({ id: s.memberships.householdId }).from(s.memberships)
+          .where(and(eq(s.memberships.userId, userId), eq(s.memberships.status, "active")));
         return row?.id ?? null;
       },
+      async ensureHousehold(userId) {
+        const cur = await repos.system.householdOf(userId);
+        if (cur) return cur;
+        const id = crypto.randomUUID();
+        try {
+          await db.transaction(async (tx) => {
+            await tx.insert(s.households).values({ id, name: "Личный бюджет", kind: "solo" });
+            await tx.insert(s.memberships).values({ householdId: id, userId, role: "owner" });
+          });
+          return id;
+        } catch (e) {
+          // Параллельный запрос успел создать свой: уникальный индекс memberships_one_active — берём его
+          const other = await repos.system.householdOf(userId);
+          if (other) return other;
+          throw e;
+        }
+      },
+      // Архив: без проверки членства — её делает lib/archive.ts (former-членство, срок, дата выхода)
+      familySnapshot: (householdId) => db.transaction((tx) => readRaw(tx, { userId: "", householdId }, [])),
       members: (householdId) =>
         db.select({ id: s.users.id, name: s.users.name }).from(s.memberships).innerJoin(s.users, eq(s.users.id, s.memberships.userId))
-          .where(eq(s.memberships.householdId, householdId)).orderBy(asc(s.memberships.joinedAt), asc(s.memberships.userId)),
+          .where(and(eq(s.memberships.householdId, householdId), eq(s.memberships.status, "active"))).orderBy(asc(s.memberships.joinedAt), asc(s.memberships.userId)),
       tokensOf: async (userId) => tokensById(await db.select().from(s.apiTokens).where(eq(s.apiTokens.userId, userId))),
       touchToken: async (userId, id, rec) =>
         void (await db.update(s.apiTokens).set({ lastUsedAt: rec.lastUsedAt ? new Date(rec.lastUsedAt) : null })

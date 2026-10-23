@@ -49,7 +49,7 @@ function PlanHatch({ id = "plan-hatch" }: { id?: string }) {
 }
 
 export function ChartView() {
-  const { data, setMonth } = useTracker();
+  const { data, setMonth, isSolo } = useTracker();
   const router = useRouter();
   const [range, setRange] = useState(6);
   const [on, setOn] = useState<Record<Layer, boolean>>({ expense: true, income: true, cumulative: false });
@@ -63,8 +63,10 @@ export function ChartView() {
 
   const keys: string[] = [];
   for (let i = 0, k = curMonthKey(); i < range; i++, k = shiftMonth(k, -1)) keys.unshift(k);
-  // Личное — двумя сегментами по людям: у меня из моих записей, у партнёра — только сумма за месяц
-  const people = [data.me, data.partner].sort((a, b) => a.id.localeCompare(b.id));
+  // Личное — двумя сегментами по людям: у меня из моих записей, у партнёра — только сумма за месяц.
+  // В solo категории — мои личные, сегментов по людям нет
+  const people = isSolo || !data.partner ? [] : [data.me, data.partner].sort((a, b) => a.id.localeCompare(b.id));
+  const cats = isSolo ? data.mySettings.personalCategories : st.familyCategories;
   const personalId = (userId: string) => `personal:${userId}`;
   // Траты по плану — отдельным сегментом «План», в категориях и личном только обычные
   const perMonth = keys.map((k) => {
@@ -74,9 +76,9 @@ export function ChartView() {
     const partnerPlanned = Object.values(data.partnerPlannedDaily[k] ?? {}).reduce((a, v) => a + v, 0);
     const partnerRecurring = Object.values(data.partnerRecurringDaily?.[k] ?? {}).reduce((a, v) => a + v, 0);
     return {
-      ...spentByCat(regular(data.familyExpenses[k])),
-      [personalId(data.me.id)]: regular(data.myExpenses[k]).reduce((a, e) => a + e.base, 0),
-      [personalId(data.partner.id)]: (data.partnerPersonalTotals[k] ?? 0) - partnerPlanned - partnerRecurring,
+      ...spentByCat(regular(isSolo ? data.myExpenses[k] : data.familyExpenses[k])),
+      ...(!isSolo && { [personalId(data.me.id)]: regular(data.myExpenses[k]).reduce((a, e) => a + e.base, 0) }),
+      ...(data.partner && { [personalId(data.partner.id)]: (data.partnerPersonalTotals[k] ?? 0) - partnerPlanned - partnerRecurring }),
       [RECURRING]: monthRecurringPaid(data, k),
       [PLAN]: monthPlanned(data, k),
     } as Record<string, number>;
@@ -87,16 +89,16 @@ export function ChartView() {
     .filter((c) => perMonth.some((d) => d[c.id]));
   const plan = perMonth.some((d) => d[PLAN] > 0) ? [{ id: PLAN, name: "План", limit: 0 }] : [];
   const rec = perMonth.some((d) => d[RECURRING] > 0) ? [{ id: RECURRING, name: "↻ Регулярные", limit: 0 }] : [];
-  const used = [...st.familyCategories.filter((c) => !c.archived || perMonth.some((d) => d[c.id])), ...personal, ...rec, ...plan];
+  const used = [...cats.filter((c) => !c.archived || perMonth.some((d) => d[c.id])), ...personal, ...rec, ...plan];
   const color: Record<string, string> = {};
-  st.familyCategories.forEach((c, i) => (color[c.id] = catColor(i)));
+  cats.forEach((c, i) => (color[c.id] = catColor(i)));
   // Цветов категорий 8 и они у семейных; личное — нейтральными токенами, порядок по id одинаков у обоих
   // var(--muted) занят регулярными — личные сегменты темнее
   people.forEach((u, i) => (color[personalId(u.id)] = i === 0 ? "var(--dim)" : "var(--line)"));
   color[RECURRING] = "var(--muted)";
   color[PLAN] = "url(#plan-hatch)";
   // Сумма лимитов каждого месяца — как действовала тогда, с поправками плана на месяц; на графике ступеньками
-  const limits = keys.map((k) => limitsSum(st.familyCategories, k, data.plans[k]?.familyOverrides));
+  const limits = keys.map((k) => limitsSum(cats, k, isSolo ? data.plans[k]?.myOverrides : data.plans[k]?.familyOverrides));
   const limitSum = limits[limits.length - 1];
 
   // Левая ось: расходы, лимиты и доходы включённых слоёв

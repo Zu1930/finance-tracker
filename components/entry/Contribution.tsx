@@ -5,10 +5,11 @@ import { fmt } from '@/lib/utils'
 
 /** «ВЛАД 18 400 · МАША 12 800» — суммы по авторам */
 export function Contribution({ sums, sign = '' }: { sums: Record<string, number>; sign?: string }) {
-	const { data } = useTracker()
+	const { data, isSolo } = useTracker()
+	if (isSolo || !data.partner) return null
 	return (
 		<span className="text-muted uppercase">
-			{[data.me, data.partner].map((u, i) => (
+			{[data.me, data.partner!].map((u, i) => (
 				<span key={u.id}>
 					{i > 0 && ' · '}
 					{u.name} {sign}

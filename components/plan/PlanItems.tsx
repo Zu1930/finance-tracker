@@ -38,7 +38,7 @@ export function PlanItems({ month, withStatus, form = true }: { month: string; w
 }
 
 function ItemRow({ it, linked, cat, withStatus }: { it: PlanItem; linked: number; cat: string; withStatus: boolean }) {
-	const { api, toast } = useTracker()
+	const { api, toast, scopeTag } = useTracker()
 	const status = itemStatus(it, linked)
 	const next = shiftMonth(it.month, 1)
 	const canMove = linked === 0 && it.expenseIds.length === 0 && monthsAhead(curMonthKey(), next) <= MAX_AHEAD
@@ -70,11 +70,11 @@ function ItemRow({ it, linked, cat, withStatus }: { it: PlanItem; linked: number
 				<b>{termName(it.name)}</b>
 				<span className="text-muted max-sm:hidden"> // {cat}</span>
 			</span>
-			<span className="text-muted max-sm:hidden">[{it.scope === 'family' ? 'СЕМ' : 'ЛИЧН'}]</span>
+			<span className="text-muted max-sm:hidden">{scopeTag(it.scope) && `[${scopeTag(it.scope)}]`}</span>
 			<b className="text-right">
 				{withStatus && status === 'partial' ? `${fmt(linked)} из ${fmt(it.amount)}` : minus(it.amount)}
 			</b>
-			<span className="truncate text-xs text-muted sm:hidden">{cat} · {it.scope === 'family' ? 'СЕМ' : 'ЛИЧН'}</span>
+			<span className="truncate text-xs text-muted sm:hidden">{cat}{scopeTag(it.scope) && ` · ${scopeTag(it.scope)}`}</span>
 			<span className="flex items-center justify-end gap-2 sm:contents">
 				{canMove && (
 					<button className="tb" aria-label={`Перенести ${it.name} на следующий месяц`} onClick={() => void move()}>
@@ -88,11 +88,12 @@ function ItemRow({ it, linked, cat, withStatus }: { it: PlanItem; linked: number
 }
 
 function NewItem({ month }: { month: string }) {
-	const { data, api, toast } = useTracker()
+	const { data, isSolo, api, toast } = useTracker()
 	const st = data.settings!
 	const [name, setName] = useState('')
 	const [sum, setSum] = useState('')
-	const [scope, setScope] = useState<Scope>('family')
+	const [picked, setScope] = useState<Scope>('family')
+	const scope: Scope = isSolo ? 'personal' : picked
 	const [catId, setCatId] = useState<string | null>(null)
 	const cats = (scope === 'personal' ? data.mySettings.personalCategories : st.familyCategories).filter((c) => aliveIn(c, month))
 
@@ -121,13 +122,15 @@ function NewItem({ month }: { month: string }) {
 					<input id="item-sum" className="tfield flex-1 text-right" inputMode="decimal" placeholder={st.base} value={sum}
 						onChange={(e) => setSum(amountChars(e.target.value))} onKeyDown={onEnter} />
 				</div>
-				<div className="tgroup max-sm:w-full" role="group" aria-label="Чья покупка">
-					{(['family', 'personal'] as const).map((s) => (
-						<button key={s} className="tb" aria-pressed={scope === s} onClick={() => { setScope(s); setCatId(null) }}>
-							{s === 'family' ? 'Семья' : 'Личное'}
-						</button>
-					))}
-				</div>
+				{!isSolo && (
+					<div className="tgroup max-sm:w-full" role="group" aria-label="Чья покупка">
+						{(['family', 'personal'] as const).map((s) => (
+							<button key={s} className="tb" aria-pressed={scope === s} onClick={() => { setScope(s); setCatId(null) }}>
+								{s === 'family' ? 'Семья' : 'Личное'}
+							</button>
+						))}
+					</div>
+				)}
 			</div>
 			<div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Категория покупки">
 				{cats.map((c) => (

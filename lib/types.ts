@@ -245,7 +245,17 @@ export type MonthKey = string;
 /** Ответ GET /api/data: только то, что видно текущему пользователю */
 export type TrackerData = {
   me: User;
-  partner: User;
+  /** Админ закрытой беты (ADMIN_USER_IDS): в настройках раздел кодов регистрации */
+  admin?: true;
+  /** Бюджет одного человека: партнёра нет, весь интерфейс без семейных частей (isSolo в TrackerProvider) */
+  solo?: true;
+  /** Архив бывшей семьи: только чтение, данные до даты выхода (lib/archive.ts) */
+  readonly?: { householdId: string; name: string; until: string; leftAt: string };
+  /** Имена авторов записей, если их больше, чем я и партнёр (архив, семья из 3+) */
+  names?: Record<string, string>;
+  /** Бывшая семья распущена, а разбор семейного имущества не пройден */
+  pendingReview?: { householdId: string; name: string };
+  partner: User | null;
   settings: Settings | null;
   mySettings: UserSettings;
   savings: SavingsView;

@@ -13,7 +13,7 @@ const TONE = { paid: 'text-muted', overdue: 'text-warn', upcoming: 'text-ink' } 
 
 /** :: РЕГУЛЯРНЫЕ месяца. future — будущий месяц: оплаты нет, статус [ ] */
 export function RecurringSection({ month, future }: { month: string; future: boolean }) {
-	const { data } = useTracker()
+	const { data, scopeTag } = useTracker()
 	const st = data.settings!
 	const { rows, skipped, catName, pay, skip, pause, all } = useRecurring(month)
 	const [menu, setMenu] = useState<string | null>(null)
@@ -50,12 +50,12 @@ export function RecurringSection({ month, future }: { month: string; future: boo
 					<span className={isPaid ? 'text-muted' : ''}>{termName(r.name)}</span>
 					<span className="text-muted max-sm:hidden"> // {catName(p)}</span>
 				</span>
-				<span className="text-muted max-sm:hidden">[{p.scope === 'family' ? 'СЕМ' : 'ЛИЧН'}]</span>
+				<span className="text-muted max-sm:hidden">{scopeTag(p.scope) && `[${scopeTag(p.scope)}]`}</span>
 				<span className="text-right">
 					<b className={isPaid ? 'font-normal text-muted' : ''}>{shown}</b>
 					{inBase && <span className="text-muted">{inBase}</span>}
 				</span>
-				<span className="truncate text-xs text-muted sm:hidden">{r.dueDate.slice(8)} · {catName(p)} · {p.scope === 'family' ? 'СЕМ' : 'ЛИЧН'}</span>
+				<span className="truncate text-xs text-muted sm:hidden">{r.dueDate.slice(8)} · {catName(p)}{scopeTag(p.scope) && ` · ${scopeTag(p.scope)}`}</span>
 				<span className="flex items-center justify-end gap-2 has-[input]:col-span-full sm:contents">
 					<span className="has-[input]:flex-1 sm:text-right">
 						{isPaid ? <span className="text-muted2">Записано</span> : future ? null : <PayControl row={r} pay={(a) => pay(p, month, a)} />}

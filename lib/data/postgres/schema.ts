@@ -104,17 +104,81 @@ export const households = pgTable("households", {
   schemaVersion: integer("schema_version"),
   version: integer("version").notNull().default(0),
   createdAt: moment("created_at").notNull().defaultNow(),
+  /** solo — бюджет одного человека (всё личное), family — семья */
+  kind: text("kind", { enum: ["solo", "family"] }).notNull().default("family"),
+  /** archived — семья распущена: только чтение до purge_at, потом удаляется */
+  status: text("status", { enum: ["active", "archived"] }).notNull().default("active"),
+  archivedAt: moment("archived_at"),
+  purgeAt: moment("purge_at"),
 });
 
 export const memberships = pgTable(
   "memberships",
   {
-    householdId: text("household_id").notNull().references(() => households.id),
+    householdId: text("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
     userId: text("user_id").notNull().references(() => users.id),
     role: text("role", { enum: ["owner", "member"] }).notNull(),
     joinedAt: moment("joined_at").notNull().defaultNow(),
+    /** former — вышел: архив только для чтения до readonly_until и только данные до left_at */
+    status: text("status", { enum: ["active", "former"] }).notNull().default("active"),
+    leftAt: moment("left_at"),
+    readonlyUntil: moment("readonly_until"),
+    /** Разбор семейного имущества после выхода пройден или пропущен — экран больше не показывается сам */
+    reviewedAt: moment("reviewed_at"),
+    /** Попросил восстановить распущенную семью; восстановление — когда попросили все */
+    restoreRequestedAt: moment("restore_requested_at"),
   },
-  (t) => [primaryKey({ columns: [t.householdId, t.userId] }), index("memberships_user").on(t.userId)],
+  (t) => [
+    primaryKey({ columns: [t.householdId, t.userId] }),
+    index("memberships_user").on(t.userId),
+    // У пользователя ровно один действующий бюджет
+    uniqueIndex("memberships_one_active").on(t.userId).where(sql`${t.status} = 'active'`),
+  ],
+);
+
+/** Приглашение в бюджет по ссылке /join/<код>: одноразовое, 7 дней. Хранится только хеш кода */
+export const householdInvites = pgTable(
+  "household_invites",
+  {
+    id: text("id").primaryKey(),
+    householdId: text("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
+    codeHash: text("code_hash").notNull().unique(),
+    createdBy: text("created_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+    createdAt: moment("created_at").notNull().defaultNow(),
+    expiresAt: moment("expires_at").notNull(),
+    usedBy: text("used_by").references(() => users.id, { onDelete: "set null" }),
+    usedAt: moment("used_at"),
+    revokedAt: moment("revoked_at"),
+  },
+  (t) => [index("household_invites_household").on(t.householdId)],
+);
+
+/** Коды закрытой регистрации: создаёт админ (ADMIN_USER_IDS), хранится только хеш */
+export const signupCodes = pgTable("signup_codes", {
+  id: text("id").primaryKey(),
+  codeHash: text("code_hash").notNull().unique(),
+  createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: moment("created_at").notNull().defaultNow(),
+  usesTotal: integer("uses_total").notNull(),
+  usesLeft: integer("uses_left").notNull(),
+  expiresAt: moment("expires_at").notNull(),
+  revokedAt: moment("revoked_at"),
+}, (t) => [check("signup_codes_uses", sql`${t.usesLeft} >= 0 AND ${t.usesLeft} <= ${t.usesTotal}`)]);
+
+/** Разбор семейного имущества после выхода: кто забрал счёт или продолжил платить платёж — один на запись */
+export const claims = pgTable(
+  "claims",
+  {
+    householdId: text("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
+    entity: text("entity", { enum: ["account", "recurring"] }).notNull(),
+    entityId: text("entity_id").notNull(),
+    claimedBy: text("claimed_by").references(() => users.id, { onDelete: "set null" }),
+    claimedAt: moment("claimed_at").notNull().defaultNow(),
+    /** Копия у забравшего: её id и версия при копировании — восстановление удалит копию, если она не менялась */
+    copyId: text("copy_id"),
+    copyVersion: integer("copy_version"),
+  },
+  (t) => [primaryKey({ columns: [t.householdId, t.entity, t.entityId] })],
 );
 
 /** Личные настройки участника бюджета (без личных категорий — они в categories) */
@@ -134,7 +198,7 @@ export const userSettings = pgTable(
 export const categories = pgTable(
   "categories",
   {
-    householdId: text("household_id").notNull().references(() => households.id),
+    householdId: text("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
     id: text("id").notNull(),
     scope: scope(),
     ownerId: text("owner_id"),
@@ -157,7 +221,7 @@ export const categories = pgTable(
 export const incomeSources = pgTable(
   "income_sources",
   {
-    householdId: text("household_id").notNull().references(() => households.id),
+    householdId: text("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
     id: text("id").notNull(),
     name: text("name").notNull(),
     sort: integer("sort").notNull(),
@@ -168,7 +232,7 @@ export const incomeSources = pgTable(
 export const recurringPayments = pgTable(
   "recurring_payments",
   {
-    householdId: text("household_id").notNull().references(() => households.id),
+    householdId: text("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
     id: text("id").notNull(),
     name: text("name").notNull(),
     currency: text("currency").notNull(),
@@ -207,7 +271,7 @@ export const recurringAmounts = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.householdId, t.paymentId, t.fromMonth] }),
-    foreignKey({ name: "recurring_amounts_payment", columns: [t.householdId, t.paymentId], foreignColumns: [recurringPayments.householdId, recurringPayments.id] }).onDelete("cascade"),
+    foreignKey({ name: "recurring_amounts_payment", columns: [t.householdId, t.paymentId], foreignColumns: [recurringPayments.householdId, recurringPayments.id] }).onDelete("cascade").onUpdate("cascade"),
   ],
 );
 
@@ -218,7 +282,7 @@ export const recurringAmounts = pgTable(
 export const expenses = pgTable(
   "expenses",
   {
-    householdId: text("household_id").notNull().references(() => households.id),
+    householdId: text("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
     id: text("id").notNull(),
     authorId: text("author_id").notNull(),
     scope: scope(),
@@ -245,14 +309,14 @@ export const expenses = pgTable(
     check("expenses_owner_is_author", sql`${t.ownerId} IS NULL OR ${t.ownerId} = ${t.authorId}`),
     check("expenses_recurring_pair", sql`(${t.recurringId} IS NULL) = (${t.recurringMonth} IS NULL)`),
     foreignKey({ name: "expenses_author", columns: [t.householdId, t.authorId], foreignColumns: [memberships.householdId, memberships.userId] }),
-    foreignKey({ name: "expenses_recurring", columns: [t.householdId, t.recurringId], foreignColumns: [recurringPayments.householdId, recurringPayments.id] }),
+    foreignKey({ name: "expenses_recurring", columns: [t.householdId, t.recurringId], foreignColumns: [recurringPayments.householdId, recurringPayments.id] }).onUpdate("cascade"),
   ],
 );
 
 export const incomes = pgTable(
   "incomes",
   {
-    householdId: text("household_id").notNull().references(() => households.id),
+    householdId: text("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
     id: text("id").notNull(),
     authorId: text("author_id").notNull(),
     sourceId: text("source_id").notNull(),
@@ -274,7 +338,7 @@ export const incomes = pgTable(
 export const accounts = pgTable(
   "accounts",
   {
-    householdId: text("household_id").notNull().references(() => households.id),
+    householdId: text("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
     id: text("id").notNull(),
     name: text("name").notNull(),
     currency: text("currency").notNull(),
@@ -298,7 +362,7 @@ export const accounts = pgTable(
 export const goals = pgTable(
   "goals",
   {
-    householdId: text("household_id").notNull().references(() => households.id),
+    householdId: text("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
     id: text("id").notNull(),
     name: text("name").notNull(),
     target: money("target").notNull(),
@@ -331,7 +395,7 @@ export const goalOps = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.householdId, t.goalId, t.id] }),
-    foreignKey({ name: "goal_ops_goal", columns: [t.householdId, t.goalId], foreignColumns: [goals.householdId, goals.id] }).onDelete("cascade"),
+    foreignKey({ name: "goal_ops_goal", columns: [t.householdId, t.goalId], foreignColumns: [goals.householdId, goals.id] }).onDelete("cascade").onUpdate("cascade"),
   ],
 );
 
@@ -339,7 +403,7 @@ export const goalOps = pgTable(
 export const recons = pgTable(
   "recons",
   {
-    householdId: text("household_id").notNull().references(() => households.id),
+    householdId: text("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
     id: text("id").notNull(),
     at: moment("at").notNull(),
     day: day("day").notNull(),
@@ -355,7 +419,7 @@ export const recons = pgTable(
 export const monthPlans = pgTable(
   "month_plans",
   {
-    householdId: text("household_id").notNull().references(() => households.id),
+    householdId: text("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
     month: month("month").notNull(),
     ownerId: text("owner_id"),
     incomeOverride: money("income_override"),
@@ -372,7 +436,7 @@ export const monthPlans = pgTable(
 export const planItems = pgTable(
   "plan_items",
   {
-    householdId: text("household_id").notNull().references(() => households.id),
+    householdId: text("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
     id: text("id").notNull(),
     month: month("month").notNull(),
     name: text("name").notNull(),
@@ -434,7 +498,7 @@ export const pushSubscriptions = pgTable(
 export const deletedEntries = pgTable(
   "deleted_entries",
   {
-    householdId: text("household_id").notNull().references(() => households.id),
+    householdId: text("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
     id: text("id").notNull(),
     kind: text("kind", { enum: ["expense", "income"] }).notNull(),
     ownerId: text("owner_id"),

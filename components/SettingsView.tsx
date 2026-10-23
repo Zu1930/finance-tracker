@@ -8,12 +8,17 @@ import { BaseCurrency } from './settings/BaseCurrency'
 import { MyCurrency } from './settings/MyCurrency'
 import { ThemeSwitch } from './settings/ThemeSwitch'
 import { Account } from './settings/Account'
+import { Beta } from './settings/Beta'
+import { Family } from './settings/Family'
+import { Archive } from './settings/Archive'
+import { useTracker } from './TrackerProvider'
 import { Notifications } from './settings/Notifications'
 import { QuickEntrySwitch, QuickTokens } from './settings/QuickTokens'
 
 /** Настройки: валюты, основная валюта, оформление, данные, аккаунт */
 export function SettingsView() {
 	const router = useRouter()
+	const { data } = useTracker()
 	// Назад — туда, откуда пришли; если страницу открыли напрямую, истории нет — на ввод
 	const back = () => (window.history.length > 1 ? router.back() : router.push('/'))
 
@@ -28,6 +33,9 @@ export function SettingsView() {
 					← Назад
 				</button>
 			</div>
+			<Section title="Семья">
+				<Family />
+			</Section>
 			<Section title="Валюты">
 				<Currencies />
 			</Section>
@@ -53,6 +61,14 @@ export function SettingsView() {
 				<div className="tgroup">
 					<ExportButton />
 				</div>
+			</Section>
+			{data.admin && (
+				<Section title="Бета">
+					<Beta />
+				</Section>
+			)}
+			<Section title="Архив">
+				<Archive />
 			</Section>
 			<Section title="Аккаунт">
 				<Account />

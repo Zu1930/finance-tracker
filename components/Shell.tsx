@@ -52,7 +52,7 @@ function MetricsBar({ data }: { data: TrackerData }) {
 			{/* Мобильный: два числа крупно, ниже одна строка — месяц, темп и валюта один раз */}
 			<div className="border-y border-dashed border-line py-3 uppercase sm:hidden">
 				<dl className="grid grid-cols-2 gap-x-4">
-					{[['Остаток · семья', family], ['Остаток · моё', mine]].map(([label, n]) => (
+					{(data.solo ? [['Остаток', mine]] : [['Остаток · семья', family], ['Остаток · моё', mine]]).map(([label, n]) => (
 						<div key={label as string} className="min-w-0">
 							<dt className="text-xs text-muted">{label}</dt>
 							<dd className={`text-xl font-bold whitespace-nowrap ${(n as number) < 0 ? 'text-bad' : ''}`}>{fmt(n as number)}</dd>
@@ -66,7 +66,7 @@ function MetricsBar({ data }: { data: TrackerData }) {
 			</div>
 			<div className="hidden flex-wrap justify-between gap-x-6 gap-y-1 border-y border-dashed border-line py-3 text-muted uppercase sm:flex">
 				<span>
-					[ Остаток: семья {val(family)} // моё {val(mine)} ]
+					{data.solo ? <>[ Остаток: {val(mine)} ]</> : <>[ Остаток: семья {val(family)} // моё {val(mine)} ]</>}
 				</span>
 				<span>
 					[ ТЕМП:{' '}
@@ -93,6 +93,11 @@ export function Shell({ children }: { children: ReactNode }) {
 	const { status, data, reload, toastState, dismissToast, offline, queued } = useTracker()
 	useDailyRates()
 	const router = useRouter()
+	// Семья распущена, разбор ещё не пройден — экран «Общий бюджет больше не активен» (его можно пропустить)
+	const review = data.pendingReview?.householdId
+	useEffect(() => {
+		if (review && !data.readonly) router.replace(`/review/${review}`)
+	}, [review, data.readonly, router])
 
 	// Ctrl + , (⌘ + , на macOS) — настройки. В полях ввода не перехватываем
 	useEffect(() => {
@@ -114,8 +119,7 @@ export function Shell({ children }: { children: ReactNode }) {
 		body = (
 			<div className="py-8">
 				<p className="mb-4 text-bad">
-					!! НЕ УДАЛОСЬ ЗАГРУЗИТЬ ДАННЫЕ. ПРОВЕРЬТЕ ПОДКЛЮЧЕНИЕ К UPSTASH REDIS
-					В НАСТРОЙКАХ VERCEL
+					!! НЕ УДАЛОСЬ ЗАГРУЗИТЬ ДАННЫЕ. ПРОВЕРЬТЕ СВЯЗЬ И ПОВТОРИТЕ
 				</p>
 				<button
 					className="tb"
@@ -128,8 +132,12 @@ export function Shell({ children }: { children: ReactNode }) {
 	else if (!data.settings) body = <Setup />
 	else body = children
 
+	// Архив: свои вкладки внутри /archive/<id>, только чтение
+	const ro = data.readonly
+	const base = ro ? `/archive/${ro.householdId}` : ''
+	const shown = ro ? [{ href: base, label: 'Лимиты' }, { href: `${base}/chart`, label: 'График' }, { href: `${base}/logs`, label: 'Логи' }, { href: '/settings', label: '← Выход' }] : TABS
 	const tabs = (mobile: boolean) =>
-		TABS.map((t) => (
+		shown.map((t) => (
 			<Link
 				key={t.href}
 				href={t.href}
@@ -150,6 +158,11 @@ export function Shell({ children }: { children: ReactNode }) {
 						<div className="lbl hidden sm:block">
 							SPEND.LOG // BASE: <b className="text-ink">{data.settings?.base ?? '—'}</b>
 						</div>
+						{ro && (
+							<p className="text-warn uppercase">
+								// Архив, только чтение · данные до {new Date(ro.leftAt).toLocaleDateString('ru-RU')} · доступен до {new Date(ro.until).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}
+							</p>
+						)}
 					</div>
 					<nav className="hidden flex-wrap gap-2 sm:flex" aria-label="Разделы">
 						{tabs(false)}
@@ -168,7 +181,7 @@ export function Shell({ children }: { children: ReactNode }) {
 						</Link>
 					</div>
 				</header>
-				{status === 'ready' && data.settings ? (
+				{status === 'ready' && data.settings && !ro ? (
 					<MetricsBar data={data} />
 				) : (
 					<hr className="dash" />

@@ -8,13 +8,14 @@ import { curMonthKey, fmt, monthTitle } from '@/lib/utils'
 
 /** Доход месяца по людям и сравнительные показатели семьи */
 export function IncomeBalance() {
-	const { data } = useTracker()
+	const { data, isSolo } = useTracker()
 	const st = data.settings!
 	const month = curMonthKey()
 	const sums = byAuthor(data.incomes[month] ?? [])
-	const people = [data.me, data.partner].map((u) => ({ ...u, sum: sums[u.id] ?? 0 }))
-	const top = Math.max(...people.map((p) => p.sum))
-	const total = people.reduce((a, p) => a + p.sum, 0)
+	// В solo разбивки по людям нет — только «Всего»
+	const people = (isSolo || !data.partner ? [] : [data.me, data.partner]).map((u) => ({ ...u, sum: sums[u.id] ?? 0 }))
+	const top = Math.max(0, ...people.map((p) => p.sum))
+	const total = Object.values(sums).reduce((a, v) => a + v, 0)
 
 	return (
 		<section className="mt-6 border-t border-dashed border-line pt-6" aria-live="polite">

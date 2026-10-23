@@ -14,7 +14,7 @@ const BAR = 48
 
 /** :: ПЛАН — доход, лимиты, покупки, остаток и шкала распределения дохода */
 export function PlanSummary({ month }: { month: string }) {
-	const { data, toast } = useTracker()
+	const { data, toast, isSolo } = useTracker()
 	const st = data.settings!
 	const { plan, items, savePlan } = usePlan(month)
 	const narrow = useNarrow()
@@ -77,11 +77,11 @@ export function PlanSummary({ month }: { month: string }) {
 				</dd>
 								{[
 					{ mark: <span aria-hidden="true">↻ </span>, label: 'Регулярные', value: <b>{minus(s.recurring.total)}</b>,
-						note: `Семья ${fmt(s.recurring.family)} · Личное ${fmt(s.recurring.mine + s.recurring.partner)}${income ? ` · ${Math.round((s.recurring.total / income) * 100)}% дохода` : ''}` },
+						note: `${isSolo ? '' : `Семья ${fmt(s.recurring.family)} · Личное ${fmt(s.recurring.mine + s.recurring.partner)}`}${income ? `${isSolo ? '' : ' · '}${Math.round((s.recurring.total / income) * 100)}% дохода` : ''}` },
 					{ mark: <span aria-hidden="true">█ </span>, label: 'Лимиты', value: <b>{minus(s.limits.total)}</b>,
-						note: `Только переменные траты · семья ${fmt(s.limits.family)} · личное ${fmt(s.limits.mine + s.limits.partner)}` },
+						note: `Только переменные траты${isSolo ? '' : ` · семья ${fmt(s.limits.family)} · личное ${fmt(s.limits.mine + s.limits.partner)}`}` },
 					{ mark: <span aria-hidden="true" className="text-muted">▓ </span>, label: 'Покупки', value: <b>{minus(s.planned.total)}</b>,
-						note: `${s.planned.count} шт.${s.planned.partner > 0 ? ` · вкл. ${data.partner.name} ${fmt(s.planned.partner)}` : ''}` },
+						note: `${s.planned.count} шт.${s.planned.partner > 0 && data.partner ? ` · вкл. ${data.partner.name} ${fmt(s.planned.partner)}` : ''}` },
 					{ mark: <span aria-hidden="true" className="text-dim">░ </span>, label: 'Останется',
 						value: <b className={s.short ? 'text-bad' : ''}>{s.rest === null ? '—' : signed(s.rest)}</b>,
 						note: s.rest === null ? 'Нужен доход' : `В сбережения · ${pct}% дохода` },
@@ -112,10 +112,10 @@ export function PlanSummary({ month }: { month: string }) {
 
 /** :: ЛИМИТЫ // НОЯБРЬ — поправки только на этот месяц */
 export function PlanLimits({ month }: { month: string }) {
-	const { data } = useTracker()
+	const { data, isSolo, scopeTag } = useTracker()
 	const { plan, savePlan, saveMyPlan } = usePlan(month)
 	const rows: { c: Category; scope: 'family' | 'personal' }[] = [
-		...data.settings!.familyCategories.filter((c) => aliveIn(c, month)).map((c) => ({ c, scope: 'family' as const })),
+		...(isSolo ? [] : data.settings!.familyCategories).filter((c) => aliveIn(c, month)).map((c) => ({ c, scope: 'family' as const })),
 		...data.mySettings.personalCategories.filter((c) => aliveIn(c, month)).map((c) => ({ c, scope: 'personal' as const }))
 	]
 	const name = monthName(month)
@@ -136,9 +136,9 @@ export function PlanLimits({ month }: { month: string }) {
 						<li key={c.id} className="grid grid-cols-[minmax(0,1fr)_12ch_9ch] items-center gap-x-4 border-b border-dashed border-line2 py-1 uppercase sm:grid-cols-[minmax(0,1fr)_7ch_12ch_12ch_9ch]">
 							<span className="truncate max-sm:col-span-3 max-sm:pt-1">
 								{termName(c.name)}
-								<span className="text-muted sm:hidden"> [{scope === 'family' ? 'СЕМ' : 'ЛИЧН'}]</span>
+								<span className="text-muted sm:hidden"> {scopeTag(scope) && `[${scopeTag(scope)}]`}</span>
 							</span>
-							<span className="text-muted max-sm:hidden">[{scope === 'family' ? 'СЕМ' : 'ЛИЧН'}]</span>
+							<span className="text-muted max-sm:hidden">{scopeTag(scope) && `[${scopeTag(scope)}]`}</span>
 							<span className="text-muted sm:text-right">{fmt(usual)}</span>
 							<CommitInput className="tfield w-full text-right" inputMode="decimal" sanitize={amountChars}
 								aria-label={`Лимит на ${name}, ${c.name}`} value={String(cur)}

@@ -31,11 +31,12 @@ import type { ParsedEntry } from '@/lib/quick-entry/parse'
  * Семейные траты — общие лимиты, личные — свои категории, видит только автор
  */
 export function EntryPage() {
-	const { data, addEntry, removeEntry, toast } = useTracker()
+	const { data, isSolo, addEntry, removeEntry, toast } = useTracker()
 	const st = data.settings!
 	const params = useSearchParams()
 	const mode: EntryMode = params.get('mode') === 'income' ? 'income' : 'expense'
-	const scope: Scope = params.get('scope') === 'personal' ? 'personal' : 'family'
+	// В solo всё личное: переключателя нет, scope всегда personal
+	const scope: Scope = isSolo || params.get('scope') === 'personal' ? 'personal' : 'family'
 	const rootRef = useRef<HTMLDivElement>(null)
 
 	// Порядок категорий = последние использованные первыми; от него зависят номера и Alt + 1..9
@@ -173,10 +174,10 @@ export function EntryPage() {
 	return (
 		<>
 						<DueBlock />
-			{mode === 'expense' && !data.mySettings.hideQuickEntry && <QuickEntry familyCats={familyCats} personalCats={personalCats} onEdit={editParsed} />}
+			{mode === 'expense' && !data.mySettings.hideQuickEntry && <QuickEntry familyCats={isSolo ? [] : familyCats} personalCats={personalCats} onEdit={editParsed} />}
 			<div ref={rootRef}>
 				<h1 className="sr-only">
-					{mode === 'income' ? 'Новый доход' : scope === 'personal' ? 'Новый личный расход' : 'Новый семейный расход'}
+					{mode === 'income' ? 'Новый доход' : isSolo ? 'Новый расход' : scope === 'personal' ? 'Новый личный расход' : 'Новый семейный расход'}
 				</h1>
 				<div className="flex flex-wrap items-center gap-x-6 gap-y-2">
 					<div className="grid grid-cols-2 max-sm:w-full sm:flex" role="group" aria-label="Тип записи">
@@ -186,7 +187,7 @@ export function EntryPage() {
 							</button>
 						))}
 					</div>
-					{mode === 'expense' && (
+					{mode === 'expense' && !isSolo && (
 						<div className="grid grid-cols-2 max-sm:w-full sm:flex" role="group" aria-label="Чей расход">
 							{(['family', 'personal'] as const).map((sc) => (
 								<button key={sc} className={seg} aria-pressed={scope === sc} onClick={() => go('expense', sc, true)}>
@@ -195,7 +196,7 @@ export function EntryPage() {
 							))}
 						</div>
 					)}
-					<p className="hidden text-muted2 uppercase sm:ml-auto sm:block touch:hidden">Alt + {mode === 'expense' ? '← → ↑ ↓' : '← →'}</p>
+					<p className="hidden text-muted2 uppercase sm:ml-auto sm:block touch:hidden">Alt + {mode === 'expense' && !isSolo ? '← → ↑ ↓' : '← →'}</p>
 				</div>
 				<EntryForm
 					mode={mode}
@@ -224,7 +225,7 @@ export function EntryPage() {
 					empty={
 						scope === 'personal' && (
 							<p className="text-muted uppercase">
-								Нет личных категорий →{' '}
+								Нет {isSolo ? '' : 'личных '}категорий →{' '}
 								<Link href="/limits" className="tb">Создать</Link>
 							</p>
 						)

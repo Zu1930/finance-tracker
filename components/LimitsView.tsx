@@ -63,7 +63,7 @@ export function LimitsView() {
 
 /** Текущий и прошлые месяцы: итог, покупки по плану, шкалы категорий (без плановых трат, кроме превышения) */
 function MonthLimits() {
-  const { data, month, setSettings, setMySettings } = useTracker();
+  const { data, isSolo, month, setSettings, setMySettings } = useTracker();
   const st = data.settings!;
   const cur = curMonthKey();
   const { plan, items, savePlan, saveMyPlan } = usePlan(month);
@@ -92,7 +92,7 @@ function MonthLimits() {
 
   return (
     <>
-      {month === cur && <CarryOver />}
+      {month === cur && !data.readonly && <CarryOver />}
       <section className="mt-6 border-t border-dashed border-line pt-5">
         <h2 className="sec">Итог</h2>
         <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 uppercase sm:grid-cols-[12ch_minmax(0,1fr)] sm:gap-y-1">
@@ -105,7 +105,7 @@ function MonthLimits() {
           <dt className="text-muted">Расход</dt>
           <dd className="max-sm:text-right">
             <b>{minus(expense)} {st.base}</b>
-            <span className="text-muted max-sm:block max-sm:text-xs"><span className="max-sm:hidden"> // </span>семья {fmt(familyTotal)} · личное {fmt(personalTotal)}</span>
+            {!isSolo && !data.readonly && <span className="text-muted max-sm:block max-sm:text-xs"><span className="max-sm:hidden"> // </span>семья {fmt(familyTotal)} · личное {fmt(personalTotal)}</span>}
           </dd>
           <dt className="text-muted">Остаток</dt>
           <dd className="max-sm:text-right">
@@ -116,18 +116,21 @@ function MonthLimits() {
         </dl>
       </section>
 
-      {month === cur && <PlanSummary month={month} />}
+      {month === cur && !data.readonly && <PlanSummary month={month} />}
       <RecurringSection month={month} future={false} />
       {items.length > 0 && <PlanItems month={month} withStatus form={false} />}
 
-      <section className="mt-6 border-t border-dashed border-line pt-5">
-        <h2 className="sec">Семья</h2>
-        <LimitBlocks cats={familyCats} spent={familySpent} contribution={family} planned={plan.items.family} recurring={recurringByCat.family} />
-      </section>
+      {!isSolo && (
+        <section className="mt-6 border-t border-dashed border-line pt-5">
+          <h2 className="sec">Семья</h2>
+          <LimitBlocks cats={familyCats} spent={familySpent} contribution={family} planned={plan.items.family} recurring={recurringByCat.family} />
+        </section>
+      )}
 
+      {/* В solo — единственный список: заголовок «Лимиты» вместо «Семья» / «Личное» */}
       <section className="mt-6 border-t border-dashed border-line pt-5">
         <h2 className="sec">
-          Личное // <span className={myLeft < 0 ? "text-bad" : ""}>осталось {fmt(myLeft)}</span>
+          {isSolo ? "Лимиты" : "Личное"} // <span className={myLeft < 0 ? "text-bad" : ""}>осталось {fmt(myLeft)}</span>
         </h2>
         {myCats.length === 0 ? (
           <p className="mt-3 text-muted uppercase">Нет категорий — добавьте ниже</p>
@@ -136,6 +139,7 @@ function MonthLimits() {
         )}
       </section>
 
+      {!data.readonly && (<>
       <details className="group mt-4 border-t border-dashed border-line">
         <summary className="sec flex min-h-11 cursor-pointer list-none items-center gap-2 py-3 [&::-webkit-details-marker]:hidden">
           Категории и лимиты<span aria-hidden="true" className="group-open:hidden">[+]</span><span aria-hidden="true" className="hidden group-open:inline">[−]</span>
@@ -147,13 +151,17 @@ function MonthLimits() {
               <button className="tb" aria-pressed={onlyMonth} onClick={() => setOnlyMonth(true)}>Только {monthName(cur)}</button>
             </div>
           )}
-          <h3 className="lbl">Семья, {st.base}</h3>
-          <CategoryEditor
-            cats={activeCats(st)}
-            month={perMonth ? { overrides: plan.familyOverrides, save: (o) => void savePlan({ limitOverrides: o }) } : undefined}
-            update={(fn) => setSettings((s) => ({ ...s!, familyCategories: fn(s!.familyCategories) }))}
-          />
-          <h3 className="lbl mt-8">Личное, {st.base}</h3>
+          {!isSolo && (
+            <>
+              <h3 className="lbl">Семья, {st.base}</h3>
+              <CategoryEditor
+                cats={activeCats(st)}
+                month={perMonth ? { overrides: plan.familyOverrides, save: (o) => void savePlan({ limitOverrides: o }) } : undefined}
+                update={(fn) => setSettings((s) => ({ ...s!, familyCategories: fn(s!.familyCategories) }))}
+              />
+            </>
+          )}
+          <h3 className={`lbl ${isSolo ? "" : "mt-8"}`}>{isSolo ? "Категории" : "Личное"}, {st.base}</h3>
           <CategoryEditor
             cats={liveCats(data.mySettings.personalCategories)}
             month={perMonth ? { overrides: plan.myOverrides, save: (o) => void saveMyPlan(o) } : undefined}
@@ -167,6 +175,7 @@ function MonthLimits() {
         </div>
       </details>
       <RecurringManager />
+      </>)}
     </>
   );
 }
