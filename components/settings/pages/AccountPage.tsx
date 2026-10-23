@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useTracker } from '../TrackerProvider'
-import { HoldLogout } from './HoldLogout'
+import { useTracker } from '../../TrackerProvider'
+import { HoldLogout } from '../HoldLogout'
+import { Block } from '../SettingsFrame'
+import { DangerZone, SettingsRow } from '../Kit'
 
 type Session = { token: string; userAgent?: string | null; updatedAt: string; createdAt: string }
 type Me = { user: { email: string; name: string }; session: { token: string } }
@@ -25,13 +27,14 @@ export function device(ua: string | null | undefined): string {
 	return [os, browser].filter(Boolean).join(' · ') || ua.slice(0, 40)
 }
 
-/** Аккаунт: email, имя, смена пароля, активные сессии, выход */
-export function Account() {
+/** Аккаунт: профиль, вход (пароль, сессии, выход), удаление */
+export function AccountPage() {
 	const { toast, offline, reload } = useTracker()
 	const [me, setMe] = useState<Me | null>(null)
 	const [sessions, setSessions] = useState<Session[] | null>(null)
 	const [name, setName] = useState('')
 	const [busy, setBusy] = useState(false)
+	const [pwOpen, setPwOpen] = useState(false)
 
 	const load = async () => {
 		const [s, l] = await Promise.all([
@@ -56,8 +59,11 @@ export function Account() {
 		toast(done)
 		await load()
 	}
+	// Имя сохраняется само: по уходу из поля или Enter, без отдельной кнопки
 	const saveName = async () => {
-		await run('update-user', { name: name.trim() }, 'Имя сохранено')
+		const v = name.trim()
+		if (!me || !v || v === me.user.name || offline) return setName(me?.user.name ?? v)
+		await run('update-user', { name: v }, 'Имя сохранено')
 		await reload(true)
 	}
 
@@ -65,60 +71,63 @@ export function Account() {
 	const others = (sessions ?? []).filter((s) => s.token !== current)
 
 	return (
-		<div className="uppercase">
-			<p>
-				<span className="text-muted">Email:</span> <b className="normal-case">{me?.user.email ?? '…'}</b>
-			</p>
-			<div className="mt-3 flex flex-wrap items-center gap-3">
-				<label htmlFor="acc-name" className="lbl">Имя</label>
-				<input id="acc-name" className="tfield w-[20ch] normal-case max-sm:flex-1" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} />
-				<button className="tb max-sm:h-11 max-sm:w-full" disabled={busy || !!offline || !me || !name.trim() || name.trim() === me.user.name} onClick={() => void saveName()}>
-					Сохранить
-				</button>
-			</div>
+		<>
+			<Block title="Профиль">
+				<SettingsRow end={<b className="normal-case">{me?.user.email ?? '…'}</b>}>
+					<span className="text-muted uppercase">Email</span>
+				</SettingsRow>
+				<SettingsRow end={
+					<input id="acc-name" aria-label="Имя" className="tfield w-[20ch] text-right normal-case" value={name} maxLength={40} disabled={!me}
+						onChange={(e) => setName(e.target.value)} onBlur={() => void saveName()}
+						onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()} />
+				}>
+					<label htmlFor="acc-name" className="text-muted uppercase">Имя</label>
+				</SettingsRow>
+			</Block>
 
-			<ChangePassword />
+			<Block title="Вход">
+				<SettingsRow end={<button className="tb uppercase" disabled={!!offline} aria-expanded={pwOpen} onClick={() => setPwOpen((o) => !o)}>{pwOpen ? 'Свернуть' : 'Сменить'}</button>}>
+					<span className="uppercase">Пароль</span>
+				</SettingsRow>
+				{pwOpen && <ChangePassword onDone={() => setPwOpen(false)} />}
 
-			<h3 className="mt-6 text-muted">Активные сессии</h3>
-			{sessions === null ? (
-				<p className="mt-2 text-muted">…</p>
-			) : (
-				<ul className="mt-2">
-					{sessions.map((s) => (
-						<li key={s.token} className="flex flex-wrap items-center gap-x-4 border-b border-dashed border-line2 py-1">
+				<h3 className="mt-5 text-xs text-muted uppercase">Активные сессии</h3>
+				{sessions === null ? (
+					<p className="mt-2 text-muted">…</p>
+				) : (
+					sessions.map((s) => (
+						<SettingsRow key={s.token} end={
+							s.token === current ? <span className="text-muted uppercase">сейчас</span>
+							: <>
+								<span className="text-xs text-muted">{when(s.updatedAt)}</span>
+								<button className="tb uppercase" disabled={busy || !!offline} onClick={() => void run('revoke-session', { token: s.token }, 'Сессия завершена')}>Завершить</button>
+							</>
+						}>
 							<b className="normal-case">{device(s.userAgent)}</b>
-							<span className="text-muted">Активность {when(s.updatedAt)}</span>
-							{s.token === current ? (
-								<span className="ml-auto text-muted2">// Это устройство</span>
-							) : (
-								<button className="tb ml-auto" disabled={busy || !!offline} onClick={() => void run('revoke-session', { token: s.token }, 'Сессия завершена')}>
-									Завершить
-								</button>
-							)}
-						</li>
-					))}
-				</ul>
-			)}
-			<div className="mt-4 flex flex-wrap gap-3">
-				<button className="tb max-sm:h-12 max-sm:w-full" disabled={busy || !!offline || !others.length} onClick={() => void run('revoke-other-sessions', {}, 'Другие сессии завершены')}>
-					Выйти везде, кроме этого
-				</button>
-				<HoldLogout />
-			</div>
+							{s.token === current && <span className="text-muted"> // это устройство</span>}
+						</SettingsRow>
+					))
+				)}
+				<div className="mt-4 flex flex-wrap gap-3 uppercase">
+					<button className="tb max-sm:h-12 max-sm:w-full" disabled={busy || !!offline || !others.length} onClick={() => void run('revoke-other-sessions', {}, 'Другие сессии завершены')}>
+						Выйти везде, кроме этого
+					</button>
+					<HoldLogout />
+				</div>
+			</Block>
 
-			<div className="mt-6 flex flex-wrap gap-3 border-t border-dashed border-line2 pt-4">
-				<a href="/api/account/export" className="tb max-sm:h-12 max-sm:w-full">Экспорт всех моих данных</a>
-				<Link href="/delete-account" className="tb text-bad max-sm:h-12 max-sm:w-full">Удалить аккаунт</Link>
-				<Link href="/privacy" className="tb max-sm:h-12 max-sm:w-full">Конфиденциальность</Link>
-			</div>
-		</div>
+			<DangerZone title="Удаление аккаунта" action="Удалить аккаунт…" href="/delete-account">
+				Сначала скачается экспорт. Личные данные удаляются сразу и безвозвратно.
+			</DangerZone>
+
+			<p className="mt-7"><Link href="/privacy" className="text-muted underline underline-offset-4 hover:text-link-hover">Конфиденциальность</Link></p>
+		</>
 	)
 }
 
 /** Смена пароля: текущий + новый дважды. Текущая сессия остаётся, остальные завершаются */
-function ChangePassword() {
-	const { toast, offline } = useTracker()
-	const [open, setOpen] = useState(false)
+function ChangePassword({ onDone }: { onDone: () => void }) {
+	const { toast } = useTracker()
 	const [cur, setCur] = useState('')
 	const [next, setNext] = useState('')
 	const [again, setAgain] = useState('')
@@ -134,21 +143,10 @@ function ChangePassword() {
 		const res = await auth('change-password', { currentPassword: cur, newPassword: next, revokeOtherSessions: true })
 		setBusy(false)
 		if (res?.ok) {
-			setOpen(false)
-			setCur('')
-			setNext('')
-			setAgain('')
+			onDone()
 			return toast('Пароль изменён, другие устройства вышли')
 		}
 		setError(!res ? 'Нет связи' : res.status === 429 ? 'Слишком много попыток, подождите' : res.status === 400 ? 'Неверный текущий пароль' : 'Не удалось сменить пароль')
-	}
-
-	if (!open) {
-		return (
-			<button className="tb mt-4 max-sm:h-12 max-sm:w-full" disabled={!!offline} onClick={() => setOpen(true)}>
-				Сменить пароль
-			</button>
-		)
 	}
 	const field = (id: string, label: string, value: string, set: (v: string) => void, auto: string) => (
 		<div className="mt-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3">
@@ -157,15 +155,12 @@ function ChangePassword() {
 		</div>
 	)
 	return (
-		<form className="mt-4 max-w-md border border-dashed border-line2 p-3" onSubmit={submit}>
+		<form className="mt-3 max-w-md border border-dashed border-line2 p-3 uppercase" onSubmit={submit}>
 			{field('pw-cur', 'Текущий', cur, setCur, 'current-password')}
 			{field('pw-new', 'Новый', next, setNext, 'new-password')}
 			{field('pw-again', 'Ещё раз', again, setAgain, 'new-password')}
-			<p className="mt-2 text-muted2">// Минимум {MIN_PASSWORD} символов. Другие устройства выйдут</p>
-			<div className="mt-3 flex gap-3">
-				<button className="tb font-bold" disabled={busy || !cur || !next || !again}>{busy ? 'Сохраняю…' : 'Сменить пароль'}</button>
-				<button type="button" className="tb" onClick={() => setOpen(false)}>Отмена</button>
-			</div>
+			<p className="mt-2 text-xs text-muted2 normal-case">Минимум {MIN_PASSWORD} символов. Другие устройства выйдут.</p>
+			<button className="tb mt-3 font-bold" disabled={busy || !cur || !next || !again}>{busy ? 'Сохраняю…' : 'Сменить пароль'}</button>
 			<p className="mt-3 min-h-5 text-bad" role="alert">{error && `!! ${error}`}</p>
 		</form>
 	)

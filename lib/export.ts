@@ -1,13 +1,14 @@
-/** Экспорт в CSV: траты и доходы, разделитель «;», UTF-8 с BOM — так его правильно открывает Excel */
+/** Экспорт в CSV (архив и «Данные»): траты и доходы, разделитель «;», UTF-8 с BOM — так его правильно открывает Excel */
 import type { TrackerData } from "./types.ts";
 import { incomeSources } from "./utils.ts";
 
 const cell = (v: string | number) => {
-  const s = String(v);
+  // Числа — с запятой, как везде в приложении (и как ждёт Excel в русской локали)
+  const s = typeof v === "number" ? String(v).replace(".", ",") : v;
   return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
-export function archiveCsv(d: TrackerData): string {
+export function entriesCsv(d: TrackerData): string {
   const cats = new Map([...(d.settings?.familyCategories ?? []), ...d.mySettings.personalCategories].map((c) => [c.id, c.name]));
   const sources = new Map(d.settings ? incomeSources(d.settings).map((s) => [s.id, s.name]) : []);
   const names = new Map(Object.entries(d.names ?? {}));

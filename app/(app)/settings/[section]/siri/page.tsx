@@ -3,8 +3,11 @@ import { join } from "node:path";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-// README читается при сборке: страница статическая, текст один — тот же, что в репозитории
+// README читается при сборке: страница статическая, текст один — тот же, что в репозитории.
+// Есть только /settings/input/siri; /settings/<другое>/siri — 404
 export const dynamic = "force-static";
+export const dynamicParams = false;
+export const generateStaticParams = () => [{ section: "input" }];
 
 /** Разделы «## Голосовой ввод» и «## Siri» из README: строки и заголовок каждого */
 function sections(): string[] {
@@ -54,7 +57,7 @@ export default function Page() {
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="sec">Голосовой ввод и Siri</h1>
-        <Link href="/settings" className="tb">← Настройки</Link>
+        <Link href="/settings/input" className="tb">← Голос и Siri</Link>
       </div>
       <div className="max-w-[72ch]">{out}</div>
     </>

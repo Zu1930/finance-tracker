@@ -8,7 +8,7 @@ import { usePlan, withOverride } from './usePlan'
 import { limitsSum, monthLimit, planIncome, planSummary } from '@/lib/plan'
 import { average, monthRecurring } from '@/lib/metrics'
 import type { Category } from '@/lib/types'
-import { aliveIn, amountChars, fmt, minus, monthName, parseAmount, signed, termName, todayStr } from '@/lib/utils'
+import { aliveIn, amountChars, fmt, minus, monthName, numIn, parseAmount, signed, termName, todayStr } from '@/lib/utils'
 
 const BAR = 48
 
@@ -141,7 +141,7 @@ export function PlanLimits({ month }: { month: string }) {
 							<span className="text-muted max-sm:hidden">{scopeTag(scope) && `[${scopeTag(scope)}]`}</span>
 							<span className="text-muted sm:text-right">{fmt(usual)}</span>
 							<CommitInput className="tfield w-full text-right" inputMode="decimal" sanitize={amountChars}
-								aria-label={`Лимит на ${name}, ${c.name}`} value={String(cur)}
+								aria-label={`Лимит на ${name}, ${c.name}`} value={numIn(cur)}
 								onCommit={(v) => {
 									const n = parseAmount(v)
 									if (n === null) return void save(null)

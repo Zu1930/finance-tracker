@@ -216,7 +216,7 @@ export function QuickEntry({ familyCats, personalCats, onEdit }: Props) {
 					}}
 				/>
 				<span className="hidden text-muted2 uppercase sm:block touch:hidden">Alt + M · /</span>
-				<Link href="/settings/siri" className="xb hover:text-ink" aria-label="Как пользоваться голосовым вводом">?</Link>
+				<Link href="/settings/input/siri" className="xb hover:text-ink" aria-label="Как пользоваться голосовым вводом">?</Link>
 			</div>
 			{hint === 'keyboard' && <p className="mt-2 text-muted uppercase">Микрофон клавиатуры: нажмите 🎤 на клавиатуре</p>}
 			{hint === 'denied' && <p className="mt-2 text-bad uppercase" role="alert">!! Нет доступа к микрофону — разрешите в настройках браузера</p>}

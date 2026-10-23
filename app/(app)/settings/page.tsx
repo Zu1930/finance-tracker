@@ -1,2 +1,2 @@
-import { SettingsView } from "@/components/SettingsView";
-export default function Page() { return <SettingsView />; }
+import { SettingsIndex } from "@/components/settings/SettingsFrame";
+export default function Page() { return <SettingsIndex />; }

@@ -15,7 +15,7 @@ import { RecurringManager } from "./recurring/RecurringManager";
 import { byAuthor, fmtPct, monthIncome, monthOccurrences, savingsRate } from "@/lib/metrics";
 import { MAX_AHEAD, isMonth, itemStatus, linkedByItem, monthLimit, monthsAhead, planSpentByCat } from "@/lib/plan";
 import type { Category, Expense, PlanItem } from "@/lib/types";
-import { activeCats, amountChars, catsIn, curMonthKey, fmt, liveCats, monthName, monthTitle, minus, parseAmount, setLimit, shiftMonth, signed, termName, todayStr, uid } from "@/lib/utils";
+import { activeCats, amountChars, catsIn, curMonthKey, fmt, liveCats, minus, monthName, monthTitle, numIn, parseAmount, setLimit, shiftMonth, signed, termName, todayStr, uid } from "@/lib/utils";
 
 export function LimitsView() {
   const { month, setMonth } = useTracker();
@@ -170,7 +170,7 @@ function MonthLimits() {
           <p className="mt-6 text-muted uppercase">// {perMonth ? `Изменения — только на ${monthName(cur)}` : "Изменения действуют с текущего месяца, прошлые не меняются"}</p>
           <p className="mt-2 text-muted uppercase">
             Валюты, основная валюта и данные →{" "}
-            <Link href="/settings" className="tb">Настройки</Link>
+            <Link href="/settings/currency" className="tb">Настройки</Link>
           </p>
         </div>
       </details>
@@ -249,7 +249,7 @@ function CategoryEditor({ cats, update, month }: {
           <CommitInput className="tfield w-full" aria-label="Название категории" value={c.name}
             onCommit={(v) => { const n = v.trim(); if (!n) return false; patch(c.id, (x) => ({ ...x, name: n.slice(0, 40) })); }} />
           <CommitInput className="tfield w-full text-right" aria-label={`Лимит, ${c.name}`} inputMode="decimal" sanitize={amountChars}
-            value={String(month ? monthLimit(c, cur, month.overrides) : c.limit)}
+            value={numIn(month ? monthLimit(c, cur, month.overrides) : c.limit)}
             onCommit={(v) => {
               const n = parseAmount(v);
               if (n === null || !(n >= 0)) { toast("Лимит должен быть числом."); return false; }

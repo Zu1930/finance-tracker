@@ -4,7 +4,7 @@ import { useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useTracker } from '../TrackerProvider'
 import { amountIn, nextUnpaidMonth } from '@/lib/recurring'
 import type { Category, RecurringPayment, Scope } from '@/lib/types'
-import { MONTHS, aliveIn, amountChars, curMonthKey, fmt, limitIn, parseAmount, setLimit, shiftMonth, termName, todayStr } from '@/lib/utils'
+import { aliveIn, amountChars, curMonthKey, fmt, limitIn, MONTHS, numIn, parseAmount, setLimit, shiftMonth, termName, todayStr } from '@/lib/utils'
 
 const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
 
@@ -66,7 +66,7 @@ function EditPayment({ p, onDone }: { p: RecurringPayment; onDone: () => void })
 	const expenses = Object.values(p.scope === 'personal' ? data.myExpenses : data.familyExpenses).flat()
 	const cur = today.slice(0, 7)
 	const [name, setName] = useState(p.name)
-	const [sum, setSum] = useState(String(amountIn(p, cur)))
+	const [sum, setSum] = useState(numIn(amountIn(p, cur)))
 	const [day, setDay] = useState(String(p.day))
 	const [approx, setApprox] = useState(p.approx)
 	const [from, setFrom] = useState(nextUnpaidMonth(p, today, expenses))

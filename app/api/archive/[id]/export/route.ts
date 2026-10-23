@@ -2,7 +2,7 @@ import { requireUser, unauthorized } from "@/lib/auth";
 import { getDb } from "@/lib/data";
 import { archiveView } from "@/lib/archive";
 import { fail } from "@/lib/records";
-import { archiveCsv } from "@/lib/export";
+import { entriesCsv } from "@/lib/export";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +14,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!view) return fail(404, "Не найдено.");
   const csv = new URL(req.url).searchParams.get("format") === "csv";
   const day = view.readonly!.leftAt.slice(0, 10);
-  return new Response(csv ? archiveCsv(view) : JSON.stringify(view, null, 2), {
+  return new Response(csv ? entriesCsv(view) : JSON.stringify(view, null, 2), {
     headers: {
       "Content-Type": csv ? "text/csv; charset=utf-8" : "application/json; charset=utf-8",
       "Content-Disposition": `attachment; filename="archive-${day}.${csv ? "csv" : "json"}"`,

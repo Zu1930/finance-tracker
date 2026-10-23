@@ -35,7 +35,7 @@ export function Leave() {
 
 	const names = p?.others.join(', ') ?? ''
 	return (
-		<AuthFrame title="Выход из семьи" footer={<Link href="/settings" className="tb">Отмена</Link>}>
+		<AuthFrame title="Выход из семьи" footer={<Link href="/settings/family" className="tb">Отмена</Link>}>
 			{!p && !error && <p className="mt-6 text-muted">…</p>}
 			{p && (
 				<>

@@ -4,7 +4,7 @@ import { useRef, useState, type KeyboardEvent } from "react";
 import { useTracker } from "../TrackerProvider";
 import { gapStatus, toBase, totals } from "@/lib/savings";
 import type { Account, ReconView, Scope } from "@/lib/types";
-import { amountChars, ddmm, fmt, localDay, parseAmount, signed, todayStr } from "@/lib/utils";
+import { amountChars, ddmm, fmt, localDay, numIn, parseAmount, signed, todayStr } from "@/lib/utils";
 
 const STALE_DAYS = 14;
 
@@ -23,7 +23,7 @@ export function Accounts({ openFamily = false }: { openFamily?: boolean }) {
   const inputs = useRef<(HTMLInputElement | null)[]>([]);
 
   const start = () => {
-    setVals(Object.fromEntries(list.map((a) => [a.id, String(a.balance)])));
+    setVals(Object.fromEntries(list.map((a) => [a.id, numIn(a.balance)])));
     setTouched(new Set());
     setEditing(true);
     requestAnimationFrame(() => inputs.current[0]?.focus());

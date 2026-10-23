@@ -2,7 +2,7 @@
 
 import { useState, type KeyboardEvent } from 'react'
 import type { Row } from './useRecurring'
-import { amountChars, fmt, parseAmount } from '@/lib/utils'
+import { amountChars, fmt, numIn, parseAmount } from '@/lib/utils'
 
 /**
  * [ ОПЛАЧЕНО ]: точный платёж записывается сразу, примерный открывает поле с оценкой и [ OK ]
@@ -21,7 +21,7 @@ export function PayControl({ row, pay, big = false }: { row: Row; pay: (amount?:
 				aria-label={`Оплачено: ${row.name}`}
 				onClick={() => {
 					if (!row.approx) return pay()
-					setVal(String(row.amount))
+					setVal(numIn(row.amount))
 					setOpen(true)
 				}}
 			>

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTracker } from '../TrackerProvider'
 import { useNarrow } from '../AsciiBar'
-import { amountChars, ddmm, fmt, parseAmount, termName, todayStr } from '@/lib/utils'
+import { amountChars, ddmm, fmt, numIn, parseAmount, parseRate, termName, todayStr } from '@/lib/utils'
 
 /** На мобильном фокус в сумму сам не переводим: выскочит клавиатура и закроет форму */
 const isDesktop = () => window.matchMedia('(min-width: 640px)').matches
@@ -69,7 +69,7 @@ export function useEntryForm(defaultCurrency: string) {
 
 	const setCur = (c: string) => {
 		setCurState(c)
-		setRate(c === st.base ? '' : String(st.rates[c] ?? ''))
+		setRate(c === st.base ? '' : numIn(st.rates[c]))
 	}
 
 	// Сменился контекст (семья / личное / доход) или моя валюта в настройках — переключиться на его валюту
@@ -80,7 +80,7 @@ export function useEntryForm(defaultCurrency: string) {
 	}, [defaultCurrency])
 
 	const a = parseAmount(amount)
-	const r = parseAmount(rate)
+	const r = parseRate(rate)
 	const conv =
 		isForeign && a && a > 0 && r && r > 0 ? `// ≈ ${fmt(a * r)} ${st.base}` : ''
 

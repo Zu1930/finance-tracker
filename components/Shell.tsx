@@ -31,7 +31,12 @@ function MetricsBar({ data }: { data: TrackerData }) {
 		return catsIn(all, key, spent, ov).filter((c) => !c.archived).reduce((a, c) => a + c.limit - (spent[c.id] ?? 0), 0)
 	}
 	const family = left(st.familyCategories, data.familyExpenses[key] ?? [], plan?.items.family ?? [], plan?.familyOverrides)
-	const mine = left(data.mySettings.personalCategories, data.myExpenses[key] ?? [], plan?.items.mine ?? [], plan?.myOverrides)
+	const mineBase = left(data.mySettings.personalCategories, data.myExpenses[key] ?? [], plan?.items.mine ?? [], plan?.myOverrides)
+	// Личный остаток — в моей валюте (курс к основной известен), семейный — в основной
+	const pref = data.mySettings.preferredCurrency
+	const myRate = pref && pref !== st.base && st.currencies.includes(pref) ? st.rates[pref] : null
+	const myCur = myRate ? pref! : st.base
+	const mine = myRate ? mineBase / myRate : mineBase
 	const now = new Date()
 	const day = now.getDate()
 	const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
@@ -41,9 +46,9 @@ function MetricsBar({ data }: { data: TrackerData }) {
 	// Просроченные регулярные — напоминание в полосе метрик, ведёт к блоку «К оплате» на вводе
 	const overdue = dueRows(data, todayStr()).filter((r) => r.status === 'overdue').length
 	const overdueText = `${overdue} не ${overdue === 1 ? 'отмечен' : 'отмечены'}`
-	const val = (n: number) => (
+	const val = (n: number, cur = st.base) => (
 		<b className={n < 0 ? 'text-bad' : 'text-ink'}>
-			{fmt(n)} {st.base}
+			{fmt(n)} {cur}
 		</b>
 	)
 
@@ -52,7 +57,7 @@ function MetricsBar({ data }: { data: TrackerData }) {
 			{/* Мобильный: два числа крупно, ниже одна строка — месяц, темп и валюта один раз */}
 			<div className="border-y border-dashed border-line py-3 uppercase sm:hidden">
 				<dl className="grid grid-cols-2 gap-x-4">
-					{(data.solo ? [['Остаток', mine]] : [['Остаток · семья', family], ['Остаток · моё', mine]]).map(([label, n]) => (
+					{(data.solo ? [[`Остаток${myCur !== st.base ? ` · ${myCur}` : ''}`, mine]] : [['Остаток · семья', family], [`Остаток · моё${myCur !== st.base ? ` · ${myCur}` : ''}`, mine]]).map(([label, n]) => (
 						<div key={label as string} className="min-w-0">
 							<dt className="text-xs text-muted">{label}</dt>
 							<dd className={`text-xl font-bold whitespace-nowrap ${(n as number) < 0 ? 'text-bad' : ''}`}>{fmt(n as number)}</dd>
@@ -66,7 +71,7 @@ function MetricsBar({ data }: { data: TrackerData }) {
 			</div>
 			<div className="hidden flex-wrap justify-between gap-x-6 gap-y-1 border-y border-dashed border-line py-3 text-muted uppercase sm:flex">
 				<span>
-					{data.solo ? <>[ Остаток: {val(mine)} ]</> : <>[ Остаток: семья {val(family)} // моё {val(mine)} ]</>}
+					{data.solo ? <>[ Остаток: {val(mine, myCur)} ]</> : <>[ Остаток: семья {val(family)} // моё {val(mine, myCur)} ]</>}
 				</span>
 				<span>
 					[ ТЕМП:{' '}
@@ -135,7 +140,7 @@ export function Shell({ children }: { children: ReactNode }) {
 	// Архив: свои вкладки внутри /archive/<id>, только чтение
 	const ro = data.readonly
 	const base = ro ? `/archive/${ro.householdId}` : ''
-	const shown = ro ? [{ href: base, label: 'Лимиты' }, { href: `${base}/chart`, label: 'График' }, { href: `${base}/logs`, label: 'Логи' }, { href: '/settings', label: '← Выход' }] : TABS
+	const shown = ro ? [{ href: base, label: 'Лимиты' }, { href: `${base}/chart`, label: 'График' }, { href: `${base}/logs`, label: 'Логи' }, { href: '/settings/data', label: '← Выход' }] : TABS
 	const tabs = (mobile: boolean) =>
 		shown.map((t) => (
 			<Link
@@ -175,7 +180,7 @@ export function Shell({ children }: { children: ReactNode }) {
 							className="tb h-10 text-muted sm:h-auto"
 							aria-label="Настройки"
 							title="Настройки (Ctrl + ,)"
-							aria-current={pathname === '/settings' ? 'page' : undefined}
+							aria-current={pathname.startsWith('/settings') ? 'page' : undefined}
 						>
 							CFG
 						</Link>

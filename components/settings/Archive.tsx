@@ -36,7 +36,7 @@ export function Archive() {
 	}
 
 	if (items === null) return <p className="text-muted">…</p>
-	if (items.length === 0) return <p className="text-muted uppercase">// Архивов нет</p>
+	if (items.length === 0) return <p className="text-muted2">Здесь появятся бюджеты, из которых вы вышли. Хранятся 90 дней.</p>
 	return (
 		<ul className="uppercase">
 			{items.map((a) => (

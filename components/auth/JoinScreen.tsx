@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Alert, AuthFrame } from './AuthForms'
+import { parseRate } from '@/lib/utils'
 
 type Preview = { inviter: string; members: number; base: string | null; myBase: string | null; needsRate: boolean }
 
@@ -26,7 +27,7 @@ export function JoinScreen({ code }: { code: string }) {
 	}, [code])
 
 	const accept = async () => {
-		const n = Number(rate.replace(',', '.'))
+		const n = parseRate(rate) ?? NaN
 		if (p?.needsRate && !(n > 0)) return setError(`Укажите курс: сколько ${p.myBase} стоит 1 ${p.base}`)
 		setBusy(true)
 		setError('')

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useTracker } from '../TrackerProvider'
+import { SettingsRow } from './Kit'
 
 type State = 'loading' | 'unsupported' | 'ios-install' | 'off-server' | 'denied' | 'on' | 'off'
 
@@ -67,28 +68,31 @@ export function Notifications() {
 		toast(j.sent ? 'Отправлено' : 'Не доставлено — включите уведомления заново')
 	}
 
+	const status = {
+		loading: '…',
+		'ios-install': 'На iPhone — только у приложения с экрана «Домой»',
+		unsupported: 'Браузер не поддерживает уведомления',
+		'off-server': 'Не настроены на сервере',
+		denied: 'Запрещены в настройках браузера',
+		on: 'Включены на этом устройстве',
+		off: 'Выключены',
+	}[state]
 	return (
-		<div className="uppercase">
-			{state === 'loading' && <p className="text-muted">…</p>}
-			{state === 'ios-install' && <p className="text-muted">На iPhone: «Поделиться → На экран „Домой“», затем откройте приложение с экрана</p>}
-			{state === 'unsupported' && <p className="text-muted">Браузер не поддерживает уведомления</p>}
-			{state === 'off-server' && <p className="text-muted">Не настроены на сервере</p>}
-			{state === 'denied' && <p className="text-muted">Запрещены в настройках браузера</p>}
-			{(state === 'on' || state === 'off') && (
-				<div className="flex flex-wrap items-center gap-2">
-					<span className="mr-2 max-sm:w-full">{state === 'on' ? 'Включены на этом устройстве' : 'Выключены'}</span>
-					<div className="tgroup max-sm:w-full">
-					{state === 'off' && <button className="tb" disabled={busy || !!offline} onClick={() => void enable()}>Включить</button>}
-					{state === 'on' && (
-						<>
-							<button className="tb" disabled={!!offline} onClick={() => void test()}>Тест</button>
-							<button className="tb" disabled={busy || !!offline} onClick={() => void disable()}>Выключить</button>
-						</>
-					)}
-					</div>
-				</div>
-			)}
-			<p className="mt-2 text-muted2">// Обновления приложения, план на следующий месяц за 2 дня до конца, по воскресеньям — внести траты</p>
+		<div>
+			<SettingsRow className="uppercase" end={
+				state === 'off' ? <button className="tb" disabled={busy || !!offline} onClick={() => void enable()}>Включить</button>
+				: state === 'on' ? (
+					<>
+						<button className="tb" disabled={!!offline} onClick={() => void test()}>Тест</button>
+						<button className="tb" disabled={busy || !!offline} onClick={() => void disable()}>Выключить</button>
+					</>
+				)
+				: state === 'ios-install' ? <span className="text-xs text-muted normal-case">Поделиться → На экран «Домой»</span>
+				: undefined
+			}>
+				<span className={state === 'on' ? '' : 'text-muted'}>{status}</span>
+			</SettingsRow>
+			<p className="mt-2 text-xs text-muted2">Обновления приложения, план на следующий месяц за 2 дня до конца, по воскресеньям — внести траты.</p>
 		</div>
 	)
 }

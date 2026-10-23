@@ -19,9 +19,20 @@ export const signed = (n: number) => {
 };
 /** Расход со знаком: −1 250; ноль — «0» без знака */
 export const minus = (n: number) => (cents(n) === 0 ? "0" : `−${fmt(Math.abs(n))}`);
-/** Курс: значимые цифры вместо копеек, чтобы 1 RSD = 0,00853 EUR не превращался в 0,01 */
-const rf = new Intl.NumberFormat("ru-RU", { maximumSignificantDigits: 6 });
-export const fmtRate = (n: number) => rf.format(n);
+/**
+ * Курс: 4 значащие цифры, но не меньше 2 знаков после запятой — 117,47 · 1,284 · 0,008514.
+ * Копейками нельзя: 1 RSD = 0,0085 EUR превратился бы в 0,01
+ */
+export function fmtRate(n: number): string {
+  const abs = Math.abs(n);
+  const int = abs >= 1 ? Math.floor(Math.log10(abs)) + 1 : 0;
+  // Ведущие нули после запятой у чисел меньше 1: 0,0085 → 2
+  const zeros = abs > 0 && abs < 1 ? -Math.floor(Math.log10(abs)) - 1 : 0;
+  const max = Math.min(20, Math.max(2, abs >= 1 ? 4 - int : zeros + 4));
+  return new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: max }).format(n);
+}
+/** Число в поле ввода — с запятой, как в выводе, и без потери точности (курс 117,467 остаётся 117,467) */
+export const numIn = (n: number | null | undefined) => (n === null || n === undefined ? "" : String(n).replace(".", ","));
 
 const pad = (n: number) => String(n).padStart(2, "0");
 export const todayStr = () => {
@@ -60,6 +71,15 @@ export const shiftMonth = (key: string, delta: number) => {
 /** Оставляет только символы, допустимые в сумме: цифры, разделители, + и − для выражений */
 export const amountChars = (raw: string) => raw.replace(/[^\d.,+\-\s]/g, "");
 
+/** Курс из поля: запятая или точка, без округления до копеек (в отличие от сумм). NaN — не число */
+export function parseRate(raw: string): number | null {
+  const s = raw.replace(/\s|\u00a0/g, "").replace(",", ".");
+  if (!s) return null;
+  if (!/^\d*\.?\d+$|^\d+\.$/.test(s)) return NaN;
+  return Number(s);
+}
+
+/** Сумма из поля: запятая или точка, можно складывать (450+120); до копеек */
 export function parseAmount(raw: string): number | null {
   const s = raw.replace(/\s|\u00a0/g, "").replace(/,/g, ".");
   if (!s) return null;

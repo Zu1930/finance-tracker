@@ -27,9 +27,7 @@ export function MyCurrency() {
 					</button>
 				))}
 			</div>
-			<p className="mt-3 text-muted2 uppercase">
-				// Личные траты и доходы — в {current}, семейные — в {st.base}
-			</p>
+			<p className="mt-2 text-xs text-muted2">{data.solo ? 'Для всех трат и доходов.' : `Для личных трат и доходов. Семейные — в ${st.base}.`}</p>
 		</div>
 	)
 }

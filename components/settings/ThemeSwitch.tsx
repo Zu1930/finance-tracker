@@ -21,7 +21,7 @@ const read = (): Theme => {
 	const t = document.documentElement.dataset.theme
 	return t === 'dark' || t === 'light' ? t : 'auto'
 }
-const useTheme = () => useSyncExternalStore(subscribe, read, () => 'auto' as Theme)
+export const useTheme = () => useSyncExternalStore(subscribe, read, () => 'auto' as Theme)
 
 /** АВТО — без data-theme, тема по системе; ТЁМНАЯ/СВЕТЛАЯ — data-theme на <html> и в localStorage */
 function setTheme(t: Theme) {

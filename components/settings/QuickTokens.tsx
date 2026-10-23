@@ -3,11 +3,11 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useTracker } from '../TrackerProvider'
+import { OnceReveal, SettingsRow } from './Kit'
 
 type Item = { id: string; name: string; createdAt: string; lastUsedAt: string | null }
 
-const when = (iso: string | null) =>
-	iso ? new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'
+const ddmm = (iso: string) => new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })
 
 /** Показывать ли строку голосового ввода на странице ввода — мне, на всех моих устройствах */
 export function QuickEntrySwitch() {
@@ -16,12 +16,9 @@ export function QuickEntrySwitch() {
 	const set = (hide: boolean) =>
 		setMySettings(({ version: _, hideQuickEntry: __, ...rest }) => ({ ...rest, ...(hide ? { hideQuickEntry: true } : {}) }))
 	return (
-		<div className="uppercase">
-			<div className="tgroup" role="group" aria-label="Голосовой ввод">
-				<button className="tb" aria-pressed={!hidden} onClick={() => set(false)}>Показывать</button>
-				<button className="tb" aria-pressed={hidden} onClick={() => set(true)}>Скрыть</button>
-			</div>
-			<p className="mt-2 text-muted2">// Строка «● Голос» над переключателем расход / доход. Siri работает и при скрытой строке</p>
+		<div className="tgroup uppercase" role="group" aria-label="Строка голосового ввода">
+			<button className="tb" aria-pressed={!hidden} onClick={() => set(false)}>Показывать</button>
+			<button className="tb" aria-pressed={hidden} onClick={() => set(true)}>Скрыть</button>
 		</div>
 	)
 }
@@ -62,53 +59,26 @@ export function QuickTokens() {
 		toast('Токен отозван')
 		await load()
 	}
-	const copy = async () => {
-		try {
-			await navigator.clipboard.writeText(created!)
-			toast('Скопировано')
-		} catch {
-			toast('Скопируйте вручную')
-		}
-	}
-
 	return (
-		<div className="uppercase">
-			<div className="flex flex-wrap items-center gap-3">
+		<div>
+			{items === null ? (
+				<p className="text-muted">…</p>
+			) : items.length === 0 ? (
+				<p className="text-muted uppercase">// Токенов нет</p>
+			) : (
+				items.map((t) => (
+					<SettingsRow key={t.id} end={<button className="tb uppercase" onClick={() => void revoke(t.id)}>Отозвать</button>}>
+						{t.name} <span className="text-muted">// {t.lastUsedAt ? `использован ${ddmm(t.lastUsedAt)}` : `создан ${ddmm(t.createdAt)}, ещё не использован`}</span>
+					</SettingsRow>
+				))
+			)}
+			{created && <OnceReveal value={created} note="Вставьте токен в Быструю команду. Потом его не увидеть — только отозвать и создать новый." onHide={() => setCreated(null)} />}
+			<div className="mt-3 flex flex-wrap items-center gap-3 uppercase">
 				<label htmlFor="token-name" className="lbl">Устройство</label>
 				<input id="token-name" className="tfield w-[16ch] normal-case max-sm:flex-1" value={name} maxLength={40} onChange={(e) => setName(e.target.value)} />
-				<button className="tb max-sm:w-full max-sm:h-11" disabled={busy || !!offline || !name.trim()} onClick={() => void create()}>
-					Создать токен
-				</button>
+				<button className="tb max-sm:h-11 max-sm:w-full" disabled={busy || !!offline || !name.trim()} onClick={() => void create()}>+ Токен</button>
+				<Link href="/settings/input/siri" className="tb max-sm:h-11 max-sm:w-full sm:ml-auto">Как настроить →</Link>
 			</div>
-			{created && (
-				<div className="mt-4 border border-warn p-3">
-					<p className="font-bold text-warn">!! Токен показывается один раз</p>
-					<code className="mt-2 block break-all normal-case select-all">{created}</code>
-					<div className="mt-2 flex gap-2">
-						<button className="tb" onClick={() => void copy()}>Копировать</button>
-						<button className="tb" onClick={() => setCreated(null)}>Скрыть</button>
-					</div>
-				</div>
-			)}
-			{items === null ? (
-				<p className="mt-3 text-muted">…</p>
-			) : items.length === 0 ? (
-				<p className="mt-3 text-muted">// Токенов нет</p>
-			) : (
-				<ul className="mt-3">
-					{items.map((t) => (
-						<li key={t.id} className="flex flex-wrap items-center gap-x-4 border-b border-dashed border-line2 py-1">
-							<b className="normal-case">{t.name}</b>
-							<span className="text-muted">Создан {when(t.createdAt)}</span>
-							<span className="text-muted">Использован {when(t.lastUsedAt)}</span>
-							<button className="tb ml-auto" onClick={() => void revoke(t.id)}>Отозвать</button>
-						</li>
-					))}
-				</ul>
-			)}
-			<p className="mt-3">
-				<Link href="/settings/siri#siri" className="tb">Как настроить Siri</Link>
-			</p>
 		</div>
 	)
 }

@@ -9,16 +9,7 @@ import { EntryForm, useAltPick, useEntryForm, type EntryMode } from './EntryForm
 import { ExpenseSummary } from './ExpenseSummary'
 import { IncomeBalance } from './IncomeBalance'
 import { RecentLogs } from './RecentLogs'
-import {
-	activeCats,
-	liveCats,
-	byRecentUse,
-	fmt,
-	incomeSources,
-		parseAmount,
-	termName,
-	uid
-} from '@/lib/utils'
+import { activeCats, byRecentUse, fmt, incomeSources, liveCats, numIn, parseAmount, termName, uid } from '@/lib/utils'
 import { itemLeft, itemStatus, linkedByItem } from '@/lib/plan'
 import { monthOccurrences } from '@/lib/metrics'
 import { matchPayment } from '@/lib/recurring'
@@ -136,7 +127,7 @@ export function EntryPage() {
 	// Трата из голосового ввода → обычная форма для ручной правки
 	const editParsed = (p: ParsedEntry) => {
 		const defaultCur = (sc: Scope) => (sc === 'family' ? st.base : myCurrency)
-		form.fill({ amount: p.amount === null ? '' : String(p.amount), currency: p.currency, note: p.note, date: p.date }, defaultCur(p.scope) !== defaultCur(scope))
+		form.fill({ amount: p.amount === null ? '' : numIn(p.amount), currency: p.currency, note: p.note, date: p.date }, defaultCur(p.scope) !== defaultCur(scope))
 		setCatIds((c) => ({ ...c, [p.scope]: p.categoryId }))
 		go('expense', p.scope, true)
 	}
