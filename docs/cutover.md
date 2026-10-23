@@ -18,17 +18,28 @@ Redis во время и после переключения **только чи
 
 ## Подготовка окружения
 
+`vercel env pull` не подходит: переменные интеграций помечены Sensitive и скачиваются как `[SENSITIVE]`.
+Значения берутся вручную в файл `.env.cutover.local` (подходит под `.env*.local` и не попадает в git):
+
 ```sh
-vercel env pull .env.production.local --environment=production
-set -a; source .env.production.local; set +a
-# Хост production-базы — по нему скрипты узнают production и требуют --production
-export PRODUCTION_DB_HOST="$(node -e 'console.log(new URL(process.env.DATABASE_URL_UNPOOLED).hostname)')"
-echo "$PRODUCTION_DB_HOST"   # ep-…: сверьте в консоли Neon, что это production-ветка
-echo "$USERS"                # первый пользователь станет owner бюджета
+DATABASE_URL_UNPOOLED='…'   # Vercel → Storage → база Neon → Show secret. Именно оттуда, а не из консоли Neon:
+                            # у интеграции свой проект Neon, и строка из «похожего» проекта ведёт в чужую базу
+KV_REST_API_URL='https://…upstash.io'
+KV_REST_API_TOKEN='…'       # лучше KV_REST_API_READ_ONLY_TOKEN: скриптам нужно только чтение Redis
+USERS='vlad:Влад,masha:Маша' # как в Vercel production, в том же порядке: первый станет owner
 ```
 
-`.env.production.local` содержит production-секреты. Удалите его сразу после переключения (шаг 9). Пока файл лежит
-в проекте, локальные `next build/start` тоже подключаются к production.
+```sh
+set -a; source .env.cutover.local; set +a
+# Хост production-базы — по нему скрипты узнают production и требуют --production
+export PRODUCTION_DB_HOST="$(node -e 'console.log(new URL(process.env.DATABASE_URL_UNPOOLED).hostname)')"
+echo "$PRODUCTION_DB_HOST"
+```
+
+Если после переключения в логах Vercel `relation "memberships" does not exist` — приложение смотрит в другую базу,
+чем та, куда шёл перенос: строка `DATABASE_URL_UNPOOLED` взята не из Vercel Storage.
+
+`.env.cutover.local` содержит production-ключи. Удалите его сразу после переключения (шаг 9).
 
 ## Шаги
 
@@ -112,7 +123,7 @@ Actions → **Backup** → Run workflow. Убедитесь, что в репо�
 ### 9. Уборка
 
 ```sh
-rm .env.production.local
+rm .env.cutover.local
 ```
 Redis и интеграцию Upstash в Vercel не удаляйте 30 дней. Приложение в них больше не пишет и не читает.
 
