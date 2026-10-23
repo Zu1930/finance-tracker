@@ -7,7 +7,7 @@ import { defaultSettings, fmt } from "@/lib/utils";
 /** Первая настройка бюджета: валюта лимитов и стартовые категории. В solo категории — личные, в семье — семейные */
 export function Setup() {
   const { setSettings, setMySettings, isSolo } = useTracker();
-  const [base, setBase] = useState("RSD");
+  const [base, setBase] = useState("EUR");
   const draft = defaultSettings(base);
   const [off, setOff] = useState<Set<string>>(new Set());
   const cats = draft.familyCategories.filter((c) => !off.has(c.name));
@@ -29,8 +29,8 @@ export function Setup() {
       <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-3">
         <label className="lbl" htmlFor="baseSel">Валюта лимитов</label>
         <select id="baseSel" className="tfield cursor-pointer bg-panel" value={base} onChange={(e) => setBase(e.target.value)}>
-          <option value="RSD">RSD — динар</option>
           <option value="EUR">EUR — евро</option>
+          <option value="RSD">RSD — динар</option>
           <option value="USD">USD — доллар</option>
           <option value="RUB">RUB — рубль</option>
         </select>

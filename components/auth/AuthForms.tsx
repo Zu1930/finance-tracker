@@ -5,14 +5,25 @@ import Link from 'next/link'
 
 export const MIN_PASSWORD = 10
 
-type Turnstile = { render: (el: HTMLElement, o: { sitekey: string; callback: (t: string) => void; 'expired-callback': () => void; theme?: string }) => string; reset: (id: string) => void }
+type TurnstileOptions = {
+	sitekey: string
+	callback: (t: string) => void
+	'expired-callback': () => void
+	theme: 'light' | 'dark' | 'auto'
+	appearance: 'always' | 'execute' | 'interaction-only'
+	size: 'normal' | 'compact' | 'flexible'
+}
+type Turnstile = { render: (el: HTMLElement, o: TurnstileOptions) => string; reset: (id: string) => void }
 declare global {
 	interface Window {
 		turnstile?: Turnstile
 	}
 }
 
-/** Cloudflare Turnstile: без siteKey (разработка, тесты) — не показывается, токен пустой */
+/**
+ * Cloudflare Turnstile: виден, только если нужна проверка (interaction-only), по ширине формы, в теме приложения
+ * (data-theme на <html>; без неё — как в системе). Без siteKey (разработка, тесты) — не показывается, токен пустой
+ */
 export function useTurnstile(siteKey: string | undefined) {
 	const box = useRef<HTMLDivElement>(null)
 	const widget = useRef<string | null>(null)
@@ -21,7 +32,11 @@ export function useTurnstile(siteKey: string | undefined) {
 		if (!siteKey) return
 		const render = () => {
 			if (!box.current || !window.turnstile || widget.current) return
-			widget.current = window.turnstile.render(box.current, { sitekey: siteKey, callback: setToken, 'expired-callback': () => setToken('') })
+			const t = document.documentElement.dataset.theme
+			widget.current = window.turnstile.render(box.current, {
+				sitekey: siteKey, callback: setToken, 'expired-callback': () => setToken(''),
+				theme: t === 'dark' || t === 'light' ? t : 'auto', appearance: 'interaction-only', size: 'flexible',
+			})
 		}
 		if (window.turnstile) return render()
 		const s = document.createElement('script')
@@ -34,7 +49,8 @@ export function useTurnstile(siteKey: string | undefined) {
 		setToken('')
 		if (widget.current && window.turnstile) window.turnstile.reset(widget.current)
 	}
-	const el = siteKey ? <div ref={box} className="mt-4 min-h-[65px]" /> : null
+	// Без min-height: при interaction-only виджет обычно невидим и места не занимает
+	const el = siteKey ? <div ref={box} className="mt-4 w-full empty:mt-0" /> : null
 	return { el, token, ready: !siteKey || !!token, headers: (token ? { 'x-captcha-response': token } : {}) as Record<string, string>, reset }
 }
 
