@@ -5,7 +5,6 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, type ReactNode } from 'react'
 import { useTracker } from './TrackerProvider'
 import { Setup } from './Setup'
-import { Migration } from './Migration'
 import { useDailyRates } from './useDailyRates'
 import { ThemeToggle } from './settings/ThemeSwitch'
 import { catsIn, curMonthKey, fmt, minus, monthTitle, todayStr } from '@/lib/utils'
@@ -126,7 +125,7 @@ export function Shell({ children }: { children: ReactNode }) {
 				</button>
 			</div>
 		)
-	else if (!data.settings) body = data.migration ? <Migration /> : <Setup />
+	else if (!data.settings) body = <Setup />
 	else body = children
 
 	const tabs = (mobile: boolean) =>

@@ -5,9 +5,9 @@
  */
 import { connect } from "./db.ts";
 import { compare, metrics, readPostgresSource, readRedisSource } from "../lib/data/migrate.ts";
-import { listUsers } from "../lib/users.ts";
+import { parseUsers } from "../lib/users.ts";
 
-const users = listUsers();
+const users = parseUsers(process.env.USERS);
 const { db, pool, host } = connect();
 try {
   const rows = compare(metrics(await readRedisSource(users), users), metrics(await readPostgresSource(db, users), users));

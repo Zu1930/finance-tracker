@@ -1,7 +1,7 @@
 # Траты по лимитам
 
 Семейный бюджет на двоих: ввод трат и доходов, семейные и личные лимиты, общие копилки, график по месяцам.
-Next.js 16 (App Router) + Upstash Redis, у каждого свой вход.
+Next.js 16 (App Router) + Postgres (Neon, Drizzle), вход по email и паролю (Better Auth).
 
 ## Модель
 
@@ -51,7 +51,6 @@ API:
 - `PUT /api/settings`, `PUT /api/my-settings` — `{ version, data }`, 409 при конфликте
 - `POST /api/accounts`, `PATCH /api/accounts/:id` — счета; `POST /api/reconcile` — сверка остатков и снимок
 - `POST /api/goals`, `PATCH|DELETE /api/goals/:id`, `POST /api/goals/:id/ops` — копилки
-- `GET|POST /api/migrate-v3` — одноразовый перенос старых копилок (только `MIGRATION_OWNER`)
 - `GET /api/plan?month=`, `PUT /api/plan/:month`, `PUT /api/my-plan/:month` — план месяца, 409 при конфликте
 - `POST /api/plan-items`, `PATCH|DELETE /api/plan-items/:id` — покупки; `POST /api/entries` принимает `planItemId`
 - `GET|POST|DELETE /api/push`, `POST /api/push/test` — подписка устройства и тестовый пуш
@@ -59,12 +58,36 @@ API:
 - `GET /api/cron/daily` — напоминания (Vercel Cron, `Authorization: Bearer CRON_SECRET`)
 - `PATCH /api/settings/rates` — слияние курсов без 409
 - `POST /api/rebase` — смена базовой валюты, пересчитывает данные обоих одной транзакцией
-- `GET|POST /api/migrate-v2` — одноразовый перенос старого формата (только `MIGRATION_OWNER`)
 - `GET /api/rates` — курсы ExchangeRate-API
-- `GET /api/users`, `POST /api/login`, `POST /api/logout`
+- `/api/auth/*` — Better Auth: `sign-in/email`, `sign-out`, `get-session`, `list-sessions`, `revoke-session`,
+  `revoke-other-sessions`, `change-password`, `update-user`. Регистрация отключена
 
-Сессия: cookie `ft_session = <userId>.<HMAC-SHA256(userId, SESSION_SECRET:пароль)>`. Проверяется в `proxy.ts`
-и повторно в каждом обработчике. Смена пароля разлогинивает только этого пользователя.
+Вход: Better Auth (`lib/auth.ts`), пользователи и сессии в Postgres; пользователь Better Auth — строка таблицы
+`users`, его id и есть id в данных. `proxy.ts` только проверяет наличие cookie сессии, полная проверка и бюджет
+пользователя (`memberships`) — в каждом обработчике (`requireUser`). Попытки входа ограничены: 5 в минуту с IP,
+счётчики в базе. Сессия живёт год и продлевается при использовании.
+
+### Пользователи и пароли
+
+Регистрации нет: пользователей создаёт скрипт. Для пользователя, уже перенесённого в `users`:
+
+```sh
+MIGRATE_USERS="vlad:vlad@example.com,masha:masha@example.com" PASSWORD_VLAD=… PASSWORD_MASHA=… \
+  npm run db:migrate-users -- --dry-run      # затем без --dry-run
+```
+
+Повторный запуск безопасен и уже заданный пароль не меняет. Пароль меняется в «Настройках → Аккаунт»
+(минимум 10 символов, другие устройства выходят).
+
+**Забытый пароль** (писем пока нет). С переменными подключения к базе, как для `db:migrate`
+(production-база — с `PRODUCTION_DB_HOST` и `--production`):
+
+```sh
+npm run reset-password -- masha@example.com --production
+```
+
+Скрипт выводит временный пароль и завершает все сессии пользователя. Передайте пароль лично; после входа
+его стоит сменить в «Настройках → Аккаунт».
 
 ## Деплой на Vercel
 
@@ -72,14 +95,12 @@ API:
 2. В проекте на Vercel: **Storage → Create Database → Upstash for Redis** (Marketplace), бесплатный план,
    подключите к проекту. Переменные `KV_REST_API_URL` и `KV_REST_API_TOKEN` появятся сами.
 3. **Settings → Environment Variables**, добавьте:
-   - `USERS` — ровно двое, `id:Имя` через запятую: `vlad:Влад,masha:Маша`;
-   - `PASSWORD_VLAD`, `PASSWORD_MASHA` — пароли (`PASSWORD_` + id в верхнем регистре);
-   - `SESSION_SECRET` — длинная случайная строка (`openssl rand -hex 32`);
-   - `MIGRATION_OWNER` — необязательно: кто переносит старые данные (по умолчанию первый из `USERS`).
-4. Сделайте Redeploy, чтобы переменные подхватились. Без двух пользователей и их паролей сервер не стартует.
-5. Если раньше трекер вёлся в формате одного пользователя, войдите как `MIGRATION_OWNER` и нажмите
-   «Перенести данные в семейный формат»: скачается резервная копия, все записи станут семейными.
-   Иначе начните с нуля, выбрав валюту лимитов.
+   - `DATABASE_URL`, `DATABASE_URL_UNPOOLED` — Postgres (появятся сами при подключении Neon через Storage);
+   - `BETTER_AUTH_SECRET` — длинная случайная строка (`openssl rand -hex 32`);
+   - `BETTER_AUTH_URL` — адрес production, например `https://spendlog.vercel.app` (на preview адрес берётся из
+     системных переменных Vercel).
+4. Сделайте Redeploy, чтобы переменные подхватились. Без `DATABASE_URL` и `BETTER_AUTH_SECRET` сервер не стартует.
+5. Схема — `npm run db:migrate`, пользователи — `npm run db:migrate-users` (раздел «Пользователи и пароли»).
 
 На телефоне удобно добавить сайт на главный экран: в Safari «Поделиться → На экран „Домой“».
 
@@ -176,10 +197,10 @@ npm run test   # node:test, без зависимостей
 ```
 app/
   (app)/            страницы за авторизацией: / (ввод), /limits, /savings, /chart, /settings
-  api/              data, entries, settings, my-settings, accounts, reconcile, goals, rebase, migrate-v2/v3, rates, …
+  api/              auth (Better Auth), data, entries, settings, my-settings, accounts, reconcile, goals, rebase, rates, …
   login/            страница входа
 components/         TrackerProvider (состояние, оптимистичные записи, опрос раз в минуту), экраны
-lib/                типы, утилиты, Redis, сессии, сборка ответа (store), пересчёт валют, миграция, метрики
-proxy.ts            проверка сессии
-instrumentation.ts  проверка конфигурации пользователей при старте
+lib/                типы, утилиты, data (репозитории Postgres), auth (вход), сборка ответа (store), пересчёт валют, миграция, метрики
+proxy.ts            есть ли cookie сессии (иначе /login)
+instrumentation.ts  проверка переменных окружения при старте
 ```

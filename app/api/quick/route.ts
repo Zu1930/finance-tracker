@@ -1,24 +1,31 @@
 import { NextResponse } from "next/server";
-import { ctxOf, getRepos } from "@/lib/data";
+import { getRepos, type Ctx } from "@/lib/data";
 import { buildView } from "@/lib/store";
-import { getUser, partnerOf } from "@/lib/users";
+import { people } from "@/lib/auth";
 import { localDate } from "@/lib/push";
 import { handleQuick, type QuickStore } from "@/lib/quick-entry/api";
 import { visibleExpenses } from "@/lib/quick-entry/dictionary";
 
 export const dynamic = "force-dynamic";
 
+/** Токен принадлежит пользователю; бюджет — его текущий */
+async function ctxOfToken(userId: string): Promise<Ctx> {
+  const householdId = await getRepos().system.householdOf(userId);
+  if (!householdId) throw new Error(`Пользователь ${userId} ни в одном бюджете`);
+  return { userId, householdId };
+}
+
 const store: QuickStore = {
   tokens: (userId) => getRepos().system.tokensOf(userId),
   touch: (userId, id, rec) => getRepos().system.touchToken(userId, id, rec),
   hit: (id) => getRepos().system.hitToken(id),
   context: async (userId) => {
-    const me = getUser(userId)!;
-    const partner = partnerOf(userId);
-    const view = buildView(await getRepos().store.snapshot(ctxOf(me)), me, partner);
+    const ctx = await ctxOfToken(userId);
+    const { me, partner } = await people(ctx);
+    const view = buildView(await getRepos().store.snapshot(ctx), me, partner);
     return { settings: view.settings, personalCategories: view.mySettings.personalCategories, expenses: visibleExpenses(view) };
   },
-  write: (userId, e) => getRepos().expenses.add(ctxOf({ id: userId }), e),
+  write: async (userId, e) => getRepos().expenses.add(await ctxOfToken(userId), e),
 };
 
 /**

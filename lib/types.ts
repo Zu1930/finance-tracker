@@ -162,8 +162,6 @@ export type SavingsView = {
   /** Личное партнёра — только суммы в базовой валюте */
   partner: { total: number; goalsAllocated: number; lastUpdatedAt: string | null };
   recons: ReconView[];
-  /** Старые копилки ещё не перенесены; owner — кто запускает перенос */
-  migration?: { goals: number; owner: User };
 };
 
 // ---------- Регулярные платежи ----------
@@ -270,8 +268,6 @@ export type TrackerData = {
   partnerRecurring: Record<MonthKey, number>;
   /** Оплаты регулярных партнёра по дням — чтобы отделить обычные траты от регулярных */
   partnerRecurringDaily: Record<MonthKey, Record<string, number>>;
-  /** Есть данные старого формата, ещё не перенесённые в семейный; owner — кто запускает перенос */
-  migration?: { pending: true; owner: User };
 };
 
 // ---------- Формат до семейного бюджета: читается только миграцией ----------

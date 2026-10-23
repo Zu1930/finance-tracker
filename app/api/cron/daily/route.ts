@@ -3,7 +3,7 @@ import { getRepos } from "@/lib/data";
 import { fail } from "@/lib/records";
 import { sendPush } from "@/lib/push-server";
 import { localDate, planReminder, weeklyReminder } from "@/lib/push";
-import { safeEqual } from "@/lib/session";
+import { safeEqual } from "@/lib/utils";
 import { shiftMonth } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";

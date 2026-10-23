@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { requireUser, unauthorized } from "@/lib/session";
-import { ctxOf, getRepos } from "@/lib/data";
+import { requireUser, unauthorized } from "@/lib/auth";
+import { getRepos } from "@/lib/data";
 
 /**
  * Слияние курсов в семейные настройки: { base, rates: { EUR: 117.44 }, ratesUpdatedAt? }.
@@ -8,8 +8,8 @@ import { ctxOf, getRepos } from "@/lib/data";
  * base — к какой базовой валюте курсы: если её успели сменить, курсы отбрасываются
  */
 export async function PATCH(req: Request) {
-  const user = await requireUser(req);
-  if (!user) return unauthorized();
+  const ctx = await requireUser(req);
+  if (!ctx) return unauthorized();
   const body = (await req.json().catch(() => null)) as { base?: unknown; rates?: unknown; ratesUpdatedAt?: unknown } | null;
   const rates = body?.rates as Record<string, unknown> | undefined;
   if (typeof body?.base !== "string" || !rates || typeof rates !== "object") {
@@ -19,7 +19,7 @@ export async function PATCH(req: Request) {
   for (const [c, r] of Object.entries(rates)) if (/^[A-Z]{3,5}$/.test(c) && typeof r === "number" && r > 0) clean[c] = r;
   const date = typeof body.ratesUpdatedAt === "string" ? body.ratesUpdatedAt : undefined;
   try {
-    const next = await getRepos().settings.merge(ctxOf(user), (cur) => {
+    const next = await getRepos().settings.merge(ctx, (cur) => {
       if (!cur || cur.base !== body.base) return null;
       const merged = { ...cur, rates: { ...cur.rates, ...clean } };
       delete merged.rates[cur.base];

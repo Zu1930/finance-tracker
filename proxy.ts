@@ -1,19 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { SESSION_COOKIE, readSession } from "@/lib/session";
+import { getSessionCookie } from "better-auth/cookies";
 
-// /api/cron/* проверяет CRON_SECRET сам: у Vercel Cron нет сессии; /api/quick — токен Быстрой команды (Bearer)
-const PUBLIC = new Set(["/login", "/api/login", "/api/users", "/api/cron/daily", "/api/quick"]);
+// /api/auth/* — Better Auth (вход, выход, сессии; без сессии отвечает сам), /api/cron/* проверяет CRON_SECRET,
+// /api/quick — токен Быстрой команды (Bearer)
+const PUBLIC = new Set(["/login", "/api/cron/daily", "/api/quick"]);
 
-export async function proxy(req: NextRequest) {
+/** Быстрая проверка: есть ли cookie сессии. Подпись и срок проверяют route handlers (requireUser) */
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  if (PUBLIC.has(pathname)) return NextResponse.next();
-
-  const value = req.cookies.get(SESSION_COOKIE)?.value ?? "";
-  if (value && (await readSession(value))) return NextResponse.next();
-
-  if (pathname.startsWith("/api/")) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
+  if (PUBLIC.has(pathname) || pathname.startsWith("/api/auth/") || getSessionCookie(req)) return NextResponse.next();
+  if (pathname.startsWith("/api/")) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   return NextResponse.redirect(new URL("/login", req.url));
 }
 

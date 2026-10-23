@@ -4,7 +4,7 @@
  * (настройки участника, планы месяца), — под advisory-блокировкой по их ключу.
  * Формы объектов совпадают с Redis-реализацией: необязательные поля без значения не попадают в объект.
  */
-import { and, asc, eq, gt, gte, inArray, isNull, lt, lte, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, sql, type SQL } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import * as s from "./schema.ts";
 import { type Change, type Ctx, type Done, type Repos, type StoredSubscription, type Updated } from "../types.ts";
@@ -665,6 +665,15 @@ export function postgresRepos(db: Db): Repos {
         for (const r of rows) out.set(r.id, [...(out.get(r.id) ?? []), r.userId]);
         return [...out].map(([id, userIds]) => ({ id, userIds }));
       },
+      async householdOf(userId) {
+        // ponytail: последний вступивший бюджет; выбор бюджета пользователем — вместе с приглашениями
+        const [row] = await db.select({ id: s.memberships.householdId }).from(s.memberships).where(eq(s.memberships.userId, userId))
+          .orderBy(desc(s.memberships.joinedAt)).limit(1);
+        return row?.id ?? null;
+      },
+      members: (householdId) =>
+        db.select({ id: s.users.id, name: s.users.name }).from(s.memberships).innerJoin(s.users, eq(s.users.id, s.memberships.userId))
+          .where(eq(s.memberships.householdId, householdId)).orderBy(asc(s.memberships.joinedAt), asc(s.memberships.userId)),
       tokensOf: async (userId) => tokensById(await db.select().from(s.apiTokens).where(eq(s.apiTokens.userId, userId))),
       touchToken: async (userId, id, rec) =>
         void (await db.update(s.apiTokens).set({ lastUsedAt: rec.lastUsedAt ? new Date(rec.lastUsedAt) : null })

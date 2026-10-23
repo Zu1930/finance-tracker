@@ -3,8 +3,7 @@
  * поэтому обработчик проверяется тестами (api.test.mjs) на хранилище в памяти
  */
 import type { Category, Expense, Settings } from "../types.ts";
-import { activeCats, fmt, liveCats, minus, uid } from "../utils.ts";
-import { safeEqual } from "../session.ts";
+import { activeCats, fmt, liveCats, minus, safeEqual, uid } from "../utils.ts";
 import { parsePhrase, type ParsedEntry } from "./parse.ts";
 import { buildDictionary } from "./dictionary.ts";
 import { entryProblem, toExpense, tratyWord } from "./entry.ts";

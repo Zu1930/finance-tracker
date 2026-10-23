@@ -1,5 +1,5 @@
-import { requireUser, unauthorized } from "@/lib/session";
-import { ctxOf, getRepos } from "@/lib/data";
+import { requireUser, unauthorized } from "@/lib/auth";
+import { getRepos } from "@/lib/data";
 import { NextResponse } from "next/server";
 import { rebaseStore, type LimitRounding } from "@/lib/rebase";
 import { todayStr } from "@/lib/utils";
@@ -8,8 +8,8 @@ const ROUNDINGS: LimitRounding[] = [0, 1, 10, 100];
 
 /** Перевод учёта в другую базовую валюту: { from, to, rate, limitRounding } */
 export async function POST(req: Request) {
-  const user = await requireUser(req);
-  if (!user) return unauthorized();
+  const ctx = await requireUser(req);
+  if (!ctx) return unauthorized();
   const body = (await req.json().catch(() => null)) as {
     from?: unknown;
     to?: unknown;
@@ -32,7 +32,6 @@ export async function POST(req: Request) {
 
   try {
     // Пересчитываются и личные данные ОБОИХ пользователей: единственное место, где сервер пишет в чужие личные ключи
-    const ctx = ctxOf(user);
     const raw = await getRepos().store.snapshot(ctx);
     if (!raw.settings) return NextResponse.json({ error: "Трекер ещё не настроен." }, { status: 409 });
     // Защита от двойного пересчёта с двух устройств: база уже сменилась

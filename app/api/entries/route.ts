@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { requireUser, unauthorized } from "@/lib/session";
-import { ctxOf, getRepos } from "@/lib/data";
+import { requireUser, unauthorized } from "@/lib/auth";
+import { getRepos } from "@/lib/data";
 import { written } from "@/lib/records";
 import { prepareEntry, type Kind } from "@/lib/store";
 import type { Expense, Income } from "@/lib/types";
@@ -11,14 +11,13 @@ import type { Expense, Income } from "@/lib/types";
  * проверяется; трата и её id в пункте пишутся атомарно
  */
 export async function POST(req: Request) {
-  const user = await requireUser(req);
-  if (!user) return unauthorized();
+  const ctx = await requireUser(req);
+  if (!ctx) return unauthorized();
   const body = (await req.json().catch(() => null)) as { kind?: unknown; entry?: unknown } | null;
   const kind = body?.kind;
   if (kind !== "expense" && kind !== "income") return NextResponse.json({ error: "Неизвестный тип записи." }, { status: 400 });
-  const entry = prepareEntry(kind as Kind, body?.entry, user.id);
+  const entry = prepareEntry(kind as Kind, body?.entry, ctx.userId);
   if (!entry) return NextResponse.json({ error: "Некорректная запись." }, { status: 400 });
-  const ctx = ctxOf(user);
   const repos = getRepos();
   try {
     if (kind === "income") {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { requireUser, unauthorized } from "@/lib/session";
-import { ctxOf, getRepos } from "@/lib/data";
+import { requireUser, unauthorized } from "@/lib/auth";
+import { getRepos } from "@/lib/data";
 import { fail, isVersion, updated } from "@/lib/records";
 import { MAX_AHEAD, isMonth, monthsAhead, planMoveError } from "@/lib/plan";
 import type { PlanItem } from "@/lib/types";
@@ -12,13 +12,12 @@ const CONFLICT = "Покупку изменил другой пользоват�
  * владелец (из сессии). toMonth — перенос: удаление из месяца и запись в новый атомарно
  */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const user = await requireUser(req);
-  if (!user) return unauthorized();
+  const ctx = await requireUser(req);
+  if (!ctx) return unauthorized();
   const { id } = await params;
   const b = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!b || !isMonth(b.month) || !isVersion(b.version)) return fail(400, "Неверные данные.");
   const scope = b.scope === "personal" ? "personal" : "family";
-  const ctx = ctxOf(user);
   const repos = getRepos();
   const name = typeof b.name === "string" ? b.name.trim().slice(0, 40) : undefined;
   const amount = b.amount;
@@ -58,14 +57,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
 /** Удаление ?scope=&month=. Связанные траты остаются и становятся обычными */
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const user = await requireUser(req);
-  if (!user) return unauthorized();
+  const ctx = await requireUser(req);
+  if (!ctx) return unauthorized();
   const { id } = await params;
   const q = new URL(req.url).searchParams;
   const month = q.get("month");
   if (!isMonth(month)) return fail(400, "Неверный месяц.");
   try {
-    return updated(await getRepos().planItems.update(ctxOf(user), q.get("scope") === "personal" ? "personal" : "family", month, id, undefined, () => null), CONFLICT);
+    return updated(await getRepos().planItems.update(ctx, q.get("scope") === "personal" ? "personal" : "family", month, id, undefined, () => null), CONFLICT);
   } catch (e) {
     console.error(e);
     return fail(500, "Не удалось удалить.");

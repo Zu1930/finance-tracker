@@ -4,7 +4,7 @@ import { useRef, useState } from 'react'
 import { SW_CACHE } from '@/lib/offline'
 
 const logout = async () => {
-	await fetch('/api/logout', { method: 'POST' })
+	await fetch('/api/auth/sign-out', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => null)
 	// Офлайн-копия данных и очередь — этого пользователя: на общем устройстве их не должен увидеть следующий
 	try {
 		await caches.delete(SW_CACHE)

@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useTracker } from "./TrackerProvider";
 import { AsciiBar } from "./AsciiBar";
-import { downloadJson } from "./ImportExport";
 import { Accounts } from "./savings/Accounts";
 import { Goals } from "./savings/Goals";
 import { abbr, average } from "@/lib/metrics";
@@ -33,7 +32,6 @@ export function SavingsView() {
 
   return (
     <>
-      {sv.migration && <MigrationBanner />}
       <section>
         <h1 className="sec">Всего</h1>
         {empty ? (
@@ -100,35 +98,6 @@ function Dynamics({ current }: { current: number }) {
           );
         })}
       </ul>
-    </section>
-  );
-}
-
-/** Старые копилки ещё в ft:goals: перенос запускает MIGRATION_OWNER, сначала скачивается копия */
-function MigrationBanner() {
-  const { data, api, toast } = useTracker();
-  const m = data.savings.migration!;
-  const [busy, setBusy] = useState(false);
-  const run = async () => {
-    setBusy(true);
-    const backup = await fetch("/api/migrate-v3").then((r) => (r.ok ? r.json() : null)).catch(() => null);
-    if (!backup) {
-      setBusy(false);
-      return toast("Не удалось скачать копию — перенос не запущен.");
-    }
-    downloadJson(backup, `goals-backup-${todayStr()}.json`);
-    const res = await api<{ goals: number }>("/api/migrate-v3", "POST");
-    setBusy(false);
-    if (res) toast(`Перенесено копилок: ${res.goals}`);
-  };
-  return (
-    <section className="mb-8 border border-dashed border-line2 px-3 py-3 uppercase">
-      <p>&gt; Старых копилок: {m.goals}. Они станут семейными, суммы и валюты сохранятся</p>
-      {m.owner.id === data.me.id ? (
-        <button className="tb mt-3" disabled={busy} onClick={() => void run()}>Перенести копилки</button>
-      ) : (
-        <p className="mt-1 text-muted">// Перенос запускает {m.owner.name}</p>
-      )}
     </section>
   );
 }

@@ -2,20 +2,18 @@
 
 import type { ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
-import { useTracker } from './TrackerProvider'
 import { ExportButton } from './ImportExport'
 import { Currencies } from './settings/Currencies'
 import { BaseCurrency } from './settings/BaseCurrency'
 import { MyCurrency } from './settings/MyCurrency'
 import { ThemeSwitch } from './settings/ThemeSwitch'
-import { HoldLogout } from './settings/HoldLogout'
+import { Account } from './settings/Account'
 import { Notifications } from './settings/Notifications'
 import { QuickEntrySwitch, QuickTokens } from './settings/QuickTokens'
 
 /** Настройки: валюты, основная валюта, оформление, данные, аккаунт */
 export function SettingsView() {
 	const router = useRouter()
-	const { data } = useTracker()
 	// Назад — туда, откуда пришли; если страницу открыли напрямую, истории нет — на ввод
 	const back = () => (window.history.length > 1 ? router.back() : router.push('/'))
 
@@ -57,12 +55,7 @@ export function SettingsView() {
 				</div>
 			</Section>
 			<Section title="Аккаунт">
-				{data.me && (
-					<p className="mb-3 uppercase">
-						<span className="text-muted">Вошёл:</span> <b>{data.me.name}</b>
-					</p>
-				)}
-				<HoldLogout />
+				<Account />
 			</Section>
 		</>
 	)

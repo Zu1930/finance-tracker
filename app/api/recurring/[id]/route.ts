@@ -1,5 +1,5 @@
-import { requireUser, unauthorized } from "@/lib/session";
-import { ctxOf, getRepos } from "@/lib/data";
+import { requireUser, unauthorized } from "@/lib/auth";
+import { getRepos } from "@/lib/data";
 import { fail, isVersion, updated } from "@/lib/records";
 import { endMonthOnDelete, isMonth, withAmount } from "@/lib/recurring";
 import type { RecurringPayment } from "@/lib/types";
@@ -14,8 +14,8 @@ const intIn = (v: unknown, lo: number, hi: number): v is number => typeof v === 
  * запись в истории с fromMonth, прошлые месяцы не меняются. Семейные правят оба, личные — только владелец
  */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const user = await requireUser(req);
-  if (!user) return unauthorized();
+  const ctx = await requireUser(req);
+  if (!ctx) return unauthorized();
   const { id } = await params;
   const b = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!b || !isVersion(b.version)) return fail(400, "Неверные данные.");
@@ -31,7 +31,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     (amount !== undefined && !(typeof amount === "number" && Number.isFinite(amount) && amount > 0 && isMonth(b.fromMonth)))
   ) return fail(400, "Неверные данные.");
   try {
-    const ctx = ctxOf(user);
     if (b.categoryId !== undefined) {
       const cats = await getRepos().categories.list(ctx);
       if (!(scope === "personal" ? cats.mine : cats.family).some((c) => c.id === b.categoryId && !c.archived)) return fail(400, "Нет такой категории.");
@@ -60,14 +59,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
  * из управления. Связи прошлых трат сохраняются. ?scope=&today=YYYY-MM-DD
  */
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const user = await requireUser(req);
-  if (!user) return unauthorized();
+  const ctx = await requireUser(req);
+  if (!ctx) return unauthorized();
   const { id } = await params;
   const q = new URL(req.url).searchParams;
   const scope = q.get("scope") === "personal" ? "personal" : "family";
   const today = DAY.test(q.get("today") ?? "") ? q.get("today")! : todayStr();
   try {
-    const ctx = ctxOf(user);
     const expenses = await getRepos().expenses.inMonth(ctx, scope, today.slice(0, 7));
     return updated(await getRepos().recurring.update(ctx, scope, id, undefined, (p) => ({ ...p, endMonth: endMonthOnDelete(p, today, expenses) })), CONFLICT);
   } catch (e) {

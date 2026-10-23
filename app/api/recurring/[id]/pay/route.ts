@@ -1,5 +1,5 @@
-import { requireUser, unauthorized } from "@/lib/session";
-import { ctxOf, getRepos } from "@/lib/data";
+import { requireUser, unauthorized } from "@/lib/auth";
+import { getRepos } from "@/lib/data";
 import { fail, written } from "@/lib/records";
 import { activeIn, amountIn, isMonth } from "@/lib/recurring";
 import type { Expense } from "@/lib/types";
@@ -12,14 +12,13 @@ const DAY = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
  * сумма платежа. Трата: категория и scope из платежа, автор из сессии, дата — сегодня, курс — текущий
  */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const user = await requireUser(req);
-  if (!user) return unauthorized();
+  const ctx = await requireUser(req);
+  if (!ctx) return unauthorized();
   const { id } = await params;
   const b = (await req.json().catch(() => null)) as { scope?: unknown; month?: unknown; amount?: unknown; today?: unknown } | null;
   if (!isMonth(b?.month)) return fail(400, "Неверный месяц.");
   const scope = b.scope === "personal" ? "personal" : "family";
   try {
-    const ctx = ctxOf(user);
     const [p, settings] = await Promise.all([getRepos().recurring.get(ctx, scope, id), getRepos().settings.get(ctx)]);
     if (!p) return fail(403, "Платёж не найден.");
     if (!activeIn(p, b.month)) return fail(400, "В этом месяце платежа нет.");
@@ -30,7 +29,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const date = typeof b.today === "string" && DAY.test(b.today) ? b.today : todayStr();
     const e: Expense = {
       id: crypto.randomUUID(), amount, currency: p.currency, rate, base: Math.round(amount * rate * 100) / 100,
-      catId: p.categoryId, note: p.name, date, ts: Date.now(), scope, authorId: user.id, recurringId: p.id, recurringMonth: b.month,
+      catId: p.categoryId, note: p.name, date, ts: Date.now(), scope, authorId: ctx.userId, recurringId: p.id, recurringMonth: b.month,
     };
     return written(await getRepos().expenses.addForRecurring(ctx, e), e, "Платёж изменил другой пользователь, проверьте и повторите.");
   } catch (e) {

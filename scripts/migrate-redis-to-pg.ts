@@ -6,11 +6,11 @@
  */
 import { connect } from "./db.ts";
 import { importToPostgres, readRedisSource } from "../lib/data/migrate.ts";
-import { listUsers } from "../lib/users.ts";
+import { parseUsers } from "../lib/users.ts";
 
 const dryRun = process.argv.includes("--dry-run");
 const force = process.argv.includes("--force");
-const users = listUsers();
+const users = parseUsers(process.env.USERS);
 const { db, pool, host } = connect();
 try {
   const { counts, skipped } = await importToPostgres(db, await readRedisSource(users), users, { dryRun, force });

@@ -17,10 +17,76 @@ const day = (name: string) => date(name, { mode: "string" });
 const scope = () => text("scope", { enum: ["family", "personal"] }).notNull();
 const scopeCheck = (table: string, t: { scope: unknown; ownerId: unknown }) =>
   check(`${table}_scope_owner`, sql`(${t.scope} = 'personal') = (${t.ownerId} IS NOT NULL)`);
+/**
+ * Пользователь — он же user Better Auth (lib/auth.ts): одна таблица, поэтому id для данных и для входа один.
+ * email NULL — пользователь ещё не перенесён скриптом migrate-users-to-auth и войти не может
+ */
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
+  email: text("email").unique(),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  image: text("image"),
   createdAt: moment("created_at").notNull().defaultNow(),
+  updatedAt: moment("updated_at").notNull().defaultNow(),
+});
+
+/** Таблицы Better Auth. Префикс auth_: accounts — это счета бюджета */
+export const authSessions = pgTable(
+  "auth_sessions",
+  {
+    id: text("id").primaryKey(),
+    token: text("token").notNull().unique(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    expiresAt: moment("expires_at").notNull(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    createdAt: moment("created_at").notNull().defaultNow(),
+    updatedAt: moment("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("auth_sessions_user").on(t.userId)],
+);
+
+/** Способ входа; у нас только providerId = 'credential' с хешем пароля */
+export const authAccounts = pgTable(
+  "auth_accounts",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id").notNull(),
+    providerId: text("provider_id").notNull(),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    accessToken: text("access_token"),
+    refreshToken: text("refresh_token"),
+    idToken: text("id_token"),
+    accessTokenExpiresAt: moment("access_token_expires_at"),
+    refreshTokenExpiresAt: moment("refresh_token_expires_at"),
+    scope: text("scope"),
+    password: text("password"),
+    createdAt: moment("created_at").notNull().defaultNow(),
+    updatedAt: moment("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("auth_accounts_user").on(t.userId), uniqueIndex("auth_accounts_provider").on(t.providerId, t.accountId)],
+);
+
+export const authVerifications = pgTable(
+  "auth_verifications",
+  {
+    id: text("id").primaryKey(),
+    identifier: text("identifier").notNull(),
+    value: text("value").notNull(),
+    expiresAt: moment("expires_at").notNull(),
+    createdAt: moment("created_at").notNull().defaultNow(),
+    updatedAt: moment("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("auth_verifications_identifier").on(t.identifier)],
+);
+
+/** Счётчики попыток входа: в памяти функции Vercel лимит не работает — у каждого экземпляра свой */
+export const authRateLimits = pgTable("auth_rate_limits", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  count: integer("count").notNull(),
+  lastRequest: bigint("last_request", { mode: "number" }).notNull(),
 });
 
 /** Бюджет и его общие настройки. base_currency IS NULL — трекер ещё не настроен (настроек нет) */

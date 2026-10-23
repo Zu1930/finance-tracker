@@ -6,17 +6,19 @@ import { DEFAULT_HOUSEHOLD, type Change, type Ctx, type Done, type Repos, type S
 import { planLinkError } from "../../plan.ts";
 import { payLinkError, paymentOf, shiftMonth } from "../../recurring.ts";
 import { K, entryKey, parseMonthKey, planItemsKey, recordKey, recurringKey } from "../../store.ts";
-import { listUsers } from "../../users.ts";
+import type { User } from "../../users.ts";
 import type { TokenRecord } from "../../quick-entry/api.ts";
 import type { Expense, Goal, Income, PlanItem, RecurringPayment, Scope, Settings, UserSettings } from "../../types.ts";
 
 /** Пользователь контекста; в Redis один бюджет — любой другой household отклоняется, а не читается как default */
 function me(ctx: Ctx): string {
   if (ctx.householdId !== DEFAULT_HOUSEHOLD) throw new Error(`Redis хранит только бюджет «${DEFAULT_HOUSEHOLD}», запрошен «${ctx.householdId}»`);
-  if (!listUsers().some((u) => u.id === ctx.userId)) throw new Error(`Пользователь «${ctx.userId}» не участник бюджета`);
+  if (!memberIds.includes(ctx.userId)) throw new Error(`Пользователь «${ctx.userId}» не участник бюджета`);
   return ctx.userId;
 }
-const members = () => listUsers().map((u) => u.id);
+// Участники единственного бюджета Redis; задаёт redisRepos. Redis остался только для переноса в Postgres
+let memberIds: string[] = [];
+const members = () => memberIds;
 const redis = () => getRedis();
 
 /** Ключ месяца в индексе: без него снимок и смена базы ключ не увидят. SADD идемпотентен — вызывается до записи */
@@ -68,7 +70,8 @@ const expenseKey = (ctx: Ctx, scope: Scope, month: string) => entryKey("expense"
 const SUBS = "ft:push";
 const APP_VERSION = "ft:push:version";
 
-export function redisRepos(): Repos {
+export function redisRepos(users: User[]): Repos {
+  memberIds = users.map((u) => u.id);
   return {
     settings: {
       get: async (ctx) => (me(ctx), redis().get<Settings>(K.settings)),
@@ -262,6 +265,8 @@ export function redisRepos(): Repos {
 
     system: {
       households: async () => [{ id: DEFAULT_HOUSEHOLD, userIds: members() }],
+      householdOf: async (userId) => (members().includes(userId) ? DEFAULT_HOUSEHOLD : null),
+      members: async (householdId) => (householdId === DEFAULT_HOUSEHOLD ? users : []),
       tokensOf: async (userId) => (members().includes(userId) ? ((await redis().hgetall<Record<string, TokenRecord>>(K.tokens(userId))) ?? {}) : {}),
       touchToken: async (userId, id, rec) => void (await redis().hset(K.tokens(userId), { [id]: rec })),
       async hitToken(tokenId) {

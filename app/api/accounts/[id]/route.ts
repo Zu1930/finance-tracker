@@ -1,5 +1,5 @@
-import { requireUser, unauthorized } from "@/lib/session";
-import { ctxOf, getRepos } from "@/lib/data";
+import { requireUser, unauthorized } from "@/lib/auth";
+import { getRepos } from "@/lib/data";
 import { fail, isVersion, updated } from "@/lib/records";
 import { accountArchiveError } from "@/lib/savings";
 
@@ -8,15 +8,15 @@ import { accountArchiveError } from "@/lib/savings";
  * (из сессии). Остаток меняет только сверка
  */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const user = await requireUser(req);
-  if (!user) return unauthorized();
+  const ctx = await requireUser(req);
+  if (!ctx) return unauthorized();
   const { id } = await params;
   const b = (await req.json().catch(() => null)) as { scope?: unknown; version?: unknown; name?: unknown; archived?: unknown } | null;
   const name = typeof b?.name === "string" ? b.name.trim().slice(0, 40) : undefined;
   if (!b || !isVersion(b.version) || name === "" || (b.archived !== undefined && typeof b.archived !== "boolean")) return fail(400, "Неверные данные.");
   try {
     const r = await getRepos().accounts.update(
-      ctxOf(user),
+      ctx,
       b.scope === "personal" ? "personal" : "family",
       id,
       b.version,

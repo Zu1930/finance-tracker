@@ -140,6 +140,10 @@ export interface LegacyRepo {
 export interface SystemRepo {
   /** Бюджеты и их участники — для cron */
   households(): Promise<{ id: string; userIds: string[] }[]>;
+  /** Бюджет пользователя; null — ни в одном не состоит */
+  householdOf(userId: string): Promise<string | null>;
+  /** Участники бюджета в порядке вступления */
+  members(householdId: string): Promise<{ id: string; name: string }[]>;
   tokensOf(userId: string): Promise<Record<string, TokenRecord>>;
   touchToken(userId: string, id: string, rec: TokenRecord): Promise<void>;
   /** Запрос токеном в текущую минуту → сколько их уже было, включая этот */
