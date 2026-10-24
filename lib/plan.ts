@@ -47,14 +47,14 @@ export const itemLeft = (item: PlanItem, linked: number) => Math.max(0, r2(item.
 /**
  * Расход категорий для шкал лимитов: траты по пунктам плана не входят, кроме превышения пункта —
  * разница сверх суммы пункта идёт в категорию, перерасход по плану должен быть виден.
- * Оплаты регулярных платежей не входят совсем — даже разница факта и оценки: она видна в строке регулярных
+ * Оплаты регулярных платежей входят, как обычные траты: регулярные — часть лимита своей категории
  */
 export function planSpentByCat(expenses: Expense[], items: PlanItem[]): Record<string, number> {
   const byId = new Map(items.map((i) => [i.id, i]));
   const linked = linkedByItem(expenses, items);
   const out: Record<string, number> = {};
   const add = (cat: string, v: number) => (out[cat] = r2((out[cat] ?? 0) + v));
-  for (const e of expenses) if (!e.recurringId && !(e.planItemId && byId.has(e.planItemId))) add(e.catId, e.base);
+  for (const e of expenses) if (!(e.planItemId && byId.has(e.planItemId))) add(e.catId, e.base);
   for (const [id, sum] of Object.entries(linked)) {
     const it = byId.get(id)!;
     if (sum > it.amount) add(it.categoryId, sum - it.amount);
@@ -69,11 +69,11 @@ export const plannedForecast = (items: PlanItem[], linked: Record<string, number
 // ---------- Сводка плана ----------
 export type PlanSummary = {
   income: number | null;
-  /** Регулярные: семья, мои, партнёра (сумма с сервера) */
+  /** Регулярные: семья, мои, партнёра (сумма с сервера). Уже внутри лимитов — в остаток отдельно не вычитаются */
   recurring: { family: number; mine: number; partner: number; total: number };
   limits: { family: number; mine: number; partner: number; total: number };
   planned: { total: number; count: number; partner: number };
-    /** income − регулярные − лимиты − покупки; null без дохода */
+  /** income − лимиты − покупки; null без дохода */
   rest: number | null;
   /** План больше дохода (при income = null — никогда) */
   short: boolean;
@@ -95,7 +95,7 @@ export function planSummary(p: {
   const recurringTotal = r2(rec.family + rec.mine + rec.partner);
   const limitsTotal = r2(p.familyLimits + p.myLimits + p.partnerLimits);
   const plannedTotal = r2(p.items.reduce((a, i) => a + i.amount, 0) + p.partnerPlanned);
-    const rest = p.income === null ? null : r2(p.income - recurringTotal - limitsTotal - plannedTotal);
+  const rest = p.income === null ? null : r2(p.income - limitsTotal - plannedTotal);
   return {
     income: p.income,
     recurring: { ...rec, total: recurringTotal },

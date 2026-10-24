@@ -40,9 +40,9 @@ export function PlanSummary({ month }: { month: string }) {
 		void savePlan({ incomeOverride: n })
 	}
 
-		// Шкала: █ регулярные и лимиты (обязательное), ▓ покупки, ░ остаток. План больше дохода — делим по плану, справа +!!
+		// Шкала: █ лимиты (с регулярными внутри), ▓ покупки, ░ остаток. План больше дохода — делим по плану, справа +!!
 	const w = narrow ? 24 : BAR
-	const fixed = s.recurring.total + s.limits.total
+	const fixed = s.limits.total
 	const total = fixed + s.planned.total
 	const scale = income !== null && income > 0 && !s.short ? income : total
 	const cells = (v: number) => (scale > 0 ? Math.round((v / scale) * w) : 0)
@@ -76,10 +76,11 @@ export function PlanSummary({ month }: { month: string }) {
 					<span className="flex flex-wrap items-center gap-y-1 max-sm:w-full max-sm:justify-end max-sm:text-right max-sm:text-xs">{caption}</span>
 				</dd>
 								{[
-					{ mark: <span aria-hidden="true">↻ </span>, label: 'Регулярные', value: <b>{minus(s.recurring.total)}</b>,
-						note: `${isSolo ? '' : `Семья ${fmt(s.recurring.family)} · Личное ${fmt(s.recurring.mine + s.recurring.partner)}`}${income ? `${isSolo ? '' : ' · '}${Math.round((s.recurring.total / income) * 100)}% дохода` : ''}` },
 					{ mark: <span aria-hidden="true">█ </span>, label: 'Лимиты', value: <b>{minus(s.limits.total)}</b>,
-						note: `Только переменные траты${isSolo ? '' : ` · семья ${fmt(s.limits.family)} · личное ${fmt(s.limits.mine + s.limits.partner)}`}` },
+						note: `Вместе с регулярными${isSolo ? '' : ` · семья ${fmt(s.limits.family)} · личное ${fmt(s.limits.mine + s.limits.partner)}`}` },
+					// Регулярные — часть лимитов: справочно, в остаток отдельно не вычитаются
+					{ mark: <span aria-hidden="true" className="text-muted">↻ </span>, label: 'Из них регулярные', value: <b className="font-normal">{fmt(s.recurring.total)}</b>,
+						note: `${isSolo ? '' : `Семья ${fmt(s.recurring.family)} · Личное ${fmt(s.recurring.mine + s.recurring.partner)}`}${s.recurring.total > s.limits.total ? `${isSolo ? '' : ' · '}больше лимитов — поднимите лимиты` : ''}` },
 					{ mark: <span aria-hidden="true" className="text-muted">▓ </span>, label: 'Покупки', value: <b>{minus(s.planned.total)}</b>,
 						note: `${s.planned.count} шт.${s.planned.partner > 0 && data.partner ? ` · вкл. ${data.partner.name} ${fmt(s.planned.partner)}` : ''}` },
 					{ mark: <span aria-hidden="true" className="text-dim">░ </span>, label: 'Останется',

@@ -96,8 +96,13 @@ export async function completeOnboarding(db: Db, ctx: Ctx, draft: WelcomeDraft, 
       const payments = draft.payments ?? [];
       const keys = cats.flatMap((c) => (c.key ? [c.key] : []));
       if (payments.some((p) => payCategory(PAY_PRESETS.find((x) => x.key === p.key)!, keys) === "other") && !keys.includes("other")) {
-        // Платежу некуда — «Прочее» без лимита: обязательные лимиты не съедают
+        // Платежу некуда — «Прочее»; её лимит — сумма платежей (ниже)
         cats.push({ key: "other", scope: scopeOf("family"), cat: { id: uid(), name: "Прочее", limit: 0 } });
+      }
+      // Оплаченные регулярные входят в траты категории: их сумма закладывается в её лимит
+      for (const p of payments) {
+        const c = cats.find((x) => x.key === payCategory(PAY_PRESETS.find((y) => y.key === p.key)!, keys))!;
+        c.cat.limit = Math.round((c.cat.limit + p.amount) * 100) / 100;
       }
       const family = cats.filter((c) => c.scope === "family").map((c) => c.cat);
       const personal = cats.filter((c) => c.scope === "personal").map((c) => c.cat);

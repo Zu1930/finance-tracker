@@ -150,9 +150,9 @@ export function Welcome({ userId }: { userId: string }) {
 				<h1 className="sec">Готово</h1>
 				<dl className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 uppercase">
 					<dt className="text-muted">Категории</dt>
-					<dd>{r.cats ? `${cats.length} · ${fmt(cats.reduce((a, c) => a + (presets.find((p) => p.key === c.key) ? limitOf(presets.find((p) => p.key === c.key)!.rsd) : 0), 0))} ${base} в месяц` : 'по умолчанию'}</dd>
+					<dd>{r.cats ? `${cats.length} · ${fmt(cats.reduce((a, c) => a + (presets.find((p) => p.key === c.key) ? limitOf(presets.find((p) => p.key === c.key)!.rsd) : 0), 0) + pays.reduce((a, p) => a + p.amount, 0))} ${base} в месяц` : 'по умолчанию'}</dd>
 					<dt className="text-muted">Обязательные</dt>
-					<dd>{pays.length ? `${pays.length} · ${fmt(pays.reduce((a, p) => a + p.amount, 0))} ${base} в месяц` : 'нет'}</dd>
+					<dd>{pays.length ? `${pays.length} · ${fmt(pays.reduce((a, p) => a + p.amount, 0))} ${base} в месяц · в лимитах` : 'нет'}</dd>
 					<dt className="text-muted">Счета</dt>
 					<dd>{accs.length ? `${accs.length} · ≈ ${fmt(Math.round(accTotal))} ${base}` : 'нет'}</dd>
 				</dl>
@@ -245,7 +245,7 @@ export function Welcome({ userId }: { userId: string }) {
 		body = (
 			<>
 				<h1 className="text-lg font-bold">Обязательные платежи</h1>
-				<p className="mt-2 text-muted2">Они не будут съедать лимиты, а в день оплаты появятся на вводе — отметите одним нажатием.</p>
+				<p className="mt-2 text-muted2">Сумма добавится к лимиту категории, а в день оплаты платёж появится на вводе — отметите одним нажатием.</p>
 				<ul className="mt-4">
 					{PAY_PRESETS.map((p) => {
 						const on = d.pays[p.key]

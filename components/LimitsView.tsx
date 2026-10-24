@@ -187,7 +187,7 @@ function MonthLimits() {
 /** Блоки лимитов в 2 колонки; для семейных — строка вклада по именам; под шкалой — покупки по плану в категории */
 function LimitBlocks({ cats, spent, contribution, planned, recurring }: {
   cats: Category[]; spent: Record<string, number>; contribution?: Expense[]; planned: PlanItem[];
-  /** Регулярные месяца по категориям: в шкалу не входят, строкой под ней */
+  /** Регулярные месяца по категориям: оплаченные уже в шкале, строкой под ней — сколько из лимита на них */
   recurring: Record<string, number>;
 }) {
   const { data, month } = useTracker();
@@ -205,7 +205,7 @@ function LimitBlocks({ cats, spent, contribution, planned, recurring }: {
             <p className={`mt-1 uppercase ${left < 0 ? "text-bad" : "text-muted"}`}>
               {left < 0 ? `Перерасход ${fmt(-left)} ${base}` : `Осталось ${fmt(left)} из ${fmt(c.limit)} ${base}`}
             </p>
-            {recurring[c.id] > 0 && <p className="mt-1 text-muted2 uppercase">↻ Регулярные {fmt(Math.round(recurring[c.id]))} — отдельно</p>}
+            {recurring[c.id] > 0 && <p className="mt-1 text-muted2 uppercase">↻ Из них регулярные {fmt(Math.round(recurring[c.id]))}</p>}
             {planned.filter((it) => it.categoryId === c.id).map((it) => {
               const status = itemStatus(it, linked[it.id] ?? 0);
               return (

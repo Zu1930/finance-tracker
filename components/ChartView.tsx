@@ -72,7 +72,7 @@ export function ChartView() {
   const perMonth = keys.map((k) => {
     const p = data.plans[k];
     const ids = new Set(p ? [...p.items.family, ...p.items.mine].map((i) => i.id) : []);
-    const regular = (list: Expense[] = []) => list.filter((e) => !e.recurringId && !(e.planItemId && ids.has(e.planItemId)));
+    const regular = (list: Expense[] = []) => list.filter((e) => !(e.planItemId && ids.has(e.planItemId)));
     const partnerPlanned = Object.values(data.partnerPlannedDaily[k] ?? {}).reduce((a, v) => a + v, 0);
     const partnerRecurring = Object.values(data.partnerRecurringDaily?.[k] ?? {}).reduce((a, v) => a + v, 0);
     return {
