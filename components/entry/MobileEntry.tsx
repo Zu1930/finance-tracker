@@ -267,8 +267,6 @@ function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave }: {
 	const { isSolo } = useTracker()
 	const { form } = d
 	const st = form.st
-	const dateRef = useRef<HTMLInputElement>(null)
-	const [showDate, setShowDate] = useState(false)
 	const holdTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 	const cleared = useRef(false)
 	const options = kind === 'expense' ? d.cats : d.sources
@@ -279,13 +277,6 @@ function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave }: {
 		if (k === BACKSPACE && cleared.current) return void (cleared.current = false)
 		setExpr(press(expr, k))
 		form.setError('')
-	}
-	const pickDate = () => {
-		try {
-			dateRef.current!.showPicker()
-		} catch {
-			setShowDate(true)
-		}
 	}
 
 	return (
@@ -310,7 +301,18 @@ function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave }: {
 						<IconText name={spaceIcon(scope)} className="truncate">{SPACE[scope].name}</IconText>
 					</button>
 				) : <span />}
-				<button className={chip} onClick={pickDate}><IconText name="calendar">{dateLabel(form.date).toUpperCase()}</IconText></button>
+				{/* Прозрачное поле даты поверх кнопки (как у валюты): на iOS showPicker у скрытого поля молча не срабатывает */}
+				<label className={`${chip} relative`}>
+					<IconText name="calendar">{dateLabel(form.date).toUpperCase()}</IconText>
+					<input
+						type="date"
+						aria-label={t('entry.date')}
+						className="absolute inset-0 h-full w-full opacity-0"
+						value={form.date}
+						onClick={(e) => { try { e.currentTarget.showPicker() } catch {} }}
+						onChange={(e) => e.target.value && form.setDate(e.target.value)}
+					/>
+				</label>
 				<label className={`${chip} relative`}>
 					<IconText name="currency">{form.currency}</IconText>
 					<select className="absolute inset-0 opacity-0" aria-label={t('entry.currency')} value={form.currency} onChange={(e) => form.setCur(e.target.value)}>
@@ -318,7 +320,6 @@ function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave }: {
 					</select>
 				</label>
 			</div>
-			<input ref={dateRef} type="date" aria-label={t('entry.date')} className={showDate ? 'tfield' : 'sr-only'} value={form.date} onChange={(e) => form.setDate(e.target.value)} />
 			{form.isForeign && (
 				<div className="flex items-center gap-2 text-xs text-muted">
 					<label htmlFor="m-rate">1 {form.currency} =</label>

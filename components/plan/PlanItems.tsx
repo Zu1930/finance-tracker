@@ -137,7 +137,7 @@ function NewItem({ month }: { month: string }) {
 			</div>
 			<div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Категория покупки">
 				{cats.map((c) => (
-					<button key={c.id} className="tb tb-tight" aria-pressed={catId === c.id} onClick={() => setCatId(c.id)}>{termName(c.name)}</button>
+					<button key={c.id} className="tb tb-tight max-w-full whitespace-normal break-all" aria-pressed={catId === c.id} onClick={() => setCatId(c.id)}>{termName(c.name)}</button>
 				))}
 				{cats.length === 0 && <span className="text-muted uppercase">Нет категорий</span>}
 			</div>

@@ -218,7 +218,7 @@ function NewPayment({ cats }: { cats: (s: Scope) => Category[] }) {
 				)}
 			</div>
 			<div className="flex flex-wrap gap-2" role="group" aria-label="Категория платежа">
-				{list.map((c) => <button key={c.id} className="tb tb-tight" aria-pressed={catId === c.id} onClick={() => setCatId(c.id)}>{termName(c.name)}</button>)}
+				{list.map((c) => <button key={c.id} className="tb tb-tight max-w-full whitespace-normal break-all" aria-pressed={catId === c.id} onClick={() => setCatId(c.id)}>{termName(c.name)}</button>)}
 				{list.length === 0 && <span className="text-muted uppercase">Нет категорий</span>}
 			</div>
 			<button className="tb max-sm:h-12 max-sm:w-full" onClick={() => void add()}>+ Добавить</button>

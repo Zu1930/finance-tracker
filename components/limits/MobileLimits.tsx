@@ -72,8 +72,11 @@ function CurrentMonth({ month }: { month: string }) {
 					<span className={`text-[32px] leading-tight font-bold tracking-tight ${left < 0 ? 'text-bad' : ''}`}>{left < 0 ? minus(-left) : fmt(left)}</span>
 					<span className="text-xs text-muted uppercase">{t('limits.of', { x: fmt(limit) })}</span>
 				</div>
-				<div aria-hidden="true" className="tracking-[-0.04em] whitespace-pre">
-					[{'█'.repeat(filled)}<span className="text-dim">{'░'.repeat(BAR - filled)}</span>]
+				{/* 30 равных ячеек на всю ширину: █ — заливка без щелей, ░ — символ; ширина не зависит от шрифта */}
+				<div aria-hidden="true" className="flex w-full leading-none">
+					{Array.from({ length: BAR }, (_, k) => (
+						k < filled ? <span key={k} className="flex-1 bg-ink" /> : <span key={k} className="flex-1 overflow-hidden text-center text-dim">░</span>
+					))}
 				</div>
 				{left < 0 ? (
 					<span className="text-xs text-bad uppercase">{t('limits.overLimits', { x: fmt(-left) })}</span>
@@ -137,7 +140,7 @@ function RequiredRow({ month }: { month: string }) {
 							const overdue = r.status === 'overdue'
 							return (
 								<li key={r.paymentId} className="flex min-h-[52px] flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-dashed border-line2 py-2">
-									<span className={`flex min-w-0 items-center gap-2 ${done ? 'text-muted' : overdue ? 'text-warn' : ''}`}>
+									<span className={`flex min-w-0 flex-1 items-center gap-2 ${done ? 'text-muted' : overdue ? 'text-warn' : ''}`}>
 										<Icon name={done ? 'check' : overdue ? 'warning' : 'recurring'} size={16} label={done ? t('recurring.paid') : overdue ? t('recurring.overdue') : undefined} />
 										<span className="truncate">{r.dueDate.slice(8, 10)} {termName(r.name)}</span>
 									</span>
@@ -249,8 +252,8 @@ function CategoryRow({ c, scope, month, spent, open, onToggle }: { c: Category; 
 	return (
 		<div className="border-b border-dashed border-line2">
 			<button className="flex min-h-[52px] w-full flex-col gap-1.5 py-3 text-left" onClick={onToggle} aria-expanded={open}>
-				<span className="flex w-full justify-between gap-2">
-					<span className="truncate">{c.name}</span>
+				<span className="flex w-full min-w-0 justify-between gap-2">
+					<span className="min-w-0 truncate">{c.name}</span>
 					<span className="shrink-0">
 						<b className={left < 0 ? 'text-bad' : ''}>{left < 0 ? minus(-left) : fmt(left)}</b>{' '}
 						<span className="text-xs text-muted uppercase">{left < 0 ? t('limits.over') : t('limits.left')}</span>
@@ -264,7 +267,7 @@ function CategoryRow({ c, scope, month, spent, open, onToggle }: { c: Category; 
 				<div className="flex flex-col gap-1 pb-3 text-xs text-muted uppercase">
 					<span>{t('limits.spentOf', { x: fmt(spent), y: fmt(c.limit) })}</span>
 					{people && <span>{people}</span>}
-					{last.length > 0 && <span className="normal-case">{t('limits.last')} {last.map((e) => `${e.note || c.name} ${minus(e.base)}`).join(', ')}</span>}
+					{last.length > 0 && <span className="normal-case break-words">{t('limits.last')} {last.map((e) => `${e.note || c.name} ${minus(e.base)}`).join(', ')}</span>}
 					<span className="mt-1 flex flex-wrap gap-1.5 text-sm text-ink">
 						<Link className={BTN} href={`/?cat=${encodeURIComponent(c.id)}`}>{t('limits.expenses')}</Link>
 						{canEdit && <button className={BTN} aria-pressed={edit} onClick={() => setEdit(!edit)}>{t('limits.editLimit')}</button>}
