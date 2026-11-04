@@ -5,6 +5,7 @@
  */
 import type { RawStore } from "../store.ts";
 import type { TokenRecord } from "../quick-entry/api.ts";
+import type { PlanBulk } from "../plan.ts";
 import type {
   Account, Category, Expense, Goal, Income, MonthPlan, MyMonthPlan, PlanItem, Recon, RecurringPayment, Scope, Settings, UserSettings,
 } from "../types.ts";
@@ -87,6 +88,11 @@ export interface ReconsRepo {
 export interface PlansRepo {
   putFamily(ctx: Ctx, month: string, expected: number, data: Omit<MonthPlan, "version">): Promise<CasResult>;
   putMine(ctx: Ctx, month: string, expected: number, data: Omit<MyMonthPlan, "version">): Promise<CasResult>;
+  /**
+   * Мастер плана одной транзакцией: документы плана по версиям, пропуски регулярных, покупки (добавить, удалить, перенести).
+   * 409 — версия плана не совпала или переносимую покупку уже изменили; 404 — платежа или покупки нет. При отказе не пишется ничего
+   */
+  bulk(ctx: Ctx, month: string, b: PlanBulk): Promise<Done>;
 }
 
 export interface PlanItemsRepo {

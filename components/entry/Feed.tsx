@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useTracker } from '../TrackerProvider'
 import { useSpace } from '../SpaceProvider'
@@ -37,7 +38,9 @@ export function Feed() {
 	const cats = new Map([...st.familyCategories, ...data.mySettings.personalCategories].map((c) => [c.id, c.name]))
 	const sources = new Map(incomeSources(st).map((s) => [s.id, s.name]))
 	const names = new Map([...Object.entries(data.names ?? {}), ...[data.me, ...(data.partner ? [data.partner] : [])].map((u) => [u.id, u.name] as const)])
-	const rows = feedRows(data, view)
+	// /?cat=<id> — из «Лимитов»: только траты этой категории
+	const cat = params.get('cat')
+	const rows = feedRows(data, view).filter((r) => !cat || (r.kind === 'expense' && r.e.catId === cat))
 	const days = groupByDay(rows.slice(0, shown), todayStr())
 	const withNames = !isSolo && view !== 'personal'
 	const actions = !readOnly && !data.readonly
@@ -53,7 +56,13 @@ export function Feed() {
 		<WithSetupCard>
 			<h1 className="sr-only">Лента</h1>
 			<SpaceSummary />
-			{actions && <div className="mt-4"><DueBlock /></div>}
+			{actions && !cat && <div className="mt-4"><DueBlock /></div>}
+			{cat && (
+				<div className="mt-4 flex items-center justify-between gap-3 border-b border-ink pb-2 uppercase">
+					<b className="truncate">{t('feed.byCategory', { x: termName(cats.get(cat) ?? '—') })}</b>
+					<Link href="/" replace className="ib"><Icon name="close" size={20} label={t('feed.allEntries')} /></Link>
+				</div>
+			)}
 			<section aria-label="Записи" className="pb-6">
 				{days.length === 0 && <p className="mt-6 text-muted uppercase">// Записей пока нет</p>}
 				{days.map((d) => (

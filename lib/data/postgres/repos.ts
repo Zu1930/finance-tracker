@@ -8,7 +8,7 @@ import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, sql, type SQL } 
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import * as s from "./schema.ts";
 import { type Change, type Ctx, type Done, type Repos, type StoredSubscription, type Updated } from "../types.ts";
-import { planLinkError } from "../../plan.ts";
+import { planLinkError, planMoveError } from "../../plan.ts";
 import { payLinkError, shiftMonth } from "../../recurring.ts";
 import { K, parseMonthKey, type RawStore } from "../../store.ts";
 import type { TokenRecord } from "../../quick-entry/api.ts";
@@ -538,6 +538,42 @@ export function postgresRepos(db: Db): Repos {
           if (cur !== expected) return { ok: false, version: cur };
           await putPlan(tx, ctx, month, ctx.userId, data, expected + 1);
           return { ok: true, version: expected + 1 };
+        }),
+      bulk: (ctx, month, b) =>
+        db.transaction(async (tx): Promise<Done> => {
+          // Сначала все проверки, потом запись: отказ ничего не оставляет
+          if (b.family) {
+            await lock(tx, `plan:${ctx.householdId}:${month}`);
+            if ((await planVersion(tx, ctx, month, null)) !== b.family.expected) return { ok: false, status: 409 };
+          }
+          if (b.mine) {
+            await lock(tx, `plan:${ctx.householdId}:${month}:${ctx.userId}`);
+            if ((await planVersion(tx, ctx, month, ctx.userId)) !== b.mine.expected) return { ok: false, status: 409 };
+          }
+          const payments: RecurringPayment[] = [];
+          for (const x of b.skips) {
+            const p = await loadPayment(tx, ctx, b.scope, x.id, true);
+            if (!p) return { ok: false, status: 404, error: "Платёж не найден." };
+            payments.push({ ...p, skips: x.skip ? [...p.skips.filter((m) => m !== month), month].sort() : p.skips.filter((m) => m !== month), version: p.version + 1 });
+          }
+          const moved: PlanItem[] = [];
+          for (const x of b.move) {
+            const [r] = await tx.select().from(s.planItems).where(and(own(s.planItems, ctx, b.scope), eq(s.planItems.id, x.id), eq(s.planItems.month, x.from))).for("update");
+            if (!r) return { ok: false, status: 404, error: "Покупка не найдена." };
+            const it = toPlanItem(r);
+            const err = planMoveError(it);
+            if (err) return { ok: false, status: 409, error: err };
+            moved.push({ ...it, month, movedFrom: it.movedFrom ?? x.from, version: it.version + 1 });
+          }
+          if (b.family) await putPlan(tx, ctx, month, null, b.family.data, b.family.expected + 1);
+          if (b.mine) await putPlan(tx, ctx, month, ctx.userId, b.mine.data, b.mine.expected + 1);
+          for (const p of payments) await tx.update(s.recurringPayments).set(recurringRow(ctx, p)).where(and(own(s.recurringPayments, ctx, b.scope), eq(s.recurringPayments.id, p.id)));
+          for (const id of b.remove) await tx.delete(s.planItems).where(and(own(s.planItems, ctx, b.scope), eq(s.planItems.id, id), eq(s.planItems.month, month)));
+          if (b.add.length) await tx.insert(s.planItems).values(b.add.map((it) => planItemRow(ctx, it)));
+          for (const [i, it] of moved.entries()) {
+            await tx.update(s.planItems).set(planItemRow(ctx, it)).where(and(own(s.planItems, ctx, b.scope), eq(s.planItems.id, it.id), eq(s.planItems.month, b.move[i].from)));
+          }
+          return { ok: true };
         }),
     },
 

@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useTracker } from "./TrackerProvider";
 import { useSpace, useSpaceData } from "./SpaceProvider";
 import { CommitInput } from "./CommitInput";
-import { AsciiBar } from "./AsciiBar";
+import { AsciiBar, useNarrow } from "./AsciiBar";
+import { MobileLimits } from "./limits/MobileLimits";
 import { Contribution } from "./entry/Contribution";
 import { CarryOver } from "./plan/CarryOver";
 import { PlanItems } from "./plan/PlanItems";
@@ -29,15 +30,22 @@ function ByGroup({ render }: { render: (only?: Scope) => React.ReactNode }) {
   return <>{readOnly ? spaceGroups(view).map((g) => <div key={g}>{render(g)}</div>) : render()}</>;
 }
 
+/** Лимиты: на телефоне — простая страница с мастером плана, на компьютере — как раньше */
 export function LimitsView() {
-  const { month, setMonth } = useTracker();
+  const { setMonth } = useTracker();
   const cur = curMonthKey();
-  const ahead = monthsAhead(cur, month);
   // /limits?month=YYYY-MM — из пуша «пора спланировать»: открыть этот месяц (не дальше 12 вперёд)
   useEffect(() => {
     const m = new URLSearchParams(window.location.search).get("month");
     if (m && isMonth(m) && monthsAhead(cur, m) <= MAX_AHEAD) setMonth(m);
   }, [cur, setMonth]);
+  return useNarrow() ? <MobileLimits /> : <DesktopLimits />;
+}
+
+function DesktopLimits() {
+  const { month, setMonth } = useTracker();
+  const cur = curMonthKey();
+  const ahead = monthsAhead(cur, month);
 
   return (
     <>
@@ -91,9 +99,6 @@ function MonthLimits() {
   // Блоки — как было в выбранном месяце, с поправками плана на месяц; редактор — действующие категории
   const familyCats = catsIn(st.familyCategories, month, familySpent, plan.familyOverrides);
   const myCats = catsIn(data.mySettings.personalCategories, month, mySpent, plan.myOverrides);
-  // Правка лимита в текущем месяце: навсегда (с этого месяца) или только на этот месяц
-  const [onlyMonth, setOnlyMonth] = useState(false);
-  const perMonth = onlyMonth && month === cur;
 
   // Итог бюджета; в «всё вместе» — семьи, одинаковый у обоих: личное = мои личные + сумма личных партнёра
   const income = monthIncome(sd, month);
@@ -167,45 +172,64 @@ function MonthLimits() {
       )}
 
       {!data.readonly && !readOnly && (<>
-      <details id="categories" ref={openOnHash} className="group mt-4 border-t border-dashed border-line">
-        <summary className="sec flex min-h-11 cursor-pointer list-none items-center gap-2 py-3 [&::-webkit-details-marker]:hidden">
-          Категории и лимиты<span aria-hidden="true" className="group-open:hidden">[+]</span><span aria-hidden="true" className="hidden group-open:inline">[−]</span>
-        </summary>
-        <div className="max-w-3xl pt-3 pb-2">
-          {month === cur && (
-            <div className="tgroup mb-4" role="group" aria-label="Изменения лимитов">
-              <button className="tb" aria-pressed={!onlyMonth} onClick={() => setOnlyMonth(false)}>Всегда</button>
-              <button className="tb" aria-pressed={onlyMonth} onClick={() => setOnlyMonth(true)}>Только {monthName(cur)}</button>
-            </div>
-          )}
-          {showFamily && (
-            <>
-              <h3 className="lbl">Семья, {st.base}</h3>
-              <CategoryEditor
-                cats={activeCats(st)}
-                month={perMonth ? { overrides: plan.familyOverrides, save: (o) => void savePlan({ limitOverrides: o }) } : undefined}
-                update={(fn) => setSettings((s) => ({ ...s!, familyCategories: fn(s!.familyCategories) }))}
-              />
-            </>
-          )}
-          {showMine && (<>
-          <h3 className="lbl">{isSolo ? "Категории" : "Личное"}, {st.base}</h3>
-          <CategoryEditor
-            cats={liveCats(data.mySettings.personalCategories)}
-            month={perMonth ? { overrides: plan.myOverrides, save: (o) => void saveMyPlan(o) } : undefined}
-            update={(fn) => setMySettings((s) => ({ ...s, personalCategories: fn(s.personalCategories) }))}
-          />
-          </>)}
-          <p className="mt-6 text-muted uppercase">// {perMonth ? `Изменения — только на ${monthName(cur)}` : "Изменения действуют с текущего месяца, прошлые не меняются"}</p>
-          <p className="mt-2 text-muted uppercase">
-            Валюты, основная валюта и данные →{" "}
-            <Link href="/settings/currency" className="tb">Настройки</Link>
-          </p>
-        </div>
-      </details>
+      <CategoriesBlock monthToggle={month === cur} />
       <RecurringManager />
       </>)}
     </>
+  );
+}
+
+/**
+ * Категории и лимиты: названия, лимиты (навсегда или только на текущий месяц), удаление и добавление.
+ * На телефоне — внизу страницы под своим заголовком
+ */
+export function CategoriesBlock({ title = "Категории и лимиты", monthToggle = true }: { title?: string; monthToggle?: boolean }) {
+  const { data, isSolo, setSettings, setMySettings } = useTracker();
+  const { view } = useSpace();
+  const showFamily = !isSolo && view !== "personal";
+  const showMine = view !== "family";
+  const st = data.settings!;
+  const cur = curMonthKey();
+  const { plan, savePlan, saveMyPlan } = usePlan(cur);
+  // Правка лимита: навсегда (с этого месяца) или только на этот месяц
+  const [perMonth, setPerMonth] = useState(false);
+  return (
+    <details id="categories" ref={openOnHash} className="group mt-4 border-t border-dashed border-line">
+      <summary className="sec flex min-h-11 cursor-pointer list-none items-center gap-2 py-3 [&::-webkit-details-marker]:hidden">
+        {title}<span aria-hidden="true" className="group-open:hidden">[+]</span><span aria-hidden="true" className="hidden group-open:inline">[−]</span>
+      </summary>
+      <div className="max-w-3xl pt-3 pb-2">
+        {monthToggle && (
+          <div className="tgroup mb-4" role="group" aria-label="Изменения лимитов">
+            <button className="tb" aria-pressed={!perMonth} onClick={() => setPerMonth(false)}>Всегда</button>
+            <button className="tb" aria-pressed={perMonth} onClick={() => setPerMonth(true)}>Только {monthName(cur)}</button>
+          </div>
+        )}
+        {showFamily && (
+          <>
+            <h3 className="lbl">Семья, {st.base}</h3>
+            <CategoryEditor
+              cats={activeCats(st)}
+              month={perMonth && monthToggle ? { overrides: plan.familyOverrides, save: (o) => void savePlan({ limitOverrides: o }) } : undefined}
+              update={(fn) => setSettings((s) => ({ ...s!, familyCategories: fn(s!.familyCategories) }))}
+            />
+          </>
+        )}
+        {showMine && (<>
+        <h3 className="lbl">{isSolo ? "Категории" : "Личное"}, {st.base}</h3>
+        <CategoryEditor
+          cats={liveCats(data.mySettings.personalCategories)}
+          month={perMonth && monthToggle ? { overrides: plan.myOverrides, save: (o) => void saveMyPlan(o) } : undefined}
+          update={(fn) => setMySettings((s) => ({ ...s, personalCategories: fn(s.personalCategories) }))}
+        />
+        </>)}
+        <p className="mt-6 text-muted uppercase">// {perMonth && monthToggle ? `Изменения — только на ${monthName(cur)}` : "Изменения действуют с текущего месяца, прошлые не меняются"}</p>
+        <p className="mt-2 text-muted uppercase">
+          Валюты, основная валюта и данные →{" "}
+          <Link href="/settings/currency" className="tb">Настройки</Link>
+        </p>
+      </div>
+    </details>
   );
 }
 

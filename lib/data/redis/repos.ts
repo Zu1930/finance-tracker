@@ -205,6 +205,11 @@ export function redisRepos(users: User[]): Repos {
         await registerKey(key);
         return casWrite(key, expected, data);
       },
+      // ponytail: Redis — только для отката до переноса в Postgres; мастер плана там не работает
+      async bulk(ctx) {
+        me(ctx);
+        throw new Error("plans.bulk: только Postgres");
+      },
     },
 
     planItems: {

@@ -145,6 +145,69 @@ export function planLinkError(item: PlanItem | null, e: Pick<Expense, "catId" | 
 /** Перенести в другой месяц можно только пункт без связанных трат */
 export const planMoveError = (item: PlanItem) => (item.expenseIds.length ? "По пункту уже есть траты — перенести нельзя." : null);
 
+// ---------- Мастер плана: всё одним запросом ----------
+/** PUT /api/plan/:month/bulk после проверки: документы плана с версиями, пропуски регулярных, покупки */
+export type PlanBulk = {
+  scope: Scope;
+  family?: { expected: number; data: Omit<MonthPlan, "version"> };
+  mine?: { expected: number; data: Omit<MyMonthPlan, "version"> };
+  /** Пропуск месяца у регулярного платежа scope: skip — пропустить, false — вернуть */
+  skips: { id: string; skip: boolean }[];
+  add: PlanItem[];
+  /** id покупок этого месяца */
+  remove: string[];
+  /** Покупки из месяца from переносятся в этот месяц (только без связанных трат) */
+  move: { id: string; from: string }[];
+};
+
+const isVer = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v >= 0;
+const isId = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length <= 64;
+const list = (v: unknown, max: number): unknown[] | null => (v === undefined ? [] : Array.isArray(v) && v.length <= max ? v : null);
+
+/**
+ * Тело мастера → PlanBulk или null. Лимиты нормализуются как в PUT /api/plan/:month, покупки — как в POST /api/plan-items.
+ * { scope, family?: { version, incomeOverride, limitOverrides }, mine?: { version, limitOverrides }, skips, add, remove, move }
+ */
+export function prepareBulk(body: unknown, userId: string, cats: { family: Category[]; mine: Category[] }, month: string, newId: () => string): PlanBulk | null {
+  const b = (body ?? {}) as Record<string, unknown>;
+  const scope: Scope = b.scope === "personal" ? "personal" : "family";
+  const out: PlanBulk = { scope, skips: [], add: [], remove: [], move: [] };
+  if (b.family !== undefined) {
+    const f = (b.family ?? {}) as Record<string, unknown>;
+    const income = f.incomeOverride;
+    if (!isVer(f.version) || !(income === null || (typeof income === "number" && Number.isFinite(income) && income >= 0))) return null;
+    const limitOverrides = normalizeOverrides(f.limitOverrides ?? {}, cats.family, month);
+    if (!limitOverrides) return null;
+    out.family = { expected: f.version, data: { month, incomeOverride: income === null ? null : r2(income), limitOverrides } };
+  }
+  if (b.mine !== undefined) {
+    const m = (b.mine ?? {}) as Record<string, unknown>;
+    const limitOverrides = normalizeOverrides(m.limitOverrides ?? {}, cats.mine, month);
+    if (!isVer(m.version) || !limitOverrides) return null;
+    out.mine = { expected: m.version, data: { month, limitOverrides } };
+  }
+  const skips = list(b.skips, 100), add = list(b.add, 20), remove = list(b.remove, 50), move = list(b.move, 20);
+  if (!skips || !add || !remove || !move) return null;
+  for (const x of skips as Record<string, unknown>[]) {
+    if (!isId(x?.id) || typeof x.skip !== "boolean") return null;
+    out.skips.push({ id: x.id, skip: x.skip });
+  }
+  for (const x of add) {
+    const it = preparePlanItem({ ...(x as object), scope, month }, userId, cats, newId());
+    if (!it) return null;
+    out.add.push(it);
+  }
+  for (const id of remove) {
+    if (!isId(id)) return null;
+    out.remove.push(id);
+  }
+  for (const x of move as Record<string, unknown>[]) {
+    if (!isId(x?.id) || !isMonth(x.from) || x.from === month) return null;
+    out.move.push({ id: x.id, from: x.from });
+  }
+  return out;
+}
+
 // ---------- Сборка ответа ----------
 /** Документы и хеши плана как в Redis, по месяцам */
 export type RawPlans = {

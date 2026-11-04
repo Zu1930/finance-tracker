@@ -9,9 +9,7 @@ import { IconText } from '../icons/IconText'
 import { t } from '@/lib/i18n'
 import { amountIn, nextUnpaidMonth } from '@/lib/recurring'
 import type { Category, RecurringPayment, Scope } from '@/lib/types'
-import { aliveIn, amountChars, curMonthKey, fmt, limitIn, MONTHS, numIn, parseAmount, setLimit, shiftMonth, termName, todayStr } from '@/lib/utils'
-
-const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+import { aliveIn, amountChars, curMonthKey, fmt, limitIn, MONTHS, MONTHS_GEN, numIn, parseAmount, setLimit, shiftMonth, termName, todayStr } from '@/lib/utils'
 
 /** Ссылка /limits#categories или #recurring (карточка «Настройка»): раскрыть свёрнутый раздел и показать его */
 export const openOnHash = (el: HTMLDetailsElement | null) => {
@@ -21,7 +19,7 @@ export const openOnHash = (el: HTMLDetailsElement | null) => {
 }
 
 /** :: РЕГУЛЯРНЫЕ ПЛАТЕЖИ — управление платежами выбранного бюджета: правка, пауза, удаление, создание. В «всё вместе» нет */
-export function RecurringManager() {
+export function RecurringManager({ title = 'Регулярные платежи' }: { title?: string }) {
 	const { data, api } = useTracker()
 	const { view, readOnly } = useSpace()
 	const st = data.settings!
@@ -39,7 +37,7 @@ export function RecurringManager() {
 	return (
 		<details id="recurring" ref={openOnHash} className="group mt-2 border-t border-dashed border-line">
 			<summary className="sec flex min-h-11 cursor-pointer list-none items-center gap-2 py-3 [&::-webkit-details-marker]:hidden">
-				<IconText name="recurring">Регулярные платежи</IconText><span aria-hidden="true" className="group-open:hidden">[+]</span><span aria-hidden="true" className="hidden group-open:inline">[−]</span>
+				<IconText name="recurring">{title}</IconText><span aria-hidden="true" className="group-open:hidden">[+]</span><span aria-hidden="true" className="hidden group-open:inline">[−]</span>
 			</summary>
 			<div className="max-w-3xl pt-1 pb-2">
 				{live.length === 0 && <p className="text-muted uppercase">Платежей пока нет</p>}
