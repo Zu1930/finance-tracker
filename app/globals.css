@@ -96,7 +96,8 @@
 @utility mbare { @media (width < 40rem) { &::before, &::after { content: none; } } }
 
 /* Форма ввода на телефоне выезжает снизу */
-@keyframes sheet-up { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes sheet-up { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 
 /* Индикатор записи голосового ввода: мягкое мигание точки */
 @keyframes rec { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }

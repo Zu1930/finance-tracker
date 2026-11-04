@@ -158,6 +158,34 @@ function MobileEntry({ req, scope0, onClose }: { req: Request; scope0: Scope; on
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [])
 
+	// Закрытие с анимацией: шторка уезжает вниз, затем запись ?new=1 уходит из истории
+	const [leaving, setLeaving] = useState(false)
+	const close = () => {
+		if (leaving) return
+		setLeaving(true)
+		setTimeout(onClose, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 220)
+	}
+	const closeRef = useRef(close)
+	closeRef.current = close
+	// Смахнуть вниз за верх шторки: дальше 120px или быстрым жестом — закрыть, иначе вернуть на место
+	const [dy, setDy] = useState(0)
+	const drag = useRef<{ y: number; t: number } | null>(null)
+	const onDown = (e: React.PointerEvent) => {
+		if ((e.target as HTMLElement).closest('button')) return
+		drag.current = { y: e.clientY, t: Date.now() }
+		e.currentTarget.setPointerCapture(e.pointerId)
+	}
+	const onMove = (e: React.PointerEvent) => {
+		if (drag.current) setDy(Math.max(0, e.clientY - drag.current.y))
+	}
+	const onUp = () => {
+		if (!drag.current) return
+		const speed = dy / Math.max(1, Date.now() - drag.current.t)
+		drag.current = null
+		if (dy > 120 || speed > 0.6) close()
+		else setDy(0)
+	}
+
 	// Фокус внутри формы, Tab не уходит наружу, Esc закрывает; страница под формой не прокручивается
 	useEffect(() => {
 		const box = boxRef.current!
@@ -165,7 +193,7 @@ function MobileEntry({ req, scope0, onClose }: { req: Request; scope0: Scope; on
 		const prev = document.body.style.overflow
 		document.body.style.overflow = 'hidden'
 		const onKey = (e: KeyboardEvent) => {
-			if (e.key === 'Escape') return onClose()
+			if (e.key === 'Escape') return closeRef.current()
 			if (e.key !== 'Tab') return
 			const list = [...box.querySelectorAll<HTMLElement>('button:not(:disabled), input, select')].filter((x) => x.offsetParent !== null)
 			const [first, last] = [list[0], list.at(-1)]
@@ -177,22 +205,32 @@ function MobileEntry({ req, scope0, onClose }: { req: Request; scope0: Scope; on
 			document.body.style.overflow = prev
 			document.removeEventListener('keydown', onKey)
 		}
-	}, [onClose])
+	}, [])
 
 	const save = () => {
-		if (d.submit()) onClose()
+		if (d.submit()) close()
 	}
+	const dragging = drag.current !== null
 
 	return (
 		<>
-			<div aria-hidden="true" className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,.35)' }} />
+			<div
+				aria-hidden="true"
+				className="fixed inset-0 z-40 motion-safe:animate-[fade-in_.25s_ease-out]"
+				style={{ background: 'rgba(0,0,0,.35)', opacity: leaving ? 0 : Math.max(0.2, 1 - dy / 400), transition: dragging ? 'none' : 'opacity .22s ease' }}
+				onClick={close}
+			/>
 			<div
 				ref={boxRef}
 				role="dialog"
 				aria-modal="true"
 				aria-label={t('entry.new')}
-				className="fixed inset-x-0 top-12 bottom-0 z-40 flex flex-col gap-2.5 border-t border-ink bg-panel px-4 pt-3 pb-[calc(16px+env(safe-area-inset-bottom,0px))] text-sm motion-safe:animate-[sheet-up_.2s_ease-out]"
+				className="fixed inset-x-0 top-12 bottom-0 z-40 flex flex-col gap-2.5 border-t border-ink bg-panel px-4 pb-[calc(16px+env(safe-area-inset-bottom,0px))] text-sm motion-safe:animate-[sheet-up_.32s_cubic-bezier(.2,.8,.2,1)]"
+				style={{ transform: leaving ? 'translateY(100%)' : dy ? `translateY(${dy}px)` : undefined, transition: dragging ? 'none' : 'transform .22s cubic-bezier(.4,0,1,1)' }}
 			>
+				{/* Ручка и строка с кнопками — за них шторку можно смахнуть вниз */}
+				<div className="-mx-4 flex shrink-0 cursor-grab flex-col gap-2 px-4 pt-2 [touch-action:none]" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
+				<span aria-hidden="true" className="mx-auto block h-1 w-10 bg-line" />
 				<div className="flex items-center justify-between gap-2">
 					<div role="group" aria-label="Тип записи" className="flex">
 						<button className={`${chip} px-2`} aria-pressed={kind === 'expense'} onClick={() => setKind('expense')}><IconText name="expense">{t('entry.expense')}</IconText></button>
@@ -203,14 +241,15 @@ function MobileEntry({ req, scope0, onClose }: { req: Request; scope0: Scope; on
 							<button className={`${chip} px-2.5`} aria-pressed={method === 'keys'} onClick={() => setMethod('keys')}><Icon name="keypad" size={20} label={t('entry.keys')} /></button>
 							<button className={`${chip} -ml-px px-2.5`} aria-pressed={method === 'voice'} onClick={() => setMethod('voice')}><Icon name="mic" size={20} label={t('entry.voice')} /></button>
 						</span>
-						<button className="ib text-ink" onClick={onClose}><Icon name="close" size={20} label={t('action.close')} /></button>
+						<button className="ib text-ink" onClick={close}><Icon name="close" size={20} label={t('action.close')} /></button>
 					</span>
+				</div>
 				</div>
 				{method === 'keys' || kind === 'income' ? (
 					<Keys d={d} kind={kind} scope={scope} expr={expr} setExpr={setExpr} onSave={save}
 						toggleScope={isSolo || kind === 'income' ? null : () => setScope(scope === 'family' ? 'personal' : 'family')} />
 				) : (
-					<Voice d={d} scope={scope} listen={!!req.listen} onClose={onClose}
+					<Voice d={d} scope={scope} listen={!!req.listen} onClose={close}
 						onEdit={(sc, amount) => { setScope(sc); setExprState(amount); setMethod('keys') }} />
 				)}
 			</div>
@@ -250,14 +289,15 @@ function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave }: {
 	}
 
 	return (
-		<div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto">
+		// Ряды не сжимаются: на низком экране форма прокручивается, а не сплющивает ленту категорий
+		<div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain [&>*]:shrink-0">
 			<label className="flex items-baseline justify-center gap-2 pt-1">
 				<span className="sr-only">Сумма</span>
 				<input
 					readOnly
 					inputMode="none"
 					data-autofocus
-					className="w-full min-w-0 bg-transparent text-center text-[44px] leading-tight font-bold outline-none"
+					className={`w-full min-w-0 bg-transparent text-center leading-tight font-bold outline-none ${expr.length > 14 ? 'text-[26px]' : expr.length > 9 ? 'text-[34px]' : 'text-[44px]'}`}
 					value={`${kind === 'income' ? '+' : '−'}${expr || '0'}`}
 					aria-describedby="m-cur"
 				/>
@@ -303,7 +343,7 @@ function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave }: {
 				{KEYS.map((k) => (
 					<button
 						key={k}
-						className="tbox h-[52px] justify-center text-xl select-none"
+						className="tbox h-[52px] justify-center text-xl select-none [@media(max-height:700px)]:h-11"
 						aria-label={k === BACKSPACE ? undefined : k === '=' ? 'Посчитать' : k === '−' ? 'Минус' : k === '+' ? 'Плюс' : k === ',' ? 'Запятая' : k}
 						onPointerDown={k === BACKSPACE ? () => { cleared.current = false; holdTimer.current = setTimeout(() => { cleared.current = true; setExpr(press(expr, 'clear')) }, 500) } : undefined}
 						onPointerUp={k === BACKSPACE ? () => clearTimeout(holdTimer.current) : undefined}
@@ -342,7 +382,7 @@ function Voice({ d, scope, listen, onClose, onEdit }: {
 	}
 
 	return (
-		<div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+		<div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain [&>*]:shrink-0">
 			{!isSolo && (
 				<p className="flex flex-wrap items-center gap-x-2 text-xs text-muted uppercase">
 					По умолчанию — <IconText name={spaceIcon(scope)}>{SPACE[scope].name}</IconText> · «себе» → <IconText name="space-personal">{SPACE.personal.name}</IconText>
