@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { IconText, Problem } from '../icons/IconText'
 import Link from 'next/link'
 import { Alert, AuthFrame } from './AuthForms'
 import { parseRate } from '@/lib/utils'
@@ -43,7 +44,7 @@ export function JoinScreen({ code }: { code: string }) {
 	return (
 		<AuthFrame title="Приглашение в семью" footer={<Link href="/" className="tb">{p ? 'Не сейчас' : 'На главную'}</Link>}>
 			{!p && !refusal && <p className="mt-6 text-muted">…</p>}
-			{refusal && <p className="mt-6 text-bad uppercase" role="alert">!! {refusal.replace(/\.$/, '')}</p>}
+			{refusal && <p className="mt-6 uppercase" role="alert"><Problem>{refusal.replace(/\.$/, '')}</Problem></p>}
 			{p && (
 				<>
 					<p className="mt-6 uppercase">&gt; <b>{p.inviter}</b> приглашает вас в общий бюджет{p.members > 1 ? ` (участников: ${p.members})` : ''}</p>
@@ -55,7 +56,7 @@ export function JoinScreen({ code }: { code: string }) {
 					</p>
 					{p.needsRate && (
 						<div className="mt-5">
-							<p className="uppercase">!! У семьи другая валюта лимитов: {p.base}. Ваши данные пересчитаются в {p.base}</p>
+							<p className="uppercase"><IconText name="warning">У семьи другая валюта лимитов: {p.base}. Ваши данные пересчитаются в {p.base}</IconText></p>
 							<div className="mt-3 flex flex-wrap items-center gap-3 uppercase">
 								<label htmlFor="join-rate" className="lbl">1 {p.base} =</label>
 								<input id="join-rate" className="tfield w-[12ch] text-right" inputMode="decimal" value={rate} onChange={(e) => setRate(e.target.value.replace(/[^\d.,]/g, ''))} />

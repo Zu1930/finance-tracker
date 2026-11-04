@@ -15,7 +15,8 @@ export type ParseContext = {
   familyCategories: Category[];
   personalCategories: Category[];
   dictionary: Dictionary;
-  lastScope: QuickScope;
+  /** Бюджет по умолчанию — текущий бюджет формы; для Siri в семье — family */
+  defaultScope: QuickScope;
 };
 
 export type ParsedEntry = {
@@ -24,6 +25,10 @@ export type ParsedEntry = {
   currency: string;
   date: string;
   scope: QuickScope;
+  /** Почему этот бюджет: слово во фразе («себе», «общее»), категория есть только в одном бюджете, по умолчанию */
+  scopeReason: "word" | "category" | "default";
+  /** Слово, выбравшее бюджет (для scopeReason = word) */
+  scopeWord: string;
   categoryId: string | null;
   categoryConfidence: "high" | "low" | "none";
   candidates: string[];
@@ -196,17 +201,17 @@ function takeDate(toks: Tok[], today: string): string {
 const PERSONAL = new Set(["себе", "личное", "лично", "мне", "личная", "личный"]);
 const FAMILY = new Set(["семья", "семье", "семейное", "семейная", "общее", "общая"]);
 
-function takeScope(toks: Tok[]): QuickScope | null {
+function takeScope(toks: Tok[]): { scope: QuickScope; word: string } | null {
   for (let i = 0; i < toks.length; i++) {
     const t = toks[i];
     if (t.used) continue;
     if (PERSONAL.has(t.w) || FAMILY.has(t.w)) {
       t.used = true;
-      return PERSONAL.has(t.w) ? "personal" : "family";
+      return { scope: PERSONAL.has(t.w) ? "personal" : "family", word: t.w };
     }
     if (t.w === "в" && toks[i + 1]?.w === "дом" && !toks[i + 1].used) {
       t.used = toks[i + 1].used = true;
-      return "family";
+      return { scope: "family", word: "в дом" };
     }
   }
   return null;
@@ -274,11 +279,13 @@ function parsePiece(toks: Tok[], ctx: ParseContext): ParsedEntry {
   }
   if (num) for (let i = num.start; i <= num.end; i++) toks[i].used = true;
 
-  // Категория и scope: явный scope ограничивает набор; иначе — набор, где нашлось совпадение, при обоих — lastScope
+  // Бюджет: слово во фразе; иначе — бюджет, только в чьих категориях нашлось совпадение; иначе — по умолчанию
   const fam = scoreCategories(ctx.familyCategories, toks, ctx.dictionary);
   const per = scoreCategories(ctx.personalCategories, toks, ctx.dictionary);
   const best = (list: Scored[]) => Math.max(0, ...list.map((s) => s.score));
-  const scope: QuickScope = explicitScope ?? (best(fam) > 0 && best(per) === 0 ? "family" : best(per) > 0 && best(fam) === 0 ? "personal" : ctx.lastScope);
+  const byCategory: QuickScope | null = best(fam) > 0 && best(per) === 0 ? "family" : best(per) > 0 && best(fam) === 0 ? "personal" : null;
+  const scope: QuickScope = explicitScope?.scope ?? byCategory ?? ctx.defaultScope;
+  const scopeReason = explicitScope ? "word" : byCategory ? "category" : "default";
   const ranked = (scope === "family" ? fam : per).filter((s) => s.score > 0).sort((a, b) => b.score - a.score);
   const [lead, second] = ranked;
   const categoryConfidence = !lead ? "none" : lead.score >= 3 && lead.score - (second?.score ?? 0) >= 2 ? "high" : "low";
@@ -299,6 +306,8 @@ function parsePiece(toks: Tok[], ctx: ParseContext): ParsedEntry {
     currency,
     date,
     scope,
+    scopeReason,
+    scopeWord: explicitScope?.word ?? "",
     categoryId: lead?.id ?? null,
     categoryConfidence,
     candidates: categoryConfidence === "high" ? [] : ranked.slice(0, 3).map((s) => s.id),

@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { useTracker } from '../TrackerProvider'
+import { useSpace } from '../SpaceProvider'
 import { usePlan } from './usePlan'
+import { spaceItems } from '@/lib/space'
+import { Icon } from '../icons/Icon'
+import { t } from '@/lib/i18n'
 import { MONTHS_IN, curMonthKey, shiftMonth } from '@/lib/utils'
 
 const HIDDEN_KEY = 'ft:carry-hidden'
@@ -15,14 +19,15 @@ export function CarryOver() {
 	const { api, toast } = useTracker()
 	const cur = curMonthKey()
 	const prev = shiftMonth(cur, -1)
+	const { view, readOnly } = useSpace()
 	const { items, linked } = usePlan(prev)
-	const left = items.filter((i) => !(linked[i.id] > 0) && i.expenseIds.length === 0)
+	const left = spaceItems(items, view).filter((i) => !(linked[i.id] > 0) && i.expenseIds.length === 0)
 	// localStorage недоступен при серверном рендере — читаем после монтирования
 	const [hidden, setHidden] = useState(true)
 	useEffect(() => {
 		try { setHidden(localStorage.getItem(HIDDEN_KEY) === cur) } catch { setHidden(false) }
 	}, [cur])
-	if (hidden || left.length === 0) return null
+	if (hidden || readOnly || left.length === 0) return null
 
 	const hide = () => {
 		try { localStorage.setItem(HIDDEN_KEY, cur) } catch {}
@@ -44,7 +49,7 @@ export function CarryOver() {
 			<span className="flex-1">Невыполнено в {MONTHS_IN[Number(prev.slice(5)) - 1]}: <b>{left.length}</b></span>
 			<button className="tb" onClick={() => void moveAll()}>Перенести всё</button>
 			<button className="tb" onClick={() => void removeAll()}>Удалить</button>
-			<button className="xb -mr-2" aria-label="Скрыть до следующего месяца" onClick={hide}>×</button>
+			<button className="ib -mr-2" onClick={hide}><Icon name="close" size={20} label={t('carry.hide')} /></button>
 		</div>
 	)
 }

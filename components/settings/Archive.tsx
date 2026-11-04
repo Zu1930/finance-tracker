@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { IconText } from '../icons/IconText'
 import Link from 'next/link'
 import { useTracker } from '../TrackerProvider'
 
@@ -47,9 +48,9 @@ export function Archive() {
 						<span className="text-warn">Доступен до {new Date(a.until).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}</span>
 					</div>
 					<div className="mt-2 flex flex-wrap gap-2">
-						<Link href={`/archive/${a.householdId}`} className="tb">Открыть</Link>
-						<a href={`/api/archive/${a.householdId}/export?format=json`} className="tb">JSON</a>
-						<a href={`/api/archive/${a.householdId}/export?format=csv`} className="tb">CSV</a>
+						<Link href={`/archive/${a.householdId}`} className="tb"><IconText name="archive">Открыть</IconText></Link>
+						<a href={`/api/archive/${a.householdId}/export?format=json`} className="tb"><IconText name="export">JSON</IconText></a>
+						<a href={`/api/archive/${a.householdId}/export?format=csv`} className="tb"><IconText name="export">CSV</IconText></a>
 						<Link href={`/review/${a.householdId}`} className="tb">Вернуться к разбору</Link>
 						{a.restore && !a.restore.requested && <button className="tb" onClick={() => void restore(a.householdId)}>Восстановить общий бюджет</button>}
 					</div>

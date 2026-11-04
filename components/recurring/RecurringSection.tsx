@@ -2,21 +2,40 @@
 
 import { useState } from 'react'
 import { useTracker } from '../TrackerProvider'
+import { useSpace } from '../SpaceProvider'
 import { PayControl } from './PayControl'
 import { useRecurring, type Row } from './useRecurring'
 import { amountIn, yearlyElsewhere } from '@/lib/recurring'
-import type { RecurringPayment } from '@/lib/types'
+import type { RecurringPayment, Scope } from '@/lib/types'
+import { SPACE, inSpace } from '@/lib/space'
+import { Icon } from '../icons/Icon'
+import { IconText, spaceIcon } from '../icons/IconText'
+import { t } from '@/lib/i18n'
 import { MONTHS_IN, fmt, termName } from '@/lib/utils'
 
-const MARK = { paid: '[✓]', overdue: '[!]', upcoming: '[ ]' } as const
+/** Статус: оплачено — галочка, просрочено — предупреждение, впереди — пустые скобки */
+const MARK = {
+	paid: <Icon name="check" size={16} label={t('recurring.paid')} />,
+	overdue: <Icon name="warning" size={16} label={t('recurring.overdue')} />,
+	upcoming: <span aria-label="не оплачено">[ ]</span>,
+} as const
 const TONE = { paid: 'text-muted', overdue: 'text-warn', upcoming: 'text-ink' } as const
 
-/** :: РЕГУЛЯРНЫЕ месяца. future — будущий месяц: оплаты нет, статус [ ] */
-export function RecurringSection({ month, future }: { month: string; future: boolean }) {
-	const { data, scopeTag } = useTracker()
+/**
+ * :: РЕГУЛЯРНЫЕ месяца выбранного бюджета. future — будущий месяц: оплаты нет, статус [ ].
+ * only — одна группа «всё вместе» (две секции, только чтение)
+ */
+export function RecurringSection({ month, future, only }: { month: string; future: boolean; only?: Scope }) {
+	const { data } = useTracker()
+	const { view, readOnly } = useSpace()
 	const st = data.settings!
-	const { rows, skipped, catName, pay, skip, pause, all } = useRecurring(month)
+	const r = useRecurring(month)
 	const [menu, setMenu] = useState<string | null>(null)
+	const mine = (p: RecurringPayment) => inSpace(p.scope, only ?? view)
+	const rows = r.rows.filter((x) => mine(x.payment))
+	const skipped = r.skipped.filter(mine)
+	const all = r.all.filter(mine)
+	const { catName, pay, skip, pause } = r
 	if (rows.length === 0 && skipped.length === 0 && all.length === 0) return null
 
 	const paid = rows.filter((r) => r.status === 'paid').length
@@ -32,7 +51,7 @@ export function RecurringSection({ month, future }: { month: string; future: boo
 			</div>
 		)
 	const menuBtn = (p: RecurringPayment) => (
-		<button className="tb tb-tight" aria-label={`Действия: ${p.name}`} aria-expanded={menu === p.id} onClick={() => setMenu(menu === p.id ? null : p.id)}>…</button>
+		!readOnly && <button className="ib" aria-expanded={menu === p.id} onClick={() => setMenu(menu === p.id ? null : p.id)}><Icon name="more" size={16} label={`${t('recurring.actions')}: ${p.name}`} /></button>
 	)
 
 	const row = (r: Row) => {
@@ -43,22 +62,22 @@ export function RecurringSection({ month, future }: { month: string; future: boo
 		const inBase = !isPaid && r.currency !== st.base && r.estimateBase !== null ? ` ≈ ${fmt(Math.round(r.estimateBase))}` : ''
 		return (
 			<li key={r.paymentId} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 border-b border-dashed border-line2 py-1 uppercase sm:grid-cols-[3ch_3ch_minmax(0,1fr)_7ch_auto_auto_auto]">
-				<span className={`${TONE[status]} max-sm:hidden`} aria-label={{ paid: 'оплачено', overdue: 'просрочено', upcoming: 'не оплачено' }[status]}>{MARK[status]}</span>
+				<span className={`${TONE[status]} max-sm:hidden`}>{MARK[status]}</span>
 				<span className="text-muted max-sm:hidden">{r.dueDate.slice(8)}</span>
 				<span className="min-w-0 truncate">
-					<span className={`sm:hidden ${TONE[status]}`}>{MARK[status]} </span>
+					<span className={`mr-2 sm:hidden ${TONE[status]}`}>{MARK[status]}</span>
 					<span className={isPaid ? 'text-muted' : ''}>{termName(r.name)}</span>
 					<span className="text-muted max-sm:hidden"> // {catName(p)}</span>
 				</span>
-				<span className="text-muted max-sm:hidden">{scopeTag(p.scope) && `[${scopeTag(p.scope)}]`}</span>
+				<span className="max-sm:hidden" />
 				<span className="text-right">
 					<b className={isPaid ? 'font-normal text-muted' : ''}>{shown}</b>
 					{inBase && <span className="text-muted">{inBase}</span>}
 				</span>
-				<span className="truncate text-xs text-muted sm:hidden">{r.dueDate.slice(8)} · {catName(p)}{scopeTag(p.scope) && ` · ${scopeTag(p.scope)}`}</span>
+				<span className="truncate text-xs text-muted sm:hidden">{r.dueDate.slice(8)} · {catName(p)}</span>
 				<span className="flex items-center justify-end gap-2 has-[input]:col-span-full sm:contents">
 					<span className="has-[input]:flex-1 sm:text-right">
-						{isPaid ? <span className="text-muted2">Записано</span> : future ? null : <PayControl row={r} pay={(a) => pay(p, month, a)} />}
+						{isPaid ? <span className="text-muted2">Записано</span> : future || readOnly ? null : <PayControl row={r} pay={(a) => pay(p, month, a)} />}
 					</span>
 					{!isPaid && menuBtn(p)}
 				</span>
@@ -70,7 +89,10 @@ export function RecurringSection({ month, future }: { month: string; future: boo
 	return (
 		<section className="mt-6 border-t border-dashed border-line pt-5">
 			<div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
-				<h2 className="sec">↻ Регулярные // оплачено {paid} из {rows.length}</h2>
+				<h2 className="sec">
+					{only && <><IconText name={spaceIcon(only)}>{SPACE[only].name}</IconText> // </>}
+					<IconText name="recurring">{t('recurring.title')} // оплачено {paid} из {rows.length}</IconText>
+				</h2>
 				{!future && left > 0 && <span className="text-muted uppercase">Осталось оплатить <b className="text-ink">{fmt(Math.round(left))}</b></span>}
 			</div>
 			<ul className="mt-2">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Icon } from "../icons/Icon";
 import { useTracker } from "../TrackerProvider";
 import { fmtRate } from "@/lib/utils";
 import { SettingsRow } from "./Kit";
@@ -26,12 +27,12 @@ export function Currencies() {
       </SettingsRow>
       {st.currencies.filter((c) => c !== st.base).map((c) => (
         <SettingsRow key={c} end={
-          <button className="xb" aria-label={`Убрать валюту ${c}`} onClick={() =>
+          <button className="ib" onClick={() =>
             setSettings((s) => {
               const rates = { ...s!.rates };
               delete rates[c];
               return { ...s!, currencies: s!.currencies.filter((x) => x !== c), rates };
-            })}>×</button>
+            })}><Icon name="trash" size={16} label={`Убрать валюту ${c}`} /></button>
         }>
           <b>{c}</b>{" "}
           <span className="text-muted">{st.rates[c] ? `${fmtRate(st.rates[c]!)} ${st.base}` : "курс ещё не известен"}</span>

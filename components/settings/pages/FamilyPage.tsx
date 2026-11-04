@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { IconText } from '../../icons/IconText'
+import { t } from '@/lib/i18n'
 import { useTracker } from '../../TrackerProvider'
 import { Block } from '../SettingsFrame'
 import { DangerZone, OnceReveal, SettingsRow } from '../Kit'
@@ -75,7 +77,7 @@ export function FamilyPage() {
 					<OnceReveal value={link.url} until={link.expiresAt} note="Одноразовая: по ней войдёт один человек. Ваши данные останутся личными." onHide={() => setLink(null)} />
 				)}
 				<div className="mt-3 flex flex-wrap items-center gap-3 uppercase">
-					<button className="tb max-sm:h-11 max-sm:w-full" disabled={busy || !!offline || !canInvite} onClick={() => void invite()}>+ Пригласить</button>
+					<button className="tb max-sm:h-11 max-sm:w-full" disabled={busy || !!offline || !canInvite} onClick={() => void invite()}><IconText name="invite">{t('action.invite')}</IconText></button>
 					<span className="text-xs text-muted2">// до {MAX_MEMBERS} участников{!canInvite && ' — мест нет'}</span>
 				</div>
 			</Block>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { IconText } from "@/components/icons/IconText";
 
 export const metadata = { title: "Конфиденциальность — SPEND.LOG" };
 
@@ -14,7 +15,7 @@ export default function Page() {
   return (
     <div className="px-4">
       <article className="mx-auto mt-[6vh] max-w-2xl pb-16">
-        <p className="border border-warn p-3 font-bold text-warn uppercase">!! Черновик — проверить перед открытием регистрации</p>
+        <p className="border border-warn p-3 font-bold text-warn uppercase"><IconText name="warning">Черновик — проверить перед открытием регистрации</IconText></p>
         <h1 className="sec mt-8">Конфиденциальность</h1>
 
         <S title="Что мы храним">

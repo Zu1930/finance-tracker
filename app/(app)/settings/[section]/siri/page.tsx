@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { Icon } from "@/components/icons/Icon";
+import { t } from "@/lib/i18n";
 import { join } from "node:path";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -57,7 +59,7 @@ export default function Page() {
     <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="sec">Голосовой ввод и Siri</h1>
-        <Link href="/settings/input" className="tb">← Голос и Siri</Link>
+        <Link href="/settings/input" className="inline-flex min-h-11 items-center gap-2 text-muted uppercase hover:text-ink"><Icon name="back" size={20} />{t("nav.voiceSettings")}</Link>
       </div>
       <div className="max-w-[72ch]">{out}</div>
     </>

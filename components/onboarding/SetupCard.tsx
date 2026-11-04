@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState, type ReactNode } from 'react'
+import { Icon } from '../icons/Icon'
+import { t } from '@/lib/i18n'
 import Link from 'next/link'
 import { useTracker } from '../TrackerProvider'
 import { CHECKLIST, checklist, checklistDone, type ChecklistId, type ChecklistItem } from '@/lib/onboarding'
@@ -73,9 +75,9 @@ function Card({ mobile, items, n, hide, dismiss }: { mobile: boolean; items: Che
 		<section className="border border-line" aria-label="Настройка бюджета">
 			<div className="flex items-center gap-1 pr-1">
 				<button className="flex min-h-11 flex-1 items-center gap-2 pl-4 text-left font-bold uppercase" aria-expanded={open} onClick={toggle}>
-					:: Настройка {n}/6 <span aria-hidden="true" className="ml-auto font-normal text-muted">{open ? '▾' : mobile ? '›' : '▸'}</span>
+					:: Настройка {n}/6 <Icon name="chevron" size={16} className={`ml-auto text-muted ${open ? '' : '-rotate-90'}`} />
 				</button>
-				<button className="xb" aria-label="Скрыть карточку «Настройка»" onClick={dismiss}>×</button>
+				<button className="ib" onClick={dismiss}><Icon name="close" size={20} label={t('setup.hide')} /></button>
 			</div>
 			{open && (
 				<div className="px-4 pb-4">
@@ -88,7 +90,7 @@ function Card({ mobile, items, n, hide, dismiss }: { mobile: boolean; items: Che
 								<li key={c.id} className="border-b border-dashed border-line2 py-1 last:border-0">
 									<div className="flex min-h-11 items-center gap-2">
 										<span className={`min-w-0 flex-1 ${ok ? 'text-muted' : ''}`}>
-											<span aria-hidden="true">{ok ? '[✓] ' : '[ ] '}</span>
+											{ok ? <Icon name="check" size={16} className="mr-2" /> : <span aria-hidden="true">[ ] </span>}
 											<span className="sr-only">{ok ? 'Готово: ' : 'Не готово: '}</span>
 											{c.title}
 											{it.hidden && !it.done && <span className="text-xs"> // не нужно</span>}
@@ -96,7 +98,7 @@ function Card({ mobile, items, n, hide, dismiss }: { mobile: boolean; items: Che
 										{!ok && (
 											<>
 												<Link href={c.href} className="tb shrink-0 uppercase">{c.action}</Link>
-												<button className="tb tb-tight min-h-11 shrink-0" aria-label={`Ещё: ${c.title}`} aria-expanded={menu === c.id} onClick={() => setMenu(menu === c.id ? null : c.id)}>…</button>
+												<button className="ib shrink-0" aria-expanded={menu === c.id} onClick={() => setMenu(menu === c.id ? null : c.id)}><Icon name="more" size={16} label={`${t('action.more')}: ${c.title}`} /></button>
 											</>
 										)}
 									</div>

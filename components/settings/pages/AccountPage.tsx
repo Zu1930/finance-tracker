@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Problem } from '../../icons/IconText'
 import Link from 'next/link'
 import { useTracker } from '../../TrackerProvider'
 import { HoldLogout } from '../HoldLogout'
@@ -161,7 +162,7 @@ function ChangePassword({ onDone }: { onDone: () => void }) {
 			{field('pw-again', 'Ещё раз', again, setAgain, 'new-password')}
 			<p className="mt-2 text-xs text-muted2 normal-case">Минимум {MIN_PASSWORD} символов. Другие устройства выйдут.</p>
 			<button className="tb mt-3 font-bold" disabled={busy || !cur || !next || !again}>{busy ? 'Сохраняю…' : 'Сменить пароль'}</button>
-			<p className="mt-3 min-h-5 text-bad" role="alert">{error && `!! ${error}`}</p>
+			<p className="mt-3 min-h-5" role="alert"><Problem>{error}</Problem></p>
 		</form>
 	)
 }

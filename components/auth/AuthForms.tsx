@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Problem } from '../icons/IconText'
 import Link from 'next/link'
 
 export const MIN_PASSWORD = 10
@@ -80,7 +81,7 @@ export function AuthFrame({ title, children, footer }: { title: string; children
 	)
 }
 
-export const Alert = ({ text }: { text: string }) => <p className="mt-3 min-h-5 text-bad uppercase" role="alert">{text && `!! ${text}`}</p>
+export const Alert = ({ text }: { text: string }) => <p className="mt-3 min-h-5 uppercase" role="alert"><Problem>{text}</Problem></p>
 
 /** Регистрация: имя, email, пароль дважды; в режиме invite — код (или ссылка-приглашение, тогда код не нужен) */
 export function SignupForm({ siteKey, mode, invite, initialCode }: { siteKey?: string; mode: 'invite' | 'open'; invite?: string; initialCode?: string }) {
@@ -162,7 +163,7 @@ export function CheckEmail({ email, invite }: { email: string; invite?: string }
 			<button className="tb mt-6 h-12 w-full sm:h-auto" disabled={!email || wait > 0} onClick={() => void resend()}>
 				{wait > 0 ? `Отправить ещё раз (${wait})` : 'Отправить ещё раз'}
 			</button>
-			<p className="mt-3 min-h-5 uppercase" role="status">{note}</p>
+			<p className="mt-3 min-h-5 uppercase" role="status">{note.startsWith('!! ') ? <Problem>{note.slice(3)}</Problem> : note}</p>
 		</AuthFrame>
 	)
 }

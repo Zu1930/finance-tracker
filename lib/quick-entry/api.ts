@@ -64,7 +64,8 @@ export async function handleQuick(auth: string | null, body: unknown, store: Qui
   const entries = parsePhrase(b.text.slice(0, 500), {
     today, base: st.base, currencies: st.currencies, familyCategories: family, personalCategories: personal,
     dictionary: buildDictionary(expenses, today),
-    lastScope: "family",
+    // Для Siri текущий бюджет — семья; у solo семейных категорий нет — личное
+    defaultScope: family.length ? "family" : "personal",
   });
   if (!entries.length) return { status: 200, body: { ok: false, summary: "Не расслышал трату.", entries } };
   const problems = entries.map((p) => problemOf(p, st)).filter(Boolean);

@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { useTracker } from "./TrackerProvider";
+import { useSpace, useSpaceData } from "./SpaceProvider";
+import { spaceSavings } from "@/lib/space";
+import { IconText } from "./icons/IconText";
 import { AsciiBar } from "./AsciiBar";
 import { Hint } from "./onboarding/Hint";
 import { Accounts } from "./savings/Accounts";
@@ -14,18 +17,23 @@ const MONTHS = 6;
 
 export function SavingsView() {
   const { data } = useTracker();
+  const { view } = useSpace();
+  const sd = useSpaceData();
   const st = data.settings!;
   const sv = data.savings;
-  const mineAccounts = [...sv.accounts.family, ...sv.accounts.mine];
-  // Итог одинаков у обоих: семейные + мои по курсу + сумма партнёра, которую сервер посчитал по тем же курсам
+  const picked = spaceSavings(sv, view);
+  const mineAccounts = [...picked.accounts.family, ...picked.accounts.personal];
+  // «Всё вместе» одинаково у обоих: семейные + мои по курсу + сумма партнёра, которую сервер посчитал по тем же курсам.
+  // Семья или личное — только счета и копилки этого бюджета
   const t = totals(mineAccounts, st.base, st.rates);
-  const partner = sv.partner.total;
+  const partner = view === "all" ? sv.partner.total : 0;
   const all = t.all + partner;
   const mine = t.byUser[data.me.id] ?? 0;
-  const goalsAlloc = allocated([...sv.goals.family, ...sv.goals.mine], st.base, st.rates);
-  const { allocated: alloc, free } = allocation(goalsAlloc.total + sv.partner.goalsAllocated, all);
-  const months = runway(free, average(data, todayStr())?.expense);
-  const change = monthChange(sv.recons, curMonthKey(), all);
+  const goalsAlloc = allocated([...picked.goals.family, ...picked.goals.personal], st.base, st.rates);
+  const { allocated: alloc, free } = allocation(goalsAlloc.total + (view === "all" ? sv.partner.goalsAllocated : 0), all);
+  const months = runway(free, average(sd, todayStr())?.expense);
+  // Сверки — по всей семье: изменение за месяц и динамика только в «всё вместе»
+  const change = view === "all" ? monthChange(sv.recons, curMonthKey(), all) : null;
   const currencies = Object.entries(byCurrency(mineAccounts)).sort(([a], [b]) => (a === st.base ? -1 : b === st.base ? 1 : a.localeCompare(b)));
   // Ни одного счёта ни у кого — пустое состояние: вместо нулей приглашение завести первый счёт
   const empty = mineAccounts.every((a) => a.archived) && !sv.partner.lastUpdatedAt;
@@ -47,9 +55,9 @@ export function SavingsView() {
           <b className="text-[36px] leading-tight sm:text-[44px]">{fmt(Math.round(all))} {st.base}</b>
           {change !== null && <span className={`uppercase ${change < 0 ? "text-bad" : "text-muted"}`}>{signed(Math.round(change))} за месяц</span>}
         </p>
-        {t.missing.length > 0 && <p className="text-warn uppercase">!! Нет курса: {t.missing.join(", ")} — эти счета не входят в итог</p>}
+        {t.missing.length > 0 && <p className="text-warn uppercase"><IconText name="warning">Нет курса: {t.missing.join(", ")} — эти счета не входят в итог</IconText></p>}
         <dl className="mt-3 grid grid-cols-1 gap-x-6 uppercase sm:grid-cols-[12ch_minmax(0,1fr)] sm:gap-y-1">
-          {data.partner && (
+          {data.partner && view === "all" && (
             <>
               <dt className="text-muted max-sm:mt-2">Чьи</dt>
               <dd>Семья {fmt(Math.round(t.family))} · Моё {fmt(Math.round(mine))} · {data.partner.name} {fmt(Math.round(partner))}</dd>
@@ -58,7 +66,7 @@ export function SavingsView() {
           <dt className="text-muted max-sm:mt-2">Валюты</dt>
           <dd>
             {currencies.length ? currencies.map(([c, v]) => `${c} ${fmt(v)}`).join(" · ") : "—"}
-            {data.partner && <span className="text-muted"> · {data.partner.name} ≈ {fmt(Math.round(partner))} {st.base}</span>}
+            {data.partner && view === "all" && <span className="text-muted"> · {data.partner.name} ≈ {fmt(Math.round(partner))} {st.base}</span>}
           </dd>
           <dt className="text-muted max-sm:mt-2">Запас</dt>
           <dd>
@@ -72,7 +80,7 @@ export function SavingsView() {
       <Hint id="savings" className="mt-6" />
       <Accounts openFamily={openFirst} />
       <Goals allocated={alloc} free={free} missing={goalsAlloc.missing} empty={empty} />
-      <Dynamics current={all} />
+      {view === "all" && <Dynamics current={all} />}
     </>
   );
 }

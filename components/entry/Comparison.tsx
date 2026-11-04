@@ -2,6 +2,8 @@
 
 import type { ReactNode } from 'react'
 import { useTracker } from '../TrackerProvider'
+import { useSpaceData } from '../SpaceProvider'
+import { IconText } from '../icons/IconText'
 import {
 	abbr,
 	fmtChange,
@@ -25,10 +27,10 @@ const signed = (n: number, base: string) => {
 	return `${v < 0 ? '−' : v > 0 ? '+' : ''}${fmt(Math.abs(v))} ${base}`
 }
 
-/** Таблица сравнения под балансом месяца. Пустые значения — «—», строки не исчезают */
+/** Таблица сравнения под балансом месяца — по выбранному бюджету (всё вместе — по семье с моими личными). Пустые значения — «—» */
 export function Comparison() {
-	const { data } = useTracker()
-	const base = data.settings!.base
+	const base = useTracker().data.settings!.base
+	const data = useSpaceData()
 	const today = todayStr()
 	const rates = savingsRates(data, today)
 	const f = forecast(data, today)
@@ -74,7 +76,7 @@ export function Comparison() {
 					)}
 				</Row>
 
-				{recurring > 0 && <Row label="↻ Регулярные">{signed(-recurring, base)}</Row>}
+				{recurring > 0 && <Row label={<IconText name="recurring">Регулярные</IconText>}>{signed(-recurring, base)}</Row>}
 				{planned > 0 && <Row label="Плановые">{signed(-planned, base)}</Row>}
 
 				<Row label="Прогноз остатка">
@@ -109,7 +111,7 @@ export function Comparison() {
 	)
 }
 
-function Row({ label, children }: { label: string; children: ReactNode }) {
+function Row({ label, children }: { label: ReactNode; children: ReactNode }) {
 	return (
 		<>
 			<dt className="text-muted max-sm:mt-2">{label}</dt>

@@ -1,6 +1,8 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { Icon } from '../icons/Icon'
+import { t } from '@/lib/i18n'
 import Link from 'next/link'
 import { useTracker } from '../TrackerProvider'
 import { HINTS, HINT_QUIET_MS, visibleHint, type HintId } from '@/lib/onboarding'
@@ -45,11 +47,11 @@ export function Hint({ id, className = '' }: { id: HintId; className?: string })
 	return (
 		<aside className={`flex items-start gap-3 border-l-2 border-ink py-1 pl-3 ${className}`} aria-label="Подсказка">
 			<p className="min-w-0 flex-1 text-muted">
-				<span aria-hidden="true">› </span>
+				<Icon name="info" size={16} className="mr-2 -mt-0.5" />
 				{h.text}{' '}
 				<Link href={h.href} className="whitespace-nowrap text-ink uppercase underline-offset-4 hover:underline" onClick={seen}>Подробнее →</Link>
 			</p>
-			<button className="xb -my-2" aria-label="Скрыть подсказку" onClick={seen}>×</button>
+			<button className="ib -my-2" onClick={seen}><Icon name="close" size={20} label={t('hint.hide')} /></button>
 		</aside>
 	)
 }

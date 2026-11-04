@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { IconText } from '../icons/IconText'
+import { t } from '@/lib/i18n'
 import { useTracker } from '../TrackerProvider'
 import { SettingsRow } from './Kit'
 import { DEFAULT_REMINDERS } from '@/lib/push'
@@ -86,7 +88,7 @@ export function Notifications() {
 	return (
 		<div>
 			<SettingsRow className="uppercase" end={
-				state === 'off' ? <button className="tb" disabled={busy || !!offline} onClick={() => void enable()}>Включить</button>
+				state === 'off' ? <button className="tb" disabled={busy || !!offline} onClick={() => void enable()}><IconText name="bell">{t('action.notifyOn')}</IconText></button>
 				: state === 'on' ? (
 					<>
 						<button className="tb" disabled={!!offline} onClick={() => void test()}>Тест</button>

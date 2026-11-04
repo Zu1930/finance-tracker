@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { Problem } from '../icons/IconText'
 import Link from 'next/link'
 import { fmt } from '@/lib/utils'
 
@@ -102,7 +103,7 @@ export function Review({ householdId }: { householdId: string }) {
 						</div>
 					</>
 				)}
-				<p className="mt-4 min-h-5" role="status">{note}</p>
+				<p className="mt-4 min-h-5" role="status">{note.startsWith('!! ') ? <Problem>{note.slice(3)}</Problem> : note}</p>
 				{!v && note && <Link href="/" className="tb">На главную</Link>}
 			</div>
 		</div>

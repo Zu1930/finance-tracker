@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState, type ReactNode } from 'react'
+import { IconText } from '../icons/IconText'
+import { t } from '@/lib/i18n'
 import Link from 'next/link'
 
 const ddmm = (iso: string) => new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })
@@ -32,7 +34,7 @@ export function OnceReveal({ value, until, note, onHide }: { value: string; unti
 			<code title={value} className="mt-2 block truncate normal-case select-all">{value}</code>
 			{note && <p className="mt-1 text-xs text-muted2">{note}</p>}
 			<div className="mt-2 flex flex-wrap gap-2 uppercase">
-				<button className="tb" onClick={() => void copy()} aria-live="polite">{copied ? 'Скопировано' : 'Копировать'}</button>
+				<button className="tb" onClick={() => void copy()} aria-live="polite"><IconText name={copied ? 'check' : 'copy'}>{copied ? 'Скопировано' : t('action.copy')}</IconText></button>
 				<button className="tb" onClick={onHide}>Скрыть</button>
 			</div>
 			{failed && <p className="mt-2 text-xs text-muted2 uppercase">// Не удалось скопировать — выделите вручную</p>}

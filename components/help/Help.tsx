@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, type ReactNode } from 'react'
+import { Icon } from '../icons/Icon'
+import { t } from '@/lib/i18n'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useTracker } from '../TrackerProvider'
@@ -107,7 +109,7 @@ export function Article({ id, md }: { id: ArticleId; md: string }) {
 	const blocks = parseMarkdown(forAudience(md, isSolo))
 	return (
 		<article>
-			<Link href="/help" className="tb mb-4 sm:hidden">‹ Помощь</Link>
+			<Link href="/help" className="mb-4 inline-flex min-h-11 items-center gap-2 text-muted uppercase hover:text-ink sm:hidden"><Icon name="back" size={20} />{t('nav.help')}</Link>
 			{blocks.map((b, i) =>
 				b.t === 'h' ? (
 					b.level === 1 ? <h1 key={i} className="text-[22px] font-bold uppercase">{isSolo && id === 'family' ? articleTitle(id, true) : <InlineText parts={b.text} />}</h1>

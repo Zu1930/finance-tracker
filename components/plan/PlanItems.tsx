@@ -2,17 +2,28 @@
 
 import { useState, type KeyboardEvent } from 'react'
 import { useTracker } from '../TrackerProvider'
+import { useSpace } from '../SpaceProvider'
 import { usePlan } from './usePlan'
 import { MAX_AHEAD, itemStatus, monthsAhead } from '@/lib/plan'
 import type { PlanItem, Scope } from '@/lib/types'
+import { SPACE, inSpace } from '@/lib/space'
+import { Icon } from '../icons/Icon'
+import { IconText, spaceIcon } from '../icons/IconText'
+import { t } from '@/lib/i18n'
 import { MONTHS_SHORT, aliveIn, amountChars, curMonthKey, fmt, minus, parseAmount, shiftMonth, termName } from '@/lib/utils'
 
-const MARK = { done: '[✓]', partial: '[~]', planned: '[ ]' } as const
+const MARK = { done: <Icon name="check" size={16} />, partial: '[~]', planned: '[ ]' } as const
 
-/** Плановые покупки месяца: список с переносом и удалением, форма добавления. withStatus — для текущего и прошлых месяцев */
-export function PlanItems({ month, withStatus, form = true }: { month: string; withStatus: boolean; form?: boolean }) {
+/**
+ * Плановые покупки месяца выбранного бюджета: список с переносом и удалением, форма добавления.
+ * withStatus — для текущего и прошлых месяцев; only — одна группа «всё вместе» (только чтение)
+ */
+export function PlanItems({ month, withStatus, form = true, only }: { month: string; withStatus: boolean; form?: boolean; only?: Scope }) {
 	const { data } = useTracker()
-	const { items, linked } = usePlan(month)
+	const { view, readOnly } = useSpace()
+	const plan = usePlan(month)
+	const { linked } = plan
+	const items = plan.items.filter((i) => inSpace(i.scope, only ?? view))
 	const st = data.settings!
 	const catName = (it: PlanItem) => {
 		const cats = it.scope === 'personal' ? data.mySettings.personalCategories : st.familyCategories
@@ -22,7 +33,7 @@ export function PlanItems({ month, withStatus, form = true }: { month: string; w
 
 	return (
 		<section className="mt-6 border-t border-dashed border-line pt-5">
-			<h2 className="sec">Покупки</h2>
+			<h2 className="sec">{only && <><IconText name={spaceIcon(only)}>{SPACE[only].name}</IconText> // </>}<IconText name="plan">Покупки</IconText></h2>
 			{items.length === 0 ? (
 				<p className="mt-3 text-muted uppercase">Покупок не запланировано</p>
 			) : (
@@ -32,16 +43,17 @@ export function PlanItems({ month, withStatus, form = true }: { month: string; w
 					))}
 				</ul>
 			)}
-			{form && <NewItem month={month} />}
+			{form && !readOnly && <NewItem month={month} />}
 		</section>
 	)
 }
 
 function ItemRow({ it, linked, cat, withStatus }: { it: PlanItem; linked: number; cat: string; withStatus: boolean }) {
-	const { api, toast, scopeTag } = useTracker()
+	const { api, toast } = useTracker()
+	const { readOnly } = useSpace()
 	const status = itemStatus(it, linked)
 	const next = shiftMonth(it.month, 1)
-	const canMove = linked === 0 && it.expenseIds.length === 0 && monthsAhead(curMonthKey(), next) <= MAX_AHEAD
+	const canMove = !readOnly && linked === 0 && it.expenseIds.length === 0 && monthsAhead(curMonthKey(), next) <= MAX_AHEAD
 	const url = `/api/plan-items/${it.id}`
 
 	const move = async () => {
@@ -70,30 +82,30 @@ function ItemRow({ it, linked, cat, withStatus }: { it: PlanItem; linked: number
 				<b>{termName(it.name)}</b>
 				<span className="text-muted max-sm:hidden"> // {cat}</span>
 			</span>
-			<span className="text-muted max-sm:hidden">{scopeTag(it.scope) && `[${scopeTag(it.scope)}]`}</span>
+
 			<b className="text-right">
 				{withStatus && status === 'partial' ? `${fmt(linked)} из ${fmt(it.amount)}` : minus(it.amount)}
 			</b>
-			<span className="truncate text-xs text-muted sm:hidden">{cat}{scopeTag(it.scope) && ` · ${scopeTag(it.scope)}`}</span>
+			<span className="truncate text-xs text-muted sm:hidden">{cat}</span>
 			<span className="flex items-center justify-end gap-2 sm:contents">
 				{canMove && (
 					<button className="tb" aria-label={`Перенести ${it.name} на следующий месяц`} onClick={() => void move()}>
 						→<span className="max-sm:hidden"> {MONTHS_SHORT[Number(next.slice(5)) - 1]}</span>
 					</button>
 				)}
-				<button className="xb -mr-2" aria-label={`Удалить покупку ${it.name}`} onClick={() => void remove()}>×</button>
+				{!readOnly && <button className="ib -mr-2" onClick={() => void remove()}><Icon name="trash" size={16} label={`Удалить покупку ${it.name}`} /></button>}
 			</span>
 		</li>
 	)
 }
 
 function NewItem({ month }: { month: string }) {
-	const { data, isSolo, api, toast } = useTracker()
+	const { data, api, toast } = useTracker()
+	// Бюджет — выбранный в шапке
+	const scope: Scope = useSpace().entryScope ?? 'personal'
 	const st = data.settings!
 	const [name, setName] = useState('')
 	const [sum, setSum] = useState('')
-	const [picked, setScope] = useState<Scope>('family')
-	const scope: Scope = isSolo ? 'personal' : picked
 	const [catId, setCatId] = useState<string | null>(null)
 	const cats = (scope === 'personal' ? data.mySettings.personalCategories : st.familyCategories).filter((c) => aliveIn(c, month))
 
@@ -122,15 +134,6 @@ function NewItem({ month }: { month: string }) {
 					<input id="item-sum" className="tfield flex-1 text-right" inputMode="decimal" placeholder={st.base} value={sum}
 						onChange={(e) => setSum(amountChars(e.target.value))} onKeyDown={onEnter} />
 				</div>
-				{!isSolo && (
-					<div className="tgroup max-sm:w-full" role="group" aria-label="Чья покупка">
-						{(['family', 'personal'] as const).map((s) => (
-							<button key={s} className="tb" aria-pressed={scope === s} onClick={() => { setScope(s); setCatId(null) }}>
-								{s === 'family' ? 'Семья' : 'Личное'}
-							</button>
-						))}
-					</div>
-				)}
 			</div>
 			<div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Категория покупки">
 				{cats.map((c) => (

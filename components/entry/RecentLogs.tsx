@@ -2,29 +2,36 @@
 
 import { useState } from 'react'
 import { useTracker } from '../TrackerProvider'
+import { useSpace } from '../SpaceProvider'
 import type { Expense, Income } from '@/lib/types'
 import { ddmm, fmt, incomeSources, termName } from '@/lib/utils'
+import { feedRows, type FeedRow } from '@/lib/space'
+import { Icon } from '../icons/Icon'
+import { spaceIcon } from '../icons/IconText'
+import { t } from '@/lib/i18n'
 
 /** Сколько строк показывать сразу и сколько добавлять по «Показать ещё» */
 const PAGE = 30
 
-type Row = { kind: 'expense'; e: Expense } | { kind: 'income'; e: Income }
+type Row = FeedRow
 
-/** Семейные траты обоих, мои личные и доходы обоих — новые сверху */
+/** Записи бюджета (lib/space.ts feedRows) — новые сверху; в «всё вместе» у строки символ её бюджета */
 export function RecentLogs() {
 	const { data, isSolo, removeEntry, restoreEntry, toast } = useTracker()
+	const { view, readOnly } = useSpace()
+	// Архив и «всё вместе» — только просмотр
+	const noEdit = !!data.readonly || readOnly
 	const st = data.settings!
 	const [shown, setShown] = useState(PAGE)
+	// Имена авторов не нужны в личном: там только мои записи
+	const withNames = !isSolo && view !== 'personal'
+	const tag = (r: Row) => (isSolo || r.kind === 'income' ? null : <Icon name={spaceIcon((r.e as Expense).scope)} size={16} label={(r.e as Expense).scope === 'personal' ? t('space.personal') : t('space.family')} />)
 
 	const cats = new Map([...st.familyCategories, ...data.mySettings.personalCategories].map((c) => [c.id, c.name]))
 	const sources = new Map(incomeSources(st).map((s) => [s.id, s.name]))
 	const names = new Map([...Object.entries(data.names ?? {}), ...[data.me, ...(data.partner ? [data.partner] : [])].map((u) => [u.id, u.name] as const)])
 
-	const rows: Row[] = [
-		...Object.values(data.familyExpenses).flat().map((e) => ({ kind: 'expense' as const, e })),
-		...Object.values(data.myExpenses).flat().map((e) => ({ kind: 'expense' as const, e })),
-		...Object.values(data.incomes).flat().map((e) => ({ kind: 'income' as const, e })),
-	].sort((a, b) => b.e.date.localeCompare(a.e.date) || b.e.ts - a.e.ts)
+	const rows = feedRows(data, view)
 
 	const remove = (r: Row) => {
 		removeEntry(r.kind, r.e)
@@ -46,19 +53,17 @@ export function RecentLogs() {
 							const what = income ? sources.get((e as Income).sourceId) : cats.get((e as Expense).catId)
 							const meta = [
 								ddmm(e.date),
-								...(isSolo ? [] : [names.get(e.authorId) ?? '—']),
-								...(income || isSolo ? [] : [(e as Expense).scope === 'personal' ? 'ЛИЧН' : 'СЕМ']),
+								...(withNames ? [names.get(e.authorId) ?? '—'] : []),
+
 								...(e.currency !== st.base ? [`${fmt(e.amount)} ${e.currency}`] : []),
 								...(e.note ? [e.note] : []),
 							]
 							return (
 								<li key={`${r.kind}-${e.id}`} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 border-b border-dashed border-line2 pt-2 uppercase">
-									<span className="truncate">{termName(what ?? (income ? 'Удалённый источник' : 'Удалённая категория'))}</span>
+									<span className="flex min-w-0 items-center gap-2"><span className={(e as Expense).scope === 'personal' ? 'text-muted' : ''}>{tag(r)}</span><span className="truncate">{termName(what ?? (income ? 'Удалённый источник' : 'Удалённая категория'))}</span></span>
 									<b className="text-right">{income ? '+' : '−'}{fmt(e.base)}</b>
 									<span className="truncate text-xs text-muted">{meta.join(' · ')}</span>
-									<button className={`xb -mr-3 justify-self-end ${data.readonly ? 'invisible' : ''}`} aria-label={income ? 'Удалить доход' : 'Удалить трату'} onClick={() => remove(r)}>
-										×
-									</button>
+									<button className={`ib -mr-3 justify-self-end ${noEdit ? 'invisible' : ''}`} onClick={() => remove(r)}><Icon name="trash" size={16} label={income ? 'Удалить доход' : 'Удалить трату'} /></button>
 								</li>
 							)
 						})}
@@ -73,7 +78,7 @@ export function RecentLogs() {
 									<li key={`${r.kind}-${e.id}`} className="col-span-7 grid grid-cols-subgrid items-center border-b border-dashed border-line2 py-1 whitespace-nowrap">
 										<span className="text-muted">{e.date}</span>
 										<span className="text-muted">{income ? '[REV]' : '[EXP]'}</span>
-										<span className="text-muted">{income || isSolo ? '' : (e as Expense).scope === 'personal' ? '[ЛИЧН]' : '[СЕМ]'}</span>
+										<span className={(e as Expense).scope === 'personal' ? 'text-muted' : ''}>{tag(r)}</span>
 										<span className="text-right font-bold">
 											{income ? '+' : '−'}
 											{fmt(e.amount)} {e.currency}
@@ -83,10 +88,8 @@ export function RecentLogs() {
 											// {termName(what ?? (income ? 'Удалённый источник' : 'Удалённая категория'))}
 											{e.note && <span className="ml-2 text-muted">{e.note}</span>}
 										</span>
-										<span className="text-muted uppercase">{isSolo ? '' : (names.get(e.authorId) ?? '—')}</span>
-										<button className={`xb ${data.readonly ? 'invisible' : ''}`} aria-label={income ? 'Удалить доход' : 'Удалить трату'} onClick={() => remove(r)}>
-											×
-										</button>
+										<span className="text-muted uppercase">{withNames ? (names.get(e.authorId) ?? '—') : ''}</span>
+										<button className={`ib ${noEdit ? 'invisible' : ''}`} onClick={() => remove(r)}><Icon name="trash" size={16} label={income ? 'Удалить доход' : 'Удалить трату'} /></button>
 									</li>
 								)
 							})}

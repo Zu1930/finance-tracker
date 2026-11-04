@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { IconText, Problem } from '../icons/IconText'
+import { t } from '@/lib/i18n'
 import Link from 'next/link'
 import { OnceReveal } from '../settings/Kit'
 import { amountChars, fmt, parseAmount } from '@/lib/utils'
@@ -70,7 +72,7 @@ export function Welcome({ userId }: { userId: string }) {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [step, !!d])
 
-	if (!info || !d) return <Frame>{error ? <p className="text-bad uppercase">!! {error}</p> : <p className="text-muted">&gt; ЗАГРУЗКА…</p>}</Frame>
+	if (!info || !d) return <Frame>{error ? <p className="uppercase"><Problem>{error}</Problem></p> : <p className="text-muted">&gt; ЗАГРУЗКА…</p>}</Frame>
 
 	const invited = info.invited
 	const base = info.base ?? d.currency
@@ -311,7 +313,7 @@ export function Welcome({ userId }: { userId: string }) {
 
 	footer = (
 		<div className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-dashed border-line pt-4 uppercase max-sm:grid max-sm:grid-cols-2">
-			<button className="tb h-12 sm:h-auto sm:min-h-11" onClick={() => go(-1)} disabled={busy}>‹ Назад</button>
+			<button className="tb h-12 sm:h-auto sm:min-h-11" onClick={() => go(-1)} disabled={busy}><IconText name="back" size={20}>{t('nav.back')}</IconText></button>
 			{step !== 'family' && (
 				<button className="min-h-12 text-muted underline-offset-4 hover:underline sm:min-h-11" onClick={() => go(1, true)} disabled={busy}>Пропустить</button>
 			)}
@@ -344,7 +346,7 @@ function Frame({ children, progress }: { children: ReactNode; progress?: string 
 	)
 }
 
-const Err = ({ text }: { text: string }) => <p className="mt-3 min-h-5 text-bad uppercase" role="alert">{text && `!! ${text}`}</p>
+const Err = ({ text }: { text: string }) => <p className="mt-3 min-h-5 uppercase" role="alert"><Problem>{text}</Problem></p>
 
 /** Плашка категории: выбранная инвертирована с ■; у пары — метка СЕМ/ЛИЧН, долгое нажатие или правый клик её меняют */
 function CatTile({ name, limit, on, scope, toggle, flip }: { name: string; limit: string; on: boolean; scope: Scope | null; toggle: () => void; flip: () => void }) {

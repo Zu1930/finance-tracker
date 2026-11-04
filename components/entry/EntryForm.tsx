@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useTracker } from '../TrackerProvider'
+import { inField } from '../SpaceProvider'
+import { Problem } from '../icons/IconText'
 import { useNarrow } from '../AsciiBar'
 import { amountChars, ddmm, fmt, numIn, parseAmount, parseRate, termName, todayStr } from '@/lib/utils'
 
@@ -155,12 +157,17 @@ export function useEntryForm(defaultCurrency: string) {
 
 export type EntryForm = ReturnType<typeof useEntryForm>
 
-/** Alt + 1..9 — выбрать вариант по номеру в списке */
-export function useAltPick(options: Option[], pick: (id: string) => void) {
+/**
+ * Alt + 1..9 — выбрать вариант по номеру в списке. spaceKeys — Alt + 1 / 2 / 3 вне полей ввода заняты
+ * переключением бюджета (SpaceProvider), здесь они работают только из поля
+ */
+export function useAltPick(options: Option[], pick: (id: string) => void, spaceKeys = false) {
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
 			if (!e.altKey || !/^Digit[1-9]$/.test(e.code)) return
-			const o = options[Number(e.code.slice(5)) - 1]
+			const n = Number(e.code.slice(5))
+			if (spaceKeys && n <= 3 && !inField(document.activeElement)) return
+			const o = options[n - 1]
 			if (o) {
 				e.preventDefault()
 				pick(o.id)
@@ -168,7 +175,7 @@ export function useAltPick(options: Option[], pick: (id: string) => void) {
 		}
 		document.addEventListener('keydown', onKey)
 		return () => document.removeEventListener('keydown', onKey)
-	}, [options, pick])
+	}, [options, pick, spaceKeys])
 }
 
 type FormProps = {
@@ -385,10 +392,10 @@ export function EntryForm({
 				</button>
 			</div>
 			<p
-				className="mt-3 min-h-5 text-bad uppercase"
+				className="mt-3 min-h-5 uppercase"
 				role="alert"
 			>
-				{form.error && `!! ${form.error.replace(/\.$/, '')}`}
+				<Problem>{form.error.replace(/\.$/, '')}</Problem>
 			</p>
 		</>
 	)

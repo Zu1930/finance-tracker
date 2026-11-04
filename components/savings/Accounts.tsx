@@ -2,6 +2,12 @@
 
 import { useRef, useState, type KeyboardEvent } from "react";
 import { useTracker } from "../TrackerProvider";
+import { useSpace } from "../SpaceProvider";
+import { SPACE, spaceSavings } from "@/lib/space";
+import { Icon } from "../icons/Icon";
+import { IconText } from "../icons/IconText";
+import { t } from "@/lib/i18n";
+import type { ReactNode } from "react";
 import { gapStatus, toBase, totals } from "@/lib/savings";
 import type { Account, ReconView, Scope } from "@/lib/types";
 import { amountChars, ddmm, fmt, localDay, numIn, parseAmount, signed, todayStr } from "@/lib/utils";
@@ -11,10 +17,14 @@ const STALE_DAYS = 14;
 /** Счета семьи и мои, режим сверки, блок расхождения по последнему снимку */
 export function Accounts({ openFamily = false }: { openFamily?: boolean }) {
   const { data, isSolo, api, toast } = useTracker();
+  const { view, readOnly } = useSpace();
   const st = data.settings!;
   const sv = data.savings;
-  const family = sv.accounts.family.filter((a) => !a.archived);
-  const mine = sv.accounts.mine.filter((a) => !a.archived);
+  const picked = spaceSavings(sv, view).accounts;
+  const family = picked.family.filter((a) => !a.archived);
+  const mine = picked.personal.filter((a) => !a.archived);
+  const showFamily = !isSolo && view !== "personal";
+  const showMine = view !== "family";
   const list = [...family, ...mine];
   const last = sv.recons.at(-1);
   const [editing, setEditing] = useState(false);
@@ -60,7 +70,7 @@ export function Accounts({ openFamily = false }: { openFamily?: boolean }) {
   };
 
   let idx = 0;
-  const group = (scope: Scope, title: string, items: Account[]) => {
+  const group = (scope: Scope, title: ReactNode, items: Account[]) => {
     const t = totals(items, st.base, st.rates);
     return (
       <div className="mt-4">
@@ -98,14 +108,14 @@ export function Accounts({ openFamily = false }: { openFamily?: boolean }) {
                       Обновлён {day === todayStr() ? "сегодня" : ddmm(day)}
                     </span>
                     <span className="w-[9ch] text-right text-muted max-sm:hidden">{day === todayStr() ? "Сегодня" : ddmm(day)}</span>
-                    <button className="xb -mr-2 justify-self-end" aria-label={`Убрать счёт ${a.name}`} onClick={() => void archive(a)}>×</button>
+                    {readOnly ? <span /> : <button className="ib -mr-2 justify-self-end" onClick={() => void archive(a)}><Icon name="trash" size={16} label={`Убрать счёт ${a.name}`} /></button>}
                   </>
                 )}
               </li>
             );
           })}
         </ul>
-        {!editing && <NewAccount key={scope === (isSolo ? "personal" : "family") ? String(openFamily) : scope} scope={scope} defaultOpen={scope === (isSolo ? "personal" : "family") && openFamily} />}
+        {!editing && !readOnly && <NewAccount key={scope === (isSolo ? "personal" : "family") ? String(openFamily) : scope} scope={scope} defaultOpen={scope === (isSolo ? "personal" : "family") && openFamily} />}
       </div>
     );
   };
@@ -116,11 +126,11 @@ export function Accounts({ openFamily = false }: { openFamily?: boolean }) {
         <h2 className="sec">
           Счета // {last ? `последняя сверка ${ddmm(last.day)}` : "сверок ещё не было"}
         </h2>
-        {!editing && list.length > 0 && <button className="tb" onClick={start}>Сверка</button>}
+        {!editing && !readOnly && list.length > 0 && <button className="tb" onClick={start}><IconText name="reconcile">{t("action.reconcile")}</IconText></button>}
       </div>
       {editing && <p className="mt-2 text-muted2">// Впишите остатки. Enter — к следующему счёту, на последнем — сохранить</p>}
-      {!isSolo && group("family", "Семья", family)}
-      {group("personal", isSolo ? "Мои счета" : "Личное", mine)}
+      {showFamily && group("family", <IconText name="space-family">{SPACE.family.name}</IconText>, family)}
+      {showMine && group("personal", isSolo ? "Мои счета" : <IconText name="space-personal">{SPACE.personal.name}</IconText>, mine)}
       {editing && (
         <div className="tgroup mt-4">
           <button className="tb max-sm:h-12" onClick={() => setEditing(false)}>Отмена</button>
@@ -187,7 +197,7 @@ function NewAccount({ scope, defaultOpen = false }: { scope: Scope; defaultOpen?
     setOpen(false);
   };
 
-  if (!open) return <button className="tb mt-3" onClick={() => setOpen(true)}>+ Счёт</button>;
+  if (!open) return <button className="tb mt-3" onClick={() => setOpen(true)}><IconText name="card">+ {t("action.addAccount")}</IconText></button>;
   return (
     <div className="mt-3 flex flex-wrap items-end gap-x-6 gap-y-3">
       <div className="flex min-w-[200px] flex-[2_1_200px] items-center gap-3">

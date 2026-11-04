@@ -2,6 +2,11 @@
 
 import { useState } from "react";
 import { useTracker } from "../TrackerProvider";
+import { useSpace } from "../SpaceProvider";
+import { spaceSavings } from "@/lib/space";
+import { Icon } from "../icons/Icon";
+import { IconText, Problem, spaceIcon } from "../icons/IconText";
+import { t } from "@/lib/i18n";
 import { AsciiBar } from "../AsciiBar";
 import { toBase } from "@/lib/savings";
 import type { Goal, Scope } from "@/lib/types";
@@ -10,8 +15,10 @@ import { amountChars, ddmm, fmt, parseAmount, termName, todayStr } from "@/lib/u
 /** Копилки: распределение общей суммы. allocated и free — в базе, сама копилка — в своей валюте */
 export function Goals({ allocated, free, missing, empty }: { allocated: number; free: number; missing: string[]; empty: boolean }) {
   const { data } = useTracker();
+  const { view, readOnly } = useSpace();
   const base = data.settings!.base;
-  const goals = [...data.savings.goals.family, ...data.savings.goals.mine];
+  const picked = spaceSavings(data.savings, view).goals;
+  const goals = [...picked.family, ...picked.personal];
   // Счетов ещё нет и копилок нет — распределять нечего
   if (empty && goals.length === 0)
     return (
@@ -27,7 +34,7 @@ export function Goals({ allocated, free, missing, empty }: { allocated: number; 
         {empty ? (
           <span>заведите счета и сделайте сверку</span>
         ) : free < 0 ? (
-          <span className="text-bad">!! Распределено больше, чем есть: −{fmt(Math.round(-free))} {base}</span>
+          <Problem>Распределено больше, чем есть: −{fmt(Math.round(-free))} {base}</Problem>
         ) : (
           <span>свободно {fmt(Math.round(free))} {base}</span>
         )}
@@ -38,13 +45,14 @@ export function Goals({ allocated, free, missing, empty }: { allocated: number; 
       ) : (
         <p className="mt-4 text-muted uppercase">// Копилок пока нет. Назовите цель и сумму ниже</p>
       )}
-      <NewGoal />
+      {!readOnly && <NewGoal />}
     </section>
   );
 }
 
 function GoalCard({ g }: { g: Goal }) {
   const { data, isSolo, api, toast } = useTracker();
+  const { view, readOnly } = useSpace();
   const st = data.settings!;
   const [val, setVal] = useState("");
   const inBase = g.currency === st.base ? null : toBase(g.allocated, g.currency, st.base, st.rates);
@@ -75,9 +83,9 @@ function GoalCard({ g }: { g: Goal }) {
     <section className="border-b border-dashed border-line2 py-4">
       <div className="flex items-start justify-between gap-3">
         <h3 className="pt-3 font-bold uppercase">
-          {termName(g.name)} {!isSolo && <span className="font-normal text-muted">[{g.scope === "family" ? "СЕМ" : "ЛИЧН"}]</span>}
+          {!isSolo && view === "all" && <Icon name={spaceIcon(g.scope)} size={16} className={`mr-2 ${g.scope === "personal" ? "text-muted" : ""}`} label={g.scope === "personal" ? t("space.personal") : t("space.family")} />}{termName(g.name)}
         </h3>
-        <button className="xb -mr-2" aria-label={`Удалить копилку ${g.name}`} onClick={() => void remove()}>×</button>
+        {!readOnly && <button className="ib -mr-2" onClick={() => void remove()}><Icon name="trash" size={16} label={`Удалить копилку ${g.name}`} /></button>}
       </div>
       <div className="mt-1"><AsciiBar value={g.allocated} max={g.target} variant="goal" label={g.name} /></div>
       <p className="mt-2 text-muted uppercase">
@@ -85,23 +93,23 @@ function GoalCard({ g }: { g: Goal }) {
         {g.currency !== st.base && <span className="text-muted2"> // {inBase === null ? "КУРС?" : `≈ ${fmt(Math.round(inBase))} ${st.base}`}</span>}
       </p>
       {last && <p className="text-muted2">// {last.amount > 0 ? "+" : "−"}{fmt(Math.abs(last.amount))} · {ddmm(last.date)}</p>}
-      <div className="mt-3 flex flex-wrap items-end gap-x-4 gap-y-2">
+      {!readOnly && <div className="mt-3 flex flex-wrap items-end gap-x-4 gap-y-2">
         <input className="tfield min-w-[10ch] flex-1 max-sm:basis-full" inputMode="decimal" placeholder="сумма" aria-label={`Сумма для ${g.name}`}
           value={val} onChange={(e) => setVal(amountChars(e.target.value))} onKeyDown={(e) => e.key === "Enter" && void move(1)} />
         <div className="tgroup max-sm:w-full">
           <button className="tb max-sm:h-11" onClick={() => void move(1)}>+ Выделить</button>
           <button className="tb max-sm:h-11" onClick={() => void move(-1)}>− Вернуть</button>
         </div>
-      </div>
+      </div>}
     </section>
   );
 }
 
 function NewGoal() {
-  const { data, isSolo, api, toast } = useTracker();
+  const { data, api, toast } = useTracker();
   const st = data.settings!;
-  const [picked, setScope] = useState<Scope>("family");
-  const scope: Scope = isSolo ? "personal" : picked;
+  // Бюджет — выбранный в шапке
+  const scope: Scope = useSpace().entryScope ?? "personal";
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
   const [cur, setCur] = useState(st.base);
@@ -121,12 +129,6 @@ function NewGoal() {
     <section className="mt-6">
       <h2 className="sec">New goal</h2>
       <div className="mt-4 flex flex-wrap items-end gap-x-6 gap-y-4">
-        {!isSolo && (
-          <div className="tgroup max-sm:w-full" role="group" aria-label="Чья копилка">
-            <button className="tb" aria-pressed={scope === "family"} onClick={() => setScope("family")}>Семья</button>
-            <button className="tb" aria-pressed={scope === "personal"} onClick={() => setScope("personal")}>Личное</button>
-          </div>
-        )}
         <div className="flex min-w-[220px] flex-[2_1_220px] items-center gap-3">
           <label htmlFor="goal-name" className="lbl">Name</label>
           <input id="goal-name" className="tfield flex-1" placeholder="например, отпуск" value={name}
@@ -142,7 +144,7 @@ function NewGoal() {
             <button key={c} className="tb tb-tight" aria-pressed={currency === c} onClick={() => setCur(c)}>{c}</button>
           ))}
         </div>
-        <button className="tb max-sm:h-12 max-sm:w-full" onClick={() => void add()}>Создать</button>
+        <button className="tb max-sm:h-12 max-sm:w-full" onClick={() => void add()}><IconText name="goal">{t("action.addGoal")}</IconText></button>
       </div>
     </section>
   );

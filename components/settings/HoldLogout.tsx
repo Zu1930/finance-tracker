@@ -1,6 +1,8 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import { IconText } from '../icons/IconText'
+import { t } from '@/lib/i18n'
 import { SW_CACHE } from '@/lib/offline'
 
 const logout = async () => {
@@ -60,7 +62,7 @@ export function HoldLogout() {
 				if (e.detail === 0 && !keyHold.current) logout()
 			}}
 		>
-			Выйти
+			<IconText name="logout">{t('action.logout')}</IconText>
 			<span
 				aria-hidden="true"
 				className={`absolute inset-0 flex items-center justify-center bg-bad font-bold text-panel transition-[clip-path] ${holding ? 'ease-linear [clip-path:inset(0_0_0_0)]' : '[clip-path:inset(0_100%_0_0)]'}`}

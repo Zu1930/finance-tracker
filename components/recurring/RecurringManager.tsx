@@ -2,6 +2,11 @@
 
 import { useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useTracker } from '../TrackerProvider'
+import { useSpace } from '../SpaceProvider'
+import { spaceRecurring } from '@/lib/space'
+import { Icon } from '../icons/Icon'
+import { IconText } from '../icons/IconText'
+import { t } from '@/lib/i18n'
 import { amountIn, nextUnpaidMonth } from '@/lib/recurring'
 import type { Category, RecurringPayment, Scope } from '@/lib/types'
 import { aliveIn, amountChars, curMonthKey, fmt, limitIn, MONTHS, numIn, parseAmount, setLimit, shiftMonth, termName, todayStr } from '@/lib/utils'
@@ -15,11 +20,12 @@ export const openOnHash = (el: HTMLDetailsElement | null) => {
 	el.scrollIntoView({ block: 'start' })
 }
 
-/** :: РЕГУЛЯРНЫЕ ПЛАТЕЖИ — управление: список с правкой, пауза, удаление, форма создания */
+/** :: РЕГУЛЯРНЫЕ ПЛАТЕЖИ — управление платежами выбранного бюджета: правка, пауза, удаление, создание. В «всё вместе» нет */
 export function RecurringManager() {
-	const { data, api, scopeTag } = useTracker()
+	const { data, api } = useTracker()
+	const { view, readOnly } = useSpace()
 	const st = data.settings!
-	const live = [...data.recurring.family, ...data.recurring.mine].filter((p) => !p.endMonth)
+	const live = spaceRecurring([...data.recurring.family, ...data.recurring.mine], view).filter((p) => !p.endMonth)
 	const [edit, setEdit] = useState<string | null>(null)
 	const cats = (scope: Scope) => (scope === 'personal' ? data.mySettings.personalCategories : st.familyCategories)
 	const catName = (p: RecurringPayment) => termName(cats(p.scope).find((c) => c.id === p.categoryId)?.name ?? 'категория удалена')
@@ -28,11 +34,12 @@ export function RecurringManager() {
 		p.frequency === 'monthly' ? `каждый месяц, ${String(p.day).padStart(2, '0')}` : `раз в год, ${p.day} ${MONTHS_GEN[(p.month ?? 1) - 1]}`
 
 	const remove = (p: RecurringPayment) => void api(`/api/recurring/${p.id}?scope=${p.scope}&today=${todayStr()}`, 'DELETE')
+	if (readOnly) return null
 
 	return (
 		<details id="recurring" ref={openOnHash} className="group mt-2 border-t border-dashed border-line">
 			<summary className="sec flex min-h-11 cursor-pointer list-none items-center gap-2 py-3 [&::-webkit-details-marker]:hidden">
-				↻ Регулярные платежи<span aria-hidden="true" className="group-open:hidden">[+]</span><span aria-hidden="true" className="hidden group-open:inline">[−]</span>
+				<IconText name="recurring">Регулярные платежи</IconText><span aria-hidden="true" className="group-open:hidden">[+]</span><span aria-hidden="true" className="hidden group-open:inline">[−]</span>
 			</summary>
 			<div className="max-w-3xl pt-1 pb-2">
 				{live.length === 0 && <p className="text-muted uppercase">Платежей пока нет</p>}
@@ -50,11 +57,11 @@ export function RecurringManager() {
 									{p.approx && '≈ '}{fmt(amountIn(p, cur))} {p.currency}
 								</span>
 								<span className="truncate text-xs text-muted sm:text-sm">
-									{when(p)}{scopeTag(p.scope) && ` · ${scopeTag(p.scope)}`}{p.paused && <b className="text-warn"> · Пауза</b>}
+									{when(p)}{p.paused && <b className="text-warn"> · Пауза</b>}
 								</span>
 								<span className="flex items-center justify-end gap-2">
 									{p.paused && <button className="tb" onClick={() => void api(`/api/recurring/${p.id}`, 'PATCH', { scope: p.scope, version: p.version, paused: false })}>Возобновить</button>}
-									<button className="xb -mr-2" aria-label={`Удалить ${p.name}`} onClick={() => remove(p)}>×</button>
+									<button className="ib -mr-2" onClick={() => remove(p)}><Icon name="trash" size={16} label={`${t('action.delete')} ${p.name}`} /></button>
 								</span>
 							</li>
 						)
@@ -139,8 +146,8 @@ function NewPayment({ cats }: { cats: (s: Scope) => Category[] }) {
 	const [yearly, setYearly] = useState(false)
 	const [day, setDay] = useState('1')
 	const [month, setMonth] = useState(Number(cur.slice(5)))
-	const [picked, setScope] = useState<Scope>('family')
-	const scope: Scope = isSolo ? 'personal' : picked
+	// Бюджет — выбранный в шапке
+	const scope: Scope = useSpace().entryScope ?? 'personal'
 	const [catId, setCatId] = useState<string | null>(null)
 	const [offer, setOffer] = useState<{ cat: Category; scope: Scope; from: number; to: number; name: string } | null>(null)
 	const list = cats(scope).filter((c) => aliveIn(c, cur))
@@ -212,12 +219,6 @@ function NewPayment({ cats }: { cats: (s: Scope) => Category[] }) {
 					</Field>
 				)}
 			</div>
-			{!isSolo && (
-				<div className="tgroup max-sm:w-full sm:w-max" role="group" aria-label="Чей платёж">
-					<button className="tb" aria-pressed={scope === 'family'} onClick={() => { setScope('family'); setCatId(null) }}>Семья</button>
-					<button className="tb" aria-pressed={scope === 'personal'} onClick={() => { setScope('personal'); setCatId(null) }}>Личное</button>
-				</div>
-			)}
 			<div className="flex flex-wrap gap-2" role="group" aria-label="Категория платежа">
 				{list.map((c) => <button key={c.id} className="tb tb-tight" aria-pressed={catId === c.id} onClick={() => setCatId(c.id)}>{termName(c.name)}</button>)}
 				{list.length === 0 && <span className="text-muted uppercase">Нет категорий</span>}

@@ -1,6 +1,10 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { Icon } from '../icons/Icon'
+import { IconText } from '../icons/IconText'
+import type { IconName } from '../icons/icons'
+import { t } from '@/lib/i18n'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useTracker } from '../TrackerProvider'
@@ -42,6 +46,11 @@ function useMeta() {
 const MetaContext = createContext<Record<Section, string> | null>(null)
 const useMetaContext = () => useContext(MetaContext)!
 
+/** Иконки пунктов меню настроек */
+const SECTION_ICON: Record<Section, IconName> = {
+	family: 'space-family', currency: 'currency', input: 'mic', device: 'theme', data: 'export', account: 'user', beta: 'shortcut',
+}
+
 const visibleGroups = (admin: boolean) => GROUPS.filter((g) => admin || g.items.every((i) => i.id !== 'beta'))
 
 /** Меню слева (десктоп) */
@@ -61,8 +70,8 @@ function SettingsMenu() {
 							return (
 								<li key={i.id}>
 									<Link href={`/settings/${i.id}`} aria-current={active ? 'page' : undefined}
-										className={`flex min-h-9 items-baseline justify-between gap-3 px-2 py-1.5 uppercase ${active ? 'bg-ink text-panel' : 'hover:bg-hover'}`}>
-										<span className="shrink-0 whitespace-nowrap">{i.title}</span>
+										className={`flex min-h-9 items-center justify-between gap-3 px-2 py-1.5 uppercase ${active ? 'bg-ink text-panel' : 'hover:bg-hover'}`}>
+										<IconText name={SECTION_ICON[i.id]} size={20} className="shrink-0 whitespace-nowrap">{i.title}</IconText>
 										<span title={meta[i.id]} className={`min-w-0 truncate text-xs ${active ? 'text-panel/70' : 'text-muted'}`}>{meta[i.id]}</span>
 									</Link>
 								</li>
@@ -100,7 +109,7 @@ export function SettingsIndex() {
 						{g.items.map((i) => (
 							<li key={i.id}>
 								<Link href={`/settings/${i.id}`} className="flex min-h-[52px] items-center gap-3 border-b border-dashed border-line2 uppercase">
-									<span className="flex-1">{i.title}</span>
+									<IconText name={SECTION_ICON[i.id]} size={20} className="flex-1">{i.title}</IconText>
 									<span className="max-w-[50%] truncate text-xs text-muted">{meta[i.id]}</span>
 									<span aria-hidden="true" className="text-muted">›</span>
 								</Link>
@@ -126,7 +135,7 @@ export function SettingsFrame({ children }: { children: ReactNode }) {
 	)
 }
 
-/** Страница раздела: заголовок 22px, на мобильном сверху ‹ НАСТРОЙКИ; раздел запоминается для /settings */
+/** Страница раздела: заголовок 22px, на мобильном сверху «назад к настройкам»; раздел запоминается для /settings */
 export function SectionPage({ section, children }: { section: Section; children: ReactNode }) {
 	useEffect(() => {
 		try {
@@ -135,7 +144,7 @@ export function SectionPage({ section, children }: { section: Section; children:
 	}, [section])
 	return (
 		<>
-			<Link href="/settings" className="tb mb-4 sm:hidden">‹ Настройки</Link>
+			<Link href="/settings" className="mb-4 inline-flex min-h-11 items-center gap-2 text-muted uppercase hover:text-ink sm:hidden"><Icon name="back" size={20} />{t('nav.settings')}</Link>
 			<h1 className="text-[22px] font-bold uppercase">{TITLES[section]}</h1>
 			{children}
 		</>

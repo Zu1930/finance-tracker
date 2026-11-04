@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useTracker } from "./TrackerProvider";
+import { useSpace, useSpaceData } from "./SpaceProvider";
 import { CommitInput } from "./CommitInput";
 import { AsciiBar } from "./AsciiBar";
 import { Contribution } from "./entry/Contribution";
@@ -13,10 +14,20 @@ import { usePlan, withOverride } from "./plan/usePlan";
 import { RecurringSection } from "./recurring/RecurringSection";
 import { RecurringManager, openOnHash } from "./recurring/RecurringManager";
 import { Hint } from "./onboarding/Hint";
-import { byAuthor, fmtPct, monthIncome, monthOccurrences, savingsRate } from "@/lib/metrics";
+import { byAuthor, fmtPct, monthExpense, monthIncome, monthOccurrences, savingsRate } from "@/lib/metrics";
 import { MAX_AHEAD, isMonth, itemStatus, linkedByItem, monthLimit, monthsAhead, planSpentByCat } from "@/lib/plan";
-import type { Category, Expense, PlanItem } from "@/lib/types";
+import type { Category, Expense, PlanItem, Scope } from "@/lib/types";
+import { SPACE, spaceGroups } from "@/lib/space";
+import { Icon } from "./icons/Icon";
+import { IconText } from "./icons/IconText";
+import { t } from "@/lib/i18n";
 import { activeCats, amountChars, catsIn, curMonthKey, fmt, liveCats, minus, monthName, monthTitle, numIn, parseAmount, setLimit, shiftMonth, signed, termName, todayStr, uid } from "@/lib/utils";
+
+/** Блоки «по группам»: в «всё вместе» — две секции ◆ СЕМЬЯ и ◇ ЛИЧНОЕ, иначе одна без заголовка */
+function ByGroup({ render }: { render: (only?: Scope) => React.ReactNode }) {
+  const { readOnly, view } = useSpace();
+  return <>{readOnly ? spaceGroups(view).map((g) => <div key={g}>{render(g)}</div>) : render()}</>;
+}
 
 export function LimitsView() {
   const { month, setMonth } = useTracker();
@@ -52,8 +63,8 @@ export function LimitsView() {
         <>
           <Hint id="plan" className="mt-6" />
           <PlanSummary month={month} />
-          <RecurringSection month={month} future />
-          <PlanItems month={month} withStatus={false} />
+          <ByGroup render={(only) => <RecurringSection month={month} future only={only} />} />
+          <ByGroup render={(only) => <PlanItems month={month} withStatus={false} only={only} />} />
           <PlanLimits month={month} />
         </>
       ) : (
@@ -66,6 +77,10 @@ export function LimitsView() {
 /** Текущий и прошлые месяцы: итог, покупки по плану, шкалы категорий (без плановых трат, кроме превышения) */
 function MonthLimits() {
   const { data, isSolo, month, setSettings, setMySettings } = useTracker();
+  const { view, readOnly } = useSpace();
+  const sd = useSpaceData();
+  const showFamily = !isSolo && view !== "personal";
+  const showMine = view !== "family";
   const st = data.settings!;
   const cur = curMonthKey();
   const { plan, items, savePlan, saveMyPlan } = usePlan(month);
@@ -80,12 +95,14 @@ function MonthLimits() {
   const [onlyMonth, setOnlyMonth] = useState(false);
   const perMonth = onlyMonth && month === cur;
 
-  // Итог семьи — одинаковый у обоих: личное = мои личные + сумма личных партнёра
-  const income = monthIncome(data, month);
+  // Итог бюджета; в «всё вместе» — семьи, одинаковый у обоих: личное = мои личные + сумма личных партнёра
+  const income = monthIncome(sd, month);
   const familyTotal = family.reduce((a, e) => a + e.base, 0);
   const personalTotal = mine.reduce((a, e) => a + e.base, 0) + (data.partnerPersonalTotals[month] ?? 0);
-  const expense = familyTotal + personalTotal;
+  const expense = monthExpense(sd, month);
   const rest = income - expense;
+  // У личного бюджета дохода нет — только расход
+  const withIncome = isSolo || view !== "personal";
     const myLeft = myCats.reduce((a, c) => a + c.limit - (mySpent[c.id] ?? 0), 0);
   // Регулярные по категориям: факт оплаченных или оценка — для строки под шкалой
   const occ = monthOccurrences(data, month, todayStr());
@@ -98,52 +115,58 @@ function MonthLimits() {
       <section className="mt-6 border-t border-dashed border-line pt-5">
         <h2 className="sec">Итог</h2>
         <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 uppercase sm:grid-cols-[12ch_minmax(0,1fr)] sm:gap-y-1">
+          {withIncome && (<>
           <dt className="text-muted">Доход</dt>
           <dd className="max-sm:text-right">
             <b>{signed(income)} {st.base}</b>
             <span className="text-muted max-sm:hidden"> // </span>
             <span className="max-sm:block max-sm:text-xs"><Contribution sums={byAuthor(data.incomes[month] ?? [])} sign="+" /></span>
           </dd>
+          </>)}
           <dt className="text-muted">Расход</dt>
           <dd className="max-sm:text-right">
             <b>{minus(expense)} {st.base}</b>
-            {!isSolo && !data.readonly && <span className="text-muted max-sm:block max-sm:text-xs"><span className="max-sm:hidden"> // </span>семья {fmt(familyTotal)} · личное {fmt(personalTotal)}</span>}
+            {!isSolo && view === "all" && !data.readonly && <span className="text-muted max-sm:block max-sm:text-xs"><span className="max-sm:hidden"> // </span>семья {fmt(familyTotal)} · личное {fmt(personalTotal)}</span>}
           </dd>
+          {withIncome && (<>
           <dt className="text-muted">Остаток</dt>
           <dd className="max-sm:text-right">
             <b className={rest < 0 ? "text-bad" : ""}>{signed(rest)} {st.base}</b>
             <span className="max-sm:block max-sm:text-xs"><span className="text-muted"><span className="max-sm:hidden"> //</span> сбережения </span>
             {fmtPct(savingsRate(income, expense))}</span>
           </dd>
+          </>)}
         </dl>
       </section>
 
       {month === cur && !data.readonly && <PlanSummary month={month} />}
       {!data.readonly && data.recurring.family.length + data.recurring.mine.length > 0 && <Hint id="recurring" className="mt-6" />}
-      <RecurringSection month={month} future={false} />
+      <ByGroup render={(only) => <RecurringSection month={month} future={false} only={only} />} />
       {!data.readonly && <Hint id="limits" className="mt-6" />}
-      {items.length > 0 && <PlanItems month={month} withStatus form={false} />}
+      {items.length > 0 && <ByGroup render={(only) => <PlanItems month={month} withStatus form={false} only={only} />} />}
 
-      {!isSolo && (
+      {showFamily && (
         <section className="mt-6 border-t border-dashed border-line pt-5">
-          <h2 className="sec">Семья</h2>
+          <h2 className="sec"><IconText name="space-family">{SPACE.family.name}</IconText></h2>
           <LimitBlocks cats={familyCats} spent={familySpent} contribution={family} planned={plan.items.family} recurring={recurringByCat.family} />
         </section>
       )}
 
       {/* В solo — единственный список: заголовок «Лимиты» вместо «Семья» / «Личное» */}
+      {showMine && (
       <section className="mt-6 border-t border-dashed border-line pt-5">
         <h2 className="sec">
-          {isSolo ? "Лимиты" : "Личное"} // <span className={myLeft < 0 ? "text-bad" : ""}>осталось {fmt(myLeft)}</span>
+          {isSolo ? "Лимиты" : <IconText name="space-personal">{SPACE.personal.name}</IconText>} // <span className={myLeft < 0 ? "text-bad" : ""}>осталось {fmt(myLeft)}</span>
         </h2>
         {myCats.length === 0 ? (
-          <p className="mt-3 text-muted uppercase">Нет категорий — добавьте ниже</p>
+          <p className="mt-3 text-muted uppercase">Нет категорий{readOnly ? "" : " — добавьте ниже"}</p>
         ) : (
           <LimitBlocks cats={myCats} spent={mySpent} planned={plan.items.mine} recurring={recurringByCat.mine} />
         )}
       </section>
+      )}
 
-      {!data.readonly && (<>
+      {!data.readonly && !readOnly && (<>
       <details id="categories" ref={openOnHash} className="group mt-4 border-t border-dashed border-line">
         <summary className="sec flex min-h-11 cursor-pointer list-none items-center gap-2 py-3 [&::-webkit-details-marker]:hidden">
           Категории и лимиты<span aria-hidden="true" className="group-open:hidden">[+]</span><span aria-hidden="true" className="hidden group-open:inline">[−]</span>
@@ -155,7 +178,7 @@ function MonthLimits() {
               <button className="tb" aria-pressed={onlyMonth} onClick={() => setOnlyMonth(true)}>Только {monthName(cur)}</button>
             </div>
           )}
-          {!isSolo && (
+          {showFamily && (
             <>
               <h3 className="lbl">Семья, {st.base}</h3>
               <CategoryEditor
@@ -165,12 +188,14 @@ function MonthLimits() {
               />
             </>
           )}
-          <h3 className={`lbl ${isSolo ? "" : "mt-8"}`}>{isSolo ? "Категории" : "Личное"}, {st.base}</h3>
+          {showMine && (<>
+          <h3 className="lbl">{isSolo ? "Категории" : "Личное"}, {st.base}</h3>
           <CategoryEditor
             cats={liveCats(data.mySettings.personalCategories)}
             month={perMonth ? { overrides: plan.myOverrides, save: (o) => void saveMyPlan(o) } : undefined}
             update={(fn) => setMySettings((s) => ({ ...s, personalCategories: fn(s.personalCategories) }))}
           />
+          </>)}
           <p className="mt-6 text-muted uppercase">// {perMonth ? `Изменения — только на ${monthName(cur)}` : "Изменения действуют с текущего месяца, прошлые не меняются"}</p>
           <p className="mt-2 text-muted uppercase">
             Валюты, основная валюта и данные →{" "}
@@ -205,7 +230,7 @@ function LimitBlocks({ cats, spent, contribution, planned, recurring }: {
             <p className={`mt-1 uppercase ${left < 0 ? "text-bad" : "text-muted"}`}>
               {left < 0 ? `Перерасход ${fmt(-left)} ${base}` : `Осталось ${fmt(left)} из ${fmt(c.limit)} ${base}`}
             </p>
-            {recurring[c.id] > 0 && <p className="mt-1 text-muted2 uppercase">↻ Из них регулярные {fmt(Math.round(recurring[c.id]))}</p>}
+            {recurring[c.id] > 0 && <p className="mt-1 text-muted2 uppercase"><IconText name="recurring">Из них регулярные {fmt(Math.round(recurring[c.id]))}</IconText></p>}
             {planned.filter((it) => it.categoryId === c.id).map((it) => {
               const status = itemStatus(it, linked[it.id] ?? 0);
               return (
@@ -260,10 +285,10 @@ function CategoryEditor({ cats, update, month }: {
               if (month) return void month.save(withOverride(month.overrides, c.id, n === monthLimit(c, cur) ? null : n));
               patch(c.id, (x) => setLimit(x, n, cur));
             }} />
-          <button className="xb" aria-label={`Удалить категорию ${c.name}`} onClick={() => {
+          <button className="ib" onClick={() => {
             patch(c.id, (x) => ({ ...x, archived: true, archivedFrom: curMonthKey() }));
             toast(`Категория ${termName(c.name)} удалена`, "Вернуть", () => patch(c.id, ({ archivedFrom: _, ...x }) => ({ ...x, archived: false })));
-          }}>×</button>
+          }}><Icon name="trash" size={16} label={`${t("action.delete")} категорию ${c.name}`} /></button>
         </div>
       ))}
       <div className="mt-4 flex items-end gap-4">

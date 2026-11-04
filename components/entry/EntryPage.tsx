@@ -1,170 +1,86 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useTracker } from '../TrackerProvider'
-import type { Expense, Income, Scope } from '@/lib/types'
-import { EntryForm, useAltPick, useEntryForm, type EntryMode } from './EntryForm'
+import { useSpace } from '../SpaceProvider'
+import { ReadOnlyPick } from '../SpaceSwitcher'
+import { useNarrow } from '../AsciiBar'
+import { EntryForm, useAltPick, type EntryMode } from './EntryForm'
+import { useEntryDraft } from './useEntryDraft'
 import { ExpenseSummary } from './ExpenseSummary'
 import { IncomeBalance } from './IncomeBalance'
 import { RecentLogs } from './RecentLogs'
-import { activeCats, byRecentUse, fmt, incomeSources, liveCats, numIn, parseAmount, termName, uid } from '@/lib/utils'
-import { itemLeft, itemStatus, linkedByItem } from '@/lib/plan'
-import { monthOccurrences } from '@/lib/metrics'
-import { matchPayment } from '@/lib/recurring'
+import { Feed } from './Feed'
+import { fmt, termName } from '@/lib/utils'
+import { itemLeft } from '@/lib/plan'
 import { DueBlock } from '../recurring/DueBlock'
 import { QuickEntry } from './QuickEntry'
 import { WithSetupCard } from '../onboarding/SetupCard'
 import { Hint } from '../onboarding/Hint'
 import type { ParsedEntry } from '@/lib/quick-entry/parse'
+import { IconText } from '../icons/IconText'
+import { t } from '@/lib/i18n'
+
+/** Телефон — лента с итогом (ввод — формой поверх неё по «+»), десктоп — страница ввода */
+export function EntryPage() {
+	return useNarrow() ? <Feed /> : <DesktopEntry />
+}
 
 /**
- * Ввод трат и поступлений на одной странице. Режим и scope живут в URL: /?mode=income, /?scope=personal.
- * Семейные траты — общие лимиты, личные — свои категории, видит только автор
+ * Ввод трат и поступлений на десктопе. Бюджет — из переключателя в шапке; режим живёт в URL: /?mode=income.
+ * Доход — семейный, поэтому только в бюджете «Семья» (и у solo). В «всё вместе» вместо формы — выбор бюджета
  */
-export function EntryPage() {
-	const { data, isSolo, addEntry, removeEntry, toast } = useTracker()
-	const st = data.settings!
+function DesktopEntry() {
+	const { data, isSolo } = useTracker()
+	const { entryScope, readOnly, setSpace } = useSpace()
 	const params = useSearchParams()
-	const mode: EntryMode = params.get('mode') === 'income' ? 'income' : 'expense'
-	// В solo всё личное: переключателя нет, scope всегда personal
-	const scope: Scope = isSolo || params.get('scope') === 'personal' ? 'personal' : 'family'
+	const scope = entryScope ?? 'family'
+	const incomeOk = isSolo || scope === 'family'
+	const mode: EntryMode = params.get('mode') === 'income' && incomeOk ? 'income' : 'expense'
 	const rootRef = useRef<HTMLDivElement>(null)
+	const d = useEntryDraft(scope, mode)
+	const { form } = d
 
-	// Порядок категорий = последние использованные первыми; от него зависят номера и Alt + 1..9
-	const familyCats = byRecentUse(activeCats(st), data.familyExpenses)
-	const personalCats = byRecentUse(liveCats(data.mySettings.personalCategories), data.myExpenses)
-	const cats = scope === 'personal' ? personalCats : familyCats
-	const sources = incomeSources(st)
-
-	// Форма общая для обоих режимов и не сбрасывается при переключении
-	// Семейные траты — в общей валюте; личные траты и доходы — в моей валюте из настроек
-	const mine = data.mySettings.preferredCurrency
-	const myCurrency = mine && st.currencies.includes(mine) ? mine : st.base
-	const form = useEntryForm(mode === 'expense' && scope === 'family' ? st.base : myCurrency)
-	// Выбранная категория — отдельно для семейного и личного
-	const [catIds, setCatIds] = useState<Record<Scope, string | null>>({ family: null, personal: null })
-	const catId = catIds[scope]
-	const setCatId = (id: string | null) => setCatIds((c) => ({ ...c, [scope]: id }))
-	// Поступления почти всегда из одного источника, поэтому выбор не сбрасывается после записи
-	const [srcId, setSrcId] = useState(sources[0].id)
-	const src = sources.find((s) => s.id === srcId) ?? sources[0]
-
-	const go = (m: EntryMode, sc: Scope, focusAmount: boolean) => {
-		if (m !== mode || sc !== scope) {
+	const go = (m: EntryMode, focusAmount: boolean) => {
+		if (m !== mode) {
 			form.setError('')
-			const q = new URLSearchParams()
-			if (m === 'income') q.set('mode', 'income')
-			if (sc === 'personal') q.set('scope', 'personal')
 			// Без похода на сервер: useSearchParams видит history.replaceState, и переключение работает без связи
-			window.history.replaceState(null, '', q.size ? `/?${q}` : '/')
+			window.history.replaceState(null, '', m === 'income' ? '/?mode=income' : '/')
 		}
 		if (focusAmount) form.amountRef.current?.focus()
 	}
 
-	// Alt + ← / → — расход и доход, Alt + ↑ / ↓ — семья и личное. Фокус в сумму, только если он уже был в форме
+	// Alt + ← / → — расход и доход. Фокус в сумму, только если он уже был в форме
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
-			if (!e.altKey) return
-			const next =
-				e.key === 'ArrowLeft' ? (['expense', scope] as const)
-				: e.key === 'ArrowRight' ? (['income', scope] as const)
-				: e.key === 'ArrowUp' && mode === 'expense' ? (['expense', 'family'] as const)
-				: e.key === 'ArrowDown' && mode === 'expense' ? (['expense', 'personal'] as const)
-				: null
-			if (!next) return
+			if (!e.altKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return
+			const next = e.key === 'ArrowRight' && incomeOk ? 'income' : 'expense'
 			e.preventDefault()
-			go(next[0], next[1], rootRef.current?.contains(document.activeElement) ?? false)
+			go(next, rootRef.current?.contains(document.activeElement) ?? false)
 		}
 		document.addEventListener('keydown', onKey)
 		return () => document.removeEventListener('keydown', onKey)
 	})
 
-	useAltPick(mode === 'expense' ? cats : sources, (id) => {
-		if (mode === 'expense') setCatId(id)
-		else setSrcId(id)
+	useAltPick(mode === 'expense' ? d.cats : d.sources, (id) => {
+		if (mode === 'expense') d.setCatId(id)
+		else d.setSrcId(id)
 		form.setError('')
-	})
+	}, !isSolo)
 
-	// Пункты плана выбранной категории в месяце даты траты, ещё не купленные полностью
-	const planMonth = form.date.slice(0, 7)
-	const plan = data.plans[planMonth]
-	const scopeItems = (scope === 'personal' ? plan?.items.mine : plan?.items.family) ?? []
-	const linked = linkedByItem([...(data.familyExpenses[planMonth] ?? []), ...(data.myExpenses[planMonth] ?? [])], scopeItems)
-	const planChips = mode === 'expense' ? scopeItems.filter((i) => i.categoryId === catId && itemStatus(i, linked[i.id] ?? 0) !== 'done') : []
-	const [planId, setPlanId] = useState<string | null>(null)
-	const planItem = planChips.find((i) => i.id === planId)
-		// Ручная трата похожа на неоплаченный регулярный платёж этой категории (±10%) — предложить связать
-	const amountBase = (() => {
-				const a = parseAmount(form.amount)
-		const r = form.currency === st.base ? 1 : st.rates[form.currency]
-		return a && a > 0 && r ? a * r : 0
-	})()
-	const occ = monthOccurrences(data, planMonth, form.date)
-	const match = mode === 'expense' && catId && amountBase > 0
-		? matchPayment([...(scope === 'personal' ? occ.mine : occ.family)].map((o) => ({ ...o, month: planMonth })), catId, amountBase)
-		: undefined
-	const [recId, setRecId] = useState<string | null>(null)
-	const recurring = match && match.paymentId === recId ? match : undefined
-	// Смена категории, scope или режима сбрасывает выбранный пункт и платёж
-	useEffect(() => {
-		setPlanId(null)
-		setRecId(null)
-	}, [catId, scope, mode])
-
-	const pickPlan = (id: string) => {
-		const it = planChips.find((i) => i.id === id)
-		if (!it || planId === id) return setPlanId(null)
-				setPlanId(id)
-		setRecId(null)
-		// Сумма пустая — подставить остаток пункта; он в базовой валюте
-		if (!form.amount.trim()) {
-			form.setCur(st.base)
-			form.setAmount(String(itemLeft(it, linked[it.id] ?? 0)))
-		}
-		form.focusAmount()
-	}
-
-	// Трата из голосового ввода → обычная форма для ручной правки
+	// Трата из голосового ввода → обычная форма; у неё может быть другой бюджет
 	const editParsed = (p: ParsedEntry) => {
-		const defaultCur = (sc: Scope) => (sc === 'family' ? st.base : myCurrency)
-		form.fill({ amount: p.amount === null ? '' : numIn(p.amount), currency: p.currency, note: p.note, date: p.date }, defaultCur(p.scope) !== defaultCur(scope))
-		setCatIds((c) => ({ ...c, [p.scope]: p.categoryId }))
-		go('expense', p.scope, true)
-	}
-
-	const recorded = (what: string, undo: () => void) => {
-		form.reset()
-		toast(`Записано: ${what}`, 'Отменить', undo)
-	}
-
-	const submit = () => {
-		if (mode === 'expense') {
-			const cat = cats.find((c) => c.id === catId)
-			const entry = form.collect(() => (cat ? null : 'Выберите категорию.'))
-			if (!entry || !cat) return
-			const e: Expense = { id: uid(), ...entry, catId: cat.id, scope, authorId: data.me.id, ...(planItem && entry.date.slice(0, 7) === planMonth && { planItemId: planItem.id }),
-				...(!planItem && recurring && { recurringId: recurring.paymentId, recurringMonth: recurring.month }) }
-			addEntry('expense', e)
-			setCatId(null)
-			const tag = e.planItemId && planItem
-				? ` // План ${(linked[planItem.id] ?? 0) + e.base >= planItem.amount ? '✓' : '~'}`
-				: e.recurringId && recurring ? ` // ↻ ${termName(recurring.name)}` : ''
-			recorded(`−${fmt(e.amount)} ${e.currency} → ${termName(cat.name)}${tag}`, () => removeEntry('expense', e))
-		} else {
-			const entry = form.collect()
-			if (!entry) return
-			const i: Income = { id: uid(), ...entry, sourceId: src.id, authorId: data.me.id }
-			addEntry('income', i)
-			recorded(`+${fmt(i.amount)} ${i.currency} → ${termName(src.name)}`, () => removeEntry('income', i))
-		}
+		d.fillParsed(p)
+		if (p.scope !== scope) setSpace(p.scope)
+		go('expense', true)
 	}
 
 	// Подсказка про сложение сумм — после первой своей траты
 	const hasMine = Object.values(data.myExpenses).some((l) => l.length > 0) || Object.values(data.familyExpenses).some((l) => l.some((e) => e.authorId === data.me.id))
 
-	// /?focus=amount — из опроса и карточки «Настройка»: фокус в сумму и на телефоне
+	// /?focus=amount — из опроса и карточки «Настройка»
 	const focus = params.get('focus') === 'amount'
 	useEffect(() => {
 		if (!focus) return
@@ -173,15 +89,21 @@ export function EntryPage() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [focus])
 
-	// Мобильный: две равные ячейки 48px на всю ширину
-	const seg = 'tb h-12 px-4 not-first:-ml-px aria-[pressed=false]:text-muted sm:h-auto sm:min-h-11'
+	if (readOnly)
+		return (
+			<WithSetupCard>
+				<h1 className="sr-only">Всё вместе — только просмотр</h1>
+				<ReadOnlyPick />
+				<RecentLogs />
+			</WithSetupCard>
+		)
 
 	return (
 		<WithSetupCard>
-						<DueBlock />
+			<DueBlock />
 			{mode === 'expense' && !data.mySettings.hideQuickEntry && (
 				<>
-					<QuickEntry familyCats={isSolo ? [] : familyCats} personalCats={personalCats} onEdit={editParsed} />
+					<QuickEntry familyCats={isSolo ? [] : d.familyCats} personalCats={d.personalCats} defaultScope={scope} onEdit={editParsed} />
 					<Hint id="voice" className="mb-4" />
 				</>
 			)}
@@ -191,48 +113,27 @@ export function EntryPage() {
 					{mode === 'income' ? 'Новый доход' : isSolo ? 'Новый расход' : scope === 'personal' ? 'Новый личный расход' : 'Новый семейный расход'}
 				</h1>
 				<div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-					<div className="grid grid-cols-2 max-sm:w-full sm:flex" role="group" aria-label="Тип записи">
-						{(['expense', 'income'] as const).map((m) => (
-							<button key={m} className={seg} aria-pressed={mode === m} onClick={() => go(m, scope, true)}>
-								{m === 'expense' ? '− Расход' : '+ Доход'}
-							</button>
-						))}
-					</div>
-					{mode === 'expense' && !isSolo && (
-						<div className="grid grid-cols-2 max-sm:w-full sm:flex" role="group" aria-label="Чей расход">
-							{(['family', 'personal'] as const).map((sc) => (
-								<button key={sc} className={seg} aria-pressed={scope === sc} onClick={() => go('expense', sc, true)}>
-									{sc === 'family' ? 'Семья' : 'Личное'}
+					{incomeOk && (
+						<div className="flex" role="group" aria-label="Тип записи">
+							{(['expense', 'income'] as const).map((m) => (
+								<button key={m} className="tb min-h-11 px-4 not-first:-ml-px aria-[pressed=false]:text-muted" aria-pressed={mode === m} onClick={() => go(m, true)}>
+									<IconText name={m}>{m === 'expense' ? t('entry.expense') : t('entry.income')}</IconText>
 								</button>
 							))}
 						</div>
 					)}
-					<p className="hidden text-muted2 uppercase sm:ml-auto sm:block touch:hidden">Alt + {mode === 'expense' && !isSolo ? '← → ↑ ↓' : '← →'}</p>
+					{!isSolo && scope === 'personal' && <p className="text-muted2"><IconText name="lock">{t('space.onlyYouEntry')}</IconText></p>}
+					<p className="ml-auto text-muted2 uppercase touch:hidden">{incomeOk ? 'Alt + ← → · ' : ''}{isSolo ? '' : 'Бюджет: Alt + 1 2 3'}</p>
 				</div>
 				<EntryForm
 					mode={mode}
 					form={form}
-					options={mode === 'expense' ? cats : sources}
-					selectedId={mode === 'expense' ? catId : src.id}
-					onPick={(id) => (mode === 'expense' ? setCatId(catId === id ? null : id) : setSrcId(id))}
-					onPlus={() => go('income', scope, false)}
-					onSubmit={submit}
-										extra={
-						(planChips.length > 0 || match) && (
-							<div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Пункт плана">
-								{planChips.map((i) => (
-																		<button key={i.id} className="tb" aria-pressed={planId === i.id} onClick={() => pickPlan(i.id)}>
-										План: {termName(i.name)} {fmt(itemLeft(i, linked[i.id] ?? 0))}
-									</button>
-								))}
-								{match && (
-									<button className="tb" aria-pressed={recId === match.paymentId} onClick={() => { setRecId(recId === match.paymentId ? null : match.paymentId); setPlanId(null) }}>
-										↻ Это {termName(match.name)}?
-									</button>
-								)}
-							</div>
-						)
-					}
+					options={mode === 'expense' ? d.cats : d.sources}
+					selectedId={mode === 'expense' ? d.catId : d.src.id}
+					onPick={(id) => (mode === 'expense' ? d.setCatId(d.catId === id ? null : id) : d.setSrcId(id))}
+					onPlus={() => incomeOk && go('income', false)}
+					onSubmit={d.submit}
+					extra={<PlanChips d={d} />}
 					empty={
 						scope === 'personal' && (
 							<p className="text-muted uppercase">
@@ -246,11 +147,30 @@ export function EntryPage() {
 
 			{mode === 'expense' && hasMine && <Hint id="entry" className="mt-4" />}
 			{mode === 'expense' ? (
-				<ExpenseSummary scope={scope} cats={cats} sel={cats.find((c) => c.id === catId)} />
+				<ExpenseSummary scope={scope} cats={d.cats} sel={d.cats.find((c) => c.id === d.catId)} />
 			) : (
 				<IncomeBalance />
 			)}
 			<RecentLogs />
 		</WithSetupCard>
+	)
+}
+
+/** Чипы пунктов плана выбранной категории и «↻ Это <платёж>?» — под категориями */
+export function PlanChips({ d, className = 'mt-3 flex flex-wrap gap-2' }: { d: ReturnType<typeof useEntryDraft>; className?: string }) {
+	if (d.planChips.length === 0 && !d.match) return null
+	return (
+		<div className={className} role="group" aria-label="Пункт плана">
+			{d.planChips.map((i) => (
+				<button key={i.id} className="tb shrink-0" aria-pressed={d.planId === i.id} onClick={() => d.pickPlan(i.id)}>
+					<IconText name="plan">План: {termName(i.name)} {fmt(itemLeft(i, d.linked[i.id] ?? 0))}</IconText>
+				</button>
+			))}
+			{d.match && (
+				<button className="tb shrink-0" aria-pressed={d.recId === d.match.paymentId} onClick={() => d.pickRecurring(d.match!.paymentId)}>
+					<IconText name="recurring">Это {termName(d.match.name)}?</IconText>
+				</button>
+			)}
+		</div>
 	)
 }

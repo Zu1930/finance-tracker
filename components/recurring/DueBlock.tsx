@@ -1,11 +1,15 @@
 'use client'
 
 import { useTracker } from '../TrackerProvider'
+import { useSpace } from '../SpaceProvider'
 import { PayControl } from './PayControl'
 import { useRecurring, type Row } from './useRecurring'
 import { dueNow } from '@/lib/recurring'
 import type { TrackerData } from '@/lib/types'
 import { ddmm, fmt, termName, todayStr } from '@/lib/utils'
+import { inSpace } from '@/lib/space'
+import { IconText } from '../icons/IconText'
+import { t } from '@/lib/i18n'
 
 /** К оплате сейчас: просроченные, сегодняшние и (в первые 7 дней) неоплаченные прошлого месяца */
 export function dueRows(data: TrackerData, today: string): Row[] {
@@ -19,18 +23,19 @@ export function dueRows(data: TrackerData, today: string): Row[] {
 		.sort((a, b) => a.dueDate.localeCompare(b.dueDate))
 }
 
-/** :: ↻ К ОПЛАТЕ над формой ввода; исчезает, когда всё оплачено */
+/** :: ↻ К ОПЛАТЕ над формой ввода и лентой — платежи выбранного бюджета; исчезает, когда всё оплачено. В «всё вместе» не показывается */
 export function DueBlock() {
 	const { data } = useTracker()
+	const { view, readOnly } = useSpace()
 	const { pay } = useRecurring(todayStr().slice(0, 7))
-	const rows = dueRows(data, todayStr())
-	if (rows.length === 0) return null
+	const rows = dueRows(data, todayStr()).filter((r) => inSpace(r.payment.scope, view))
+	if (rows.length === 0 || readOnly) return null
 	const base = data.settings!.base
 
 	return (
 		<section id="due" className="mb-6 scroll-mt-4 border border-ink px-3 py-2 uppercase">
 			<div className="flex items-baseline justify-between">
-				<h2 className="sec">↻ К оплате</h2>
+				<h2 className="sec"><IconText name="recurring">{t('recurring.due')}</IconText></h2>
 				<b>{rows.length}</b>
 			</div>
 			<ul className="mt-1">

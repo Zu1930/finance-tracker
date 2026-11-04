@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "../components/icons/icons.css";
 
 /* Устройства без мыши: подсказки горячих клавиш там не нужны — touch:hidden */
 @custom-variant touch (@media (hover: none));
@@ -78,8 +79,8 @@
   &[aria-pressed="true"], &[aria-current="page"] { @apply border-ink bg-ink font-bold text-panel; }
 }
 @utility tb { @apply brk tbox justify-center whitespace-nowrap px-1.5 py-0.5; }
-/* [×] — удаление строки */
-@utility xb { @apply brk tb-tight inline-flex min-h-11 min-w-11 items-center justify-center text-muted transition-colors hover:bg-hover hover:text-bad; }
+/* Кнопка только с иконкой (строки списков, шапка): 44×44, без скобок; подпись — label у иконки */
+@utility ib { @apply inline-flex min-h-11 min-w-11 items-center justify-center text-muted transition-colors hover:bg-hover hover:text-ink disabled:opacity-50; }
 /* [RSD] — без пробелов внутри скобок */
 @utility tb-tight { --tb-gap: ""; }
 /* Поле с подчёркиванием. 16px, чтобы iOS не зумил при фокусе */
@@ -93,6 +94,9 @@
 @utility tgroup { @apply grid auto-cols-fr grid-flow-col gap-2 sm:flex sm:flex-wrap; }
 /* Кнопка без квадратных скобок на мобильном (ячейки нижней панели, валюты, категории) */
 @utility mbare { @media (width < 40rem) { &::before, &::after { content: none; } } }
+
+/* Форма ввода на телефоне выезжает снизу */
+@keyframes sheet-up { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 
 /* Индикатор записи голосового ввода: мягкое мигание точки */
 @keyframes rec { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }

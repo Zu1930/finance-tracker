@@ -1,6 +1,8 @@
 'use client'
 
 import { useSyncExternalStore } from 'react'
+import { Icon } from '../icons/Icon'
+import { t } from '@/lib/i18n'
 
 /** Ключ должен совпадать со скриптом в app/layout.tsx, который ставит тему до гидрации */
 const THEME_KEY = 'ft:theme'
@@ -57,19 +59,14 @@ export function ThemeSwitch() {
 	)
 }
 
-/** Кнопка в шапке: по кругу AUTO → DARK → LIGHT. Ширина фиксирована под самую длинную надпись, чтобы шапка не прыгала */
+/** Кнопка в шапке: по кругу AUTO → DARK → LIGHT; иконка, имя — текущая тема */
 export function ThemeToggle() {
 	const theme = useTheme()
 	const i = THEMES.findIndex((t) => t.id === theme)
 	const cur = THEMES[i], next = THEMES[(i + 1) % THEMES.length]
 	return (
-		<button
-			className="tb h-10 w-[11ch] text-muted hover:text-ink sm:h-auto"
-			onClick={() => setTheme(next.id)}
-			aria-label={`Тема: ${cur.spoken}. Переключить на: ${next.spoken}`}
-			title={`Тема: ${cur.spoken} → ${next.spoken}`}
-		>
-			{cur.label}
+		<button className="ib" onClick={() => setTheme(next.id)} title={`Тема: ${cur.spoken} → ${next.spoken}`}>
+			<Icon name="theme" size={20} label={t(`theme.${cur.id}`)} />
 		</button>
 	)
 }

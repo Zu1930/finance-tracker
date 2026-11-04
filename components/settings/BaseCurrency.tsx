@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Problem } from "../icons/IconText";
 import { useTracker } from "../TrackerProvider";
 import { downloadJson } from "../ImportExport";
 import { rebaseData, type LimitRounding } from "@/lib/rebase";
@@ -186,7 +187,7 @@ export function BaseCurrency() {
           )}
 
           <p className="mt-3 min-h-5 text-bad uppercase" role="alert">
-            {error !== null && `!! Пересчёт не выполнен${error ? ` // ${error.replace(/\.$/, "")}` : ""}`}
+            {error !== null && <Problem>Пересчёт не выполнен{error ? ` // ${error.replace(/\.$/, "")}` : ""}</Problem>}
           </p>
         </div>
       )}

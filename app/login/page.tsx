@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Problem } from "@/components/icons/IconText";
 import Link from "next/link";
 
 const LAST_EMAIL_KEY = "ft:login-email";
@@ -67,7 +68,7 @@ export default function LoginPage() {
             value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
         <button className="tb mt-6 h-12 w-full font-bold sm:h-auto" disabled={busy || !password || !email.trim()}>{busy ? "Вхожу…" : "Войти"}</button>
-        <p className="mt-3 min-h-5 text-bad uppercase" role="alert">{error && `!! ${error}`}</p>
+        <p className="mt-3 min-h-5 uppercase" role="alert"><Problem>{error}</Problem></p>
         {unverified && (
           <p className="mt-1 uppercase">
             <Link href={`/check-email?email=${encodeURIComponent(email.trim())}${invite ? `&invite=${encodeURIComponent(invite)}` : ""}`} className="tb">Отправить письмо ещё раз</Link>
