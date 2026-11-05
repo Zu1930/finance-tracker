@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useTracker } from "./TrackerProvider";
 import { useSpace, useSpaceData } from "./SpaceProvider";
 import { CommitInput } from "./CommitInput";
-import { AsciiBar, HUGE, WIDE, useMedia, useNarrow } from "./AsciiBar";
+import { AsciiBar, useNarrow } from "./AsciiBar";
 import { CanSpend, MobileLimits } from "./limits/MobileLimits";
 import { Contribution } from "./entry/Contribution";
 import { CarryOver } from "./plan/CarryOver";
@@ -125,9 +125,9 @@ function MonthLimits() {
       <div className="l-limits">
       <div className="[grid-area:side]">
       {month === cur && <div className="hidden wide:block"><CanSpend month={month} /></div>}
-      <section className="mt-6 border-t border-dashed border-line pt-5">
+      <section className="@container mt-6 min-w-0 border-t border-dashed border-line pt-5">
         <h2 className="sec">Итог</h2>
-        <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 uppercase sm:grid-cols-[12ch_minmax(0,1fr)] sm:gap-y-1">
+        <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1 uppercase @min-[420px]:grid-cols-[12ch_minmax(0,1fr)]">
           {withIncome && (<>
           <dt className="text-muted">Доход</dt>
           <dd className="max-sm:text-right">
@@ -210,7 +210,7 @@ export function CategoriesBlock({ title = "Категории и лимиты", 
       <summary className="sec flex min-h-11 cursor-pointer list-none items-center gap-2 py-3 [&::-webkit-details-marker]:hidden">
         {title}<span aria-hidden="true" className="group-open:hidden">[+]</span><span aria-hidden="true" className="hidden group-open:inline">[−]</span>
       </summary>
-      <div className="max-w-3xl pt-3 pb-2">
+      <div className="@container max-w-3xl min-w-0 pt-3 pb-2">
         {monthToggle && (
           <div className="tgroup mb-4" role="group" aria-label="Изменения лимитов">
             <button className="tb" aria-pressed={!perMonth} onClick={() => setPerMonth(false)}>Всегда</button>
@@ -256,9 +256,6 @@ function LimitBlocks({ cats, spent, contribution, planned, recurring }: {
   const linked = linkedByItem([...(data.familyExpenses[month] ?? []), ...(data.myExpenses[month] ?? [])], planned);
   // /limits#cat-<id> — из мини-лимитов на вводе: к этой категории и подсветить её
   const [target, setTarget] = useState("");
-  // Карточки — по 320px, шкала в них короче на больших ступенях: символ █ шире буквы (его нет в подмножестве шрифта)
-  const wide = useMedia(WIDE), huge = useMedia(HUGE);
-  const barWidth = huge ? 22 : wide ? 28 : 32;
   useEffect(() => {
     const id = window.location.hash.match(/^#cat-(.+)$/)?.[1];
     if (!id || !cats.some((c) => c.id === id)) return;
@@ -273,9 +270,9 @@ function LimitBlocks({ cats, spent, contribution, planned, recurring }: {
         const s = spent[c.id] ?? 0;
         const left = c.limit - s;
         return (
-          <section key={c.id} id={`cat-${c.id}`} className={`border-b border-dashed border-line2 py-4 ${target === c.id ? "-mx-2 bg-hover px-2" : ""}`}>
+          <section key={c.id} id={`cat-${c.id}`} className={`min-w-0 border-b border-dashed border-line2 py-4 [overflow-wrap:break-word] ${target === c.id ? "-mx-2 bg-hover px-2" : ""}`}>
             <h3 className="font-bold uppercase">{termName(c.name)}</h3>
-            <div className="mt-2"><AsciiBar value={s} max={c.limit} width={barWidth} label={c.name} /></div>
+            <div className="mt-2"><AsciiBar value={s} max={c.limit} label={c.name} /></div>
             <p className={`mt-1 uppercase ${left < 0 ? "text-bad" : "text-muted"}`}>
               {left < 0 ? `Перерасход ${fmt(-left)} ${base}` : `Осталось ${fmt(left)} из ${fmt(c.limit)} ${base}`}
             </p>
@@ -323,8 +320,8 @@ function CategoryEditor({ cats, update, month }: {
   return (
     <>
       {cats.map((c) => (
-        <div className="mt-2 grid grid-cols-[minmax(0,1fr)_12ch_auto] items-end gap-4" key={c.id}>
-          <CommitInput className="tfield w-full" aria-label="Название категории" value={c.name}
+        <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-x-4 gap-y-1 @min-[420px]:grid-cols-[minmax(0,1fr)_12ch_auto]" key={c.id}>
+          <CommitInput className="tfield col-span-2 w-full @min-[420px]:col-span-1" aria-label="Название категории" value={c.name}
             onCommit={(v) => { const n = v.trim(); if (!n) return false; patch(c.id, (x) => ({ ...x, name: n.slice(0, 40) })); }} />
           <CommitInput className="tfield w-full text-right" aria-label={`Лимит, ${c.name}`} inputMode="decimal" sanitize={amountChars}
             value={numIn(month ? monthLimit(c, cur, month.overrides) : c.limit)}

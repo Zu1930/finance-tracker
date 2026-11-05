@@ -57,7 +57,7 @@ function HelpMenu() {
 /** Каркас как у настроек: меню слева на десктопе, текст до 720px */
 export function HelpFrame({ children }: { children: ReactNode }) {
 	return (
-		<div className="sm:grid sm:grid-cols-[16.25rem_1fr] sm:gap-10">
+		<div className="sm:grid sm:grid-cols-[16.25rem_minmax(0,1fr)] sm:gap-10">
 			<HelpMenu />
 			<div className="min-w-0 max-w-[72ch]">{children}</div>
 		</div>

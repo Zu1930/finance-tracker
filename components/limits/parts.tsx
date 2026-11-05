@@ -13,29 +13,42 @@ export const PRIMARY = 'tbox h-[3.25rem] w-full justify-center gap-2 border-ink 
  * Пример в столбик: знак | подпись | сумма. Последняя строка — «= Отложится» (с минусом — красным);
  * у личного бюджета дохода нет — первой строки нет, внизу «= Всего за месяц»
  */
-export function PlanEquation({ e }: { e: Equation }) {
-	const rows: [string, ReactNode, string][] = [
-		...(e.income !== null ? [['+', t('plan.income'), fmt(e.income)] as [string, ReactNode, string]] : []),
-		['−', t('plan.required'), fmt(e.required)],
-		['−', <>{t('plan.living')} <span className="text-muted">{t('plan.livingNote')}</span></>, fmt(e.living)],
-		['−', t('plan.purchases'), fmt(e.purchases)],
+export type EquationNotes = Partial<Record<'income' | 'required' | 'living' | 'purchases' | 'rest', ReactNode>>
+
+/**
+ * + Придёт / − Обязательные / − На текущие траты (лимиты) / − Покупки / = Отложится. Общее для телефона, мастера и десктопа.
+ * notes — пояснение второй строкой под суммой; income — поле ввода вместо числа дохода.
+ * adaptive — по ширине своего блока: уже 420px подпись стоит над суммой, а не слева от неё
+ */
+export function PlanEquation({ e, notes = {}, income, adaptive = false }: { e: Equation; notes?: EquationNotes; income?: ReactNode; adaptive?: boolean }) {
+	const rows: [keyof EquationNotes, string, ReactNode, ReactNode][] = [
+		...(e.income !== null ? [['income', '+', t('plan.income'), income ?? fmt(e.income)] as [keyof EquationNotes, string, ReactNode, ReactNode]] : []),
+		['required', '−', t('plan.required'), fmt(e.required)],
+		['living', '−', <>{t('plan.living')} <span className="text-muted">{t('plan.livingNote')}</span></>, fmt(e.living)],
+		['purchases', '−', t('plan.purchases'), fmt(e.purchases)],
 	]
 	const bad = e.rest !== null && e.rest < 0
 	const last = 'border-t border-ink pt-1'
-	return (
-		<div className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto] items-baseline gap-x-2.5 gap-y-1.5">
-			{rows.map(([sign, label, value], i) => (
-				<div key={i} className="contents">
+	// Сумма с пояснением: в узком блоке — под подписью, иначе — справа
+	const val = adaptive ? 'col-start-2 min-w-0 @min-[420px]:col-start-auto @min-[420px]:text-right' : 'min-w-0 text-right'
+	const note = (k: keyof EquationNotes) => notes[k] && <span className="block text-xs font-normal text-muted normal-case">{notes[k]}</span>
+	const grid = (
+		<div className={`grid items-baseline gap-x-2.5 gap-y-1.5 ${adaptive ? 'grid-cols-[1.25rem_minmax(0,1fr)] @min-[420px]:grid-cols-[1.25rem_minmax(0,1fr)_auto]' : 'grid-cols-[1.25rem_minmax(0,1fr)_auto]'}`}>
+			{rows.map(([k, sign, label, value]) => (
+				<div key={k} className="contents">
 					<span aria-hidden="true">{sign}</span>
-					<span>{label}</span>
-					<b className="text-right">{value}</b>
+					<span className="min-w-0">{label}</span>
+					<span className={val}><b>{value}</b>{note(k)}</span>
 				</div>
 			))}
 			<span aria-hidden="true" className={last}>=</span>
-			<span className={last}>{e.rest === null ? t('plan.total') : t('plan.rest')}</span>
-			<b className={`${last} text-right ${bad ? 'text-bad' : ''}`}>{e.rest === null ? fmt(equationTotal(e)) : signed(e.rest)}</b>
+			<span className={`${last} min-w-0`}>{e.rest === null ? t('plan.total') : t('plan.rest')}</span>
+			<span className={`${val} ${adaptive ? '@min-[420px]:border-t @min-[420px]:border-ink @min-[420px]:pt-1' : last}`}>
+				<b className={bad ? 'text-bad' : ''}>{e.rest === null ? fmt(equationTotal(e)) : signed(e.rest)}</b>{note('rest')}
+			</span>
 		</div>
 	)
+	return adaptive ? <div className="@container">{grid}</div> : grid
 }
 
 /** Крупно: «+163 400 ОТЛОЖИТСЯ», «−12 000 НЕ ХВАТАЕТ» или, без дохода, «95 000 ВСЕГО ЗА МЕСЯЦ» */

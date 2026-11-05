@@ -127,7 +127,7 @@ export function SettingsFrame({ children }: { children: ReactNode }) {
 	const meta = useMeta()
 	return (
 		<MetaContext.Provider value={meta}>
-			<div className="sm:grid sm:grid-cols-[16.25rem_1fr] sm:gap-10">
+			<div className="sm:grid sm:grid-cols-[16.25rem_minmax(0,1fr)] sm:gap-10">
 				<SettingsMenu />
 				<div className="min-w-0 max-w-[72ch] huge:max-w-none">{children}</div>
 			</div>

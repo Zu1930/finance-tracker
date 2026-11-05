@@ -24,7 +24,7 @@ export function IncomeBalance() {
 			<div className="mt-3 space-y-1 uppercase">
 				{people.map((p) => (
 					// На мобильном шкала уходит на отдельную строку под именем и суммой
-					<div key={p.id} className="grid grid-cols-[1fr_auto] items-baseline gap-x-4 sm:grid-cols-[12ch_minmax(0,1fr)_auto]">
+					<div key={p.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 sm:grid-cols-[12ch_minmax(0,1fr)_auto]">
 						<span className="text-muted">{p.name}</span>
 						<div className="col-span-full max-sm:order-last sm:col-span-1">
 							<AsciiBar value={p.sum} max={top} bare label={`Доход: ${p.name}`} />

@@ -1,10 +1,9 @@
 'use client'
 
-import { useSyncExternalStore } from 'react'
+import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { BAR_DEFAULT, BAR_MAX, barCells } from '@/lib/ascii'
 
 const NARROW = '(max-width: 639px)'
-/** На узких экранах шкала короче, чтобы влезть в 360px без горизонтального скролла */
-const NARROW_WIDTH = 20
 
 /** Совпадает ли медиазапрос; на сервере — false */
 export function useMedia(query: string) {
@@ -24,13 +23,37 @@ export const useNarrow = () => useMedia(NARROW)
 export const WIDE = '(width >= 100rem)'
 export const HUGE = '(width >= 120rem)'
 
+/**
+ * Сколько символов шкалы влезает в контейнер: ResizeObserver следит за шириной box, ширина «█» берётся
+ * с уже нарисованной шкалы bar (символ может рисоваться запасным шрифтом). На сервере и до замера — 24
+ */
+export function useBarCells(max = BAR_MAX) {
+	const box = useRef<HTMLDivElement>(null)
+	const bar = useRef<HTMLSpanElement>(null)
+	const [cells, setCells] = useState(BAR_DEFAULT)
+	const charW = useRef(0)
+	useLayoutEffect(() => {
+		const el = box.current
+		if (!el) return
+		const fit = () => {
+			const b = bar.current
+			// Ширина символа — один раз, по шкале с известным числом символов
+			if (!charW.current && b && b.textContent) charW.current = b.getBoundingClientRect().width / b.textContent.length
+			setCells(barCells(el.clientWidth, charW.current, max))
+		}
+		fit()
+		const ro = new ResizeObserver(fit)
+		ro.observe(el)
+		return () => ro.disconnect()
+	}, [max])
+	return { box, bar, cells }
+}
+
 type Props = {
 	value: number
 	max: number
-	/** Ширина шкалы в символах на широких экранах */
-	width?: number
-	/** Ширина на экранах уже 640px */
-	narrowWidth?: number
+	/** Не длиннее стольких символов (по умолчанию 60); сколько именно — решает ширина контейнера */
+	maxCells?: number
 	/** limit: STABLE / WARNING / OVERLOAD; goal: COLLECTING / COMPLETE */
 	variant?: 'limit' | 'goal'
 	/** Только шкала, без процента и статуса */
@@ -38,19 +61,16 @@ type Props = {
 	label: string
 }
 
-/** [████████░░░░░░] 62% - STABLE */
+/** [████████░░░░░░] 62% - STABLE — шкала шириной в свой контейнер, не шире него */
 export function AsciiBar({
 	value,
 	max,
-	width = 32,
-	narrowWidth = NARROW_WIDTH,
+	maxCells = BAR_MAX,
 	variant = 'limit',
 	bare = false,
 	label
 }: Props) {
-	const narrow = useNarrow()
-	// Ширина — в символах, не 100% колонки: на больших экранах шкала растёт только вместе со шрифтом (14 → 17px)
-	const w = narrow ? Math.min(width, narrowWidth) : width
+	const { box, bar, cells: w } = useBarCells(maxCells)
 	const pct = max > 0 ? (value / max) * 100 : value > 0 ? Infinity : 0
 	const shown = Number.isFinite(pct) ? Math.round(pct) : 100
 	const filled = Math.round((Math.min(100, Math.max(0, pct)) / 100) * w)
@@ -64,15 +84,16 @@ export function AsciiBar({
 
 	return (
 		<div
+			ref={box}
 			role="meter"
 			aria-label={label}
 			aria-valuemin={0}
 			aria-valuemax={Math.max(100, shown)}
 			aria-valuenow={shown}
 			aria-valuetext={bare ? `${shown}%` : `${shown}% ${status}`}
-			className="flex flex-wrap items-baseline gap-x-2 whitespace-pre"
+			className="flex max-w-full min-w-0 flex-wrap items-baseline gap-x-2 overflow-hidden whitespace-pre"
 		>
-			<span aria-hidden="true">
+			<span ref={bar} aria-hidden="true" data-bar>
 				<span className="text-ink">{'█'.repeat(filled)}</span>
 				<span className="text-dim">{'░'.repeat(w - filled)}</span>
 			</span>

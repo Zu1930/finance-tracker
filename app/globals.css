@@ -127,6 +127,9 @@
  * Колонки фиксированной ширины — в px (как в макете), остальное делится fr. До lg (64rem) — одна колонка по порядку разметки
  */
 @layer components {
+  /* Дети колонок не распирают сетку: длинная строка или шкала не вытолкнут колонку за край */
+  :is(.l-entry, .l-limits, .l-money, .l-summary, .l-doc) > *, :is(.l-entry, .l-limits, .l-money, .l-summary, .l-doc) > * > * { min-width: 0; }
+
   /* Ввод: ввод | лента | «Можно потратить»; на huge+ — четвёртая колонка мини-лимитов */
   .l-entry { display: grid; align-items: start; gap: 2rem; grid-template-areas: "entry" "feed" "aside"; }
   @media (width >= 64rem) { .l-entry { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); grid-template-areas: "entry feed" ". aside"; } }
@@ -135,7 +138,7 @@
   @media (width >= 120rem) { .l-entry { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) 340px 320px; grid-template-areas: "entry feed aside mini"; } }
 
   /* Лимиты: на wide+ слева 380px — итог, план, обязательные; справа — категории */
-  @media (width >= 100rem) { .l-limits { display: grid; align-items: start; column-gap: 2.5rem; grid-template-columns: 380px minmax(0, 1fr); grid-template-areas: "side main"; } }
+  @media (width >= 100rem) { .l-limits { display: grid; align-items: start; column-gap: 2.5rem; grid-template-columns: minmax(380px, 32%) minmax(0, 1fr); grid-template-areas: "side main"; } }
 
   /* Деньги: всего и цели | счета над «как менялось»; на huge+ — три колонки */
   .l-money { display: grid; align-items: start; column-gap: 3rem; row-gap: 0.75rem; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto 1fr; grid-template-areas: "main side" "main hist"; }

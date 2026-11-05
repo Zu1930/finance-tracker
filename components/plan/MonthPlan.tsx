@@ -1,9 +1,11 @@
 'use client'
 
-import { Fragment } from 'react'
 import { useTracker } from '../TrackerProvider'
 import { useSpace, useSpaceData } from '../SpaceProvider'
-import { WIDE, useMedia, useNarrow } from '../AsciiBar'
+import { useBarCells } from '../AsciiBar'
+import { PlanEquation, type EquationNotes } from '../limits/parts'
+import { planEquation } from '@/lib/plan-view'
+import { t } from '@/lib/i18n'
 import { CommitInput } from '../CommitInput'
 import { usePlan, withOverride } from './usePlan'
 import { limitsSum, monthLimit, planIncome, planSummary } from '@/lib/plan'
@@ -12,9 +14,7 @@ import type { Category } from '@/lib/types'
 import { SPACE, inSpace, spaceGroups, spaceItems } from '@/lib/space'
 import { Icon } from '../icons/Icon'
 import { IconText, Problem, spaceIcon } from '../icons/IconText'
-import { aliveIn, amountChars, fmt, minus, monthName, numIn, parseAmount, signed, termName, todayStr } from '@/lib/utils'
-
-const BAR = 48
+import { aliveIn, amountChars, fmt, monthName, numIn, parseAmount, signed, termName, todayStr } from '@/lib/utils'
 
 /**
  * :: ПЛАН — доход, лимиты, покупки, остаток и шкала распределения дохода. Семья — её лимиты, покупки и доход;
@@ -26,7 +26,6 @@ export function PlanSummary({ month }: { month: string }) {
 	const sd = useSpaceData()
 	const st = data.settings!
 	const { plan, items, savePlan } = usePlan(month)
-	const narrow = useNarrow()
 	const fam = view !== 'personal', mine = view !== 'family'
 	// Личный бюджет без дохода: доход и остаток — у семьи
 	const withIncome = isSolo || view !== 'personal'
@@ -53,82 +52,55 @@ export function PlanSummary({ month }: { month: string }) {
 		void savePlan({ incomeOverride: n })
 	}
 
-		// Шкала: █ лимиты (с регулярными внутри), ▓ покупки, ░ остаток. План больше дохода — делим по плану, справа +!!
-	// 1600+: план — в левой колонке «Лимитов» (380px), шкала короче
-	const side = useMedia(WIDE)
-	const w = narrow ? 24 : side ? 32 : BAR
+	// Те же строки, что на телефоне и в мастере; пояснения — второй строкой под суммой
+	const e = planEquation(data, view, isSolo, month, todayStr())
+	const pct = income && s.rest !== null ? Math.round((s.rest / income) * 100) : null
+	const notes: EquationNotes = {
+		income: !withIncome ? null : override === null ? (
+			avg !== null ? t('plan.noteAvg') : <span className="text-warn">{t('plan.noteNoAvg')}</span>
+		) : (
+			<span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+				{avg === null ? t('plan.noteManualNoAvg') : t('plan.noteManual', { x: fmt(Math.round(avg)) })}
+				{avg !== null && !readOnly && <button className="tb" onClick={() => void savePlan({ incomeOverride: null })}>{t('plan.toAverage')}</button>}
+			</span>
+		),
+		required: s.recurring.total > s.limits.total ? <span className="text-warn">{t('plan.noteOver')}</span> : null,
+		living: split ? t('plan.noteSplit', { f: fmt(s.limits.family), p: fmt(s.limits.mine + s.limits.partner) }) : null,
+		purchases: [t('plan.noteCount', { n: s.planned.count }), ...(s.planned.partner > 0 && data.partner ? [t('plan.notePartner', { name: data.partner.name, x: fmt(s.planned.partner) })] : [])].join(' · '),
+		rest: e.rest === null ? null : pct === null ? t('plan.noteNeedIncome') : t('plan.notePct', { n: pct }),
+	}
+	const incomeField = withIncome && !readOnly ? (
+		<CommitInput id="plan-income" aria-label={t('plan.income')} inputMode="decimal" sanitize={amountChars}
+			className={`tfield w-[14ch] max-w-full text-right ${override === null && avg === null ? 'border-warn' : ''}`}
+			value={income === null ? '' : String(Math.round(income))} placeholder={st.base}
+			onCommit={commitIncome} />
+	) : undefined
+
+	// Шкала: █ лимиты (с обязательными внутри), ▓ покупки, ░ остаток — шириной в свой блок. План больше дохода — делим по плану
+	const { box, bar, cells: w } = useBarCells()
 	const fixed = s.limits.total
 	const total = fixed + s.planned.total
 	const scale = income !== null && income > 0 && !s.short ? income : total
 	const cells = (v: number) => (scale > 0 ? Math.round((v / scale) * w) : 0)
-		const lim = Math.min(w, cells(fixed))
+	const lim = Math.min(w, cells(fixed))
 	const buy = Math.min(w - lim, cells(s.planned.total))
 	const rest = income === null ? 0 : w - lim - buy
-	const pct = income && s.rest !== null ? Math.round((s.rest / income) * 100) : null
-
-	let caption
-	if (override === null && avg !== null) caption = <span className="text-muted">Среднее за 3 мес</span>
-	else if (override === null) caption = <span className="text-warn">Среднего ещё нет — впишите ожидаемый доход</span>
-	else
-		caption = (
-			<>
-				<span className="text-muted">Вручную // {avg === null ? 'среднего ещё нет' : `среднее ${fmt(Math.round(avg))}`}</span>
-				{avg !== null && <button className="tb ml-3" onClick={() => void savePlan({ incomeOverride: null })}>= Среднее</button>}
-			</>
-		)
 
 	return (
-		<section className="mt-6 border-t border-dashed border-line pt-5">
-			<h2 className="sec"><IconText name="plan">План</IconText></h2>
-			{/* Мобильный: подпись | число, пояснение строкой 12px под числом; на десктопе число стоит в подписи */}
-			<dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-6 gap-y-2 uppercase sm:grid-cols-[max-content_minmax(0,1fr)] [&>dt]:whitespace-nowrap">
-				{withIncome && (readOnly ? (
-					<>
-						<dt className="text-muted">Доход</dt>
-						<dd className="max-sm:text-right"><b>{income === null ? '—' : fmt(Math.round(income))}</b></dd>
-					</>
-				) : (
-					<>
-						<dt className="text-muted"><label htmlFor="plan-income">Доход</label></dt>
-						<dd className="flex flex-wrap items-center gap-x-4 gap-y-1 max-sm:justify-end">
-							<CommitInput id="plan-income" inputMode="decimal" sanitize={amountChars}
-								className={`tfield w-[14ch] text-right ${override === null && avg === null ? 'border-warn' : ''}`}
-								value={income === null ? '' : String(Math.round(income))} placeholder={st.base}
-								onCommit={commitIncome} />
-							<span className="flex flex-wrap items-center gap-y-1 max-sm:w-full max-sm:justify-end max-sm:text-right max-sm:text-xs">{caption}</span>
-						</dd>
-					</>
-				))}
-								{[
-					{ mark: <span aria-hidden="true">█ </span>, label: 'Лимиты', value: <b>{minus(s.limits.total)}</b>,
-						note: `Вместе с регулярными${split ? ` · семья ${fmt(s.limits.family)} · личное ${fmt(s.limits.mine + s.limits.partner)}` : ''}` },
-					// Регулярные — часть лимитов: справочно, в остаток отдельно не вычитаются
-					{ mark: <Icon name="recurring" size={16} className="mr-2 text-muted" />, label: 'Из них регулярные', value: <b className="font-normal">{fmt(s.recurring.total)}</b>,
-						note: `${split ? `Семья ${fmt(s.recurring.family)} · Личное ${fmt(s.recurring.mine + s.recurring.partner)}` : ''}${s.recurring.total > s.limits.total ? `${split ? ' · ' : ''}больше лимитов — поднимите лимиты` : ''}` },
-					{ mark: <span aria-hidden="true" className="text-muted">▓ </span>, label: 'Покупки', value: <b>{minus(s.planned.total)}</b>,
-						note: `${s.planned.count} шт.${s.planned.partner > 0 && data.partner ? ` · вкл. ${data.partner.name} ${fmt(s.planned.partner)}` : ''}` },
-					...(withIncome ? [{ mark: <span aria-hidden="true" className="text-dim">░ </span>, label: 'Останется',
-						value: <b className={s.short ? 'text-bad' : ''}>{s.rest === null ? '—' : signed(s.rest)}</b>,
-						note: s.rest === null ? 'Нужен доход' : `В сбережения · ${pct}% дохода` }] : []),
-				].map((r) => (
-					<Fragment key={r.label}>
-						<dt>{r.mark}{r.label}<span className="max-sm:hidden"> {r.value}</span></dt>
-						<dd className="text-muted max-sm:text-right">
-							<span className="text-ink sm:hidden">{r.value}</span>
-							<span className="max-sm:block max-sm:text-xs">{r.note}</span>
-						</dd>
-					</Fragment>
-				))}
-			</dl>
-			<p className="mt-4 whitespace-pre" aria-hidden="true">
-				<span className="text-ink">{'█'.repeat(lim)}</span>
-				<span className="text-muted">{'▓'.repeat(buy)}</span>
-				<span className="text-dim">{'░'.repeat(Math.max(0, rest))}</span>
-				{s.short && <b className="text-bad"> +<Icon name="warning" size={16} /></b>}
-			</p>
+		<section className="mt-6 min-w-0 border-t border-dashed border-line pt-5 uppercase">
+			<h2 className="sec"><IconText name="plan">{t('plan.title')}</IconText></h2>
+			<div className="mt-3"><PlanEquation e={e} notes={notes} income={incomeField} adaptive /></div>
+			<div ref={box} data-plan-bar className="mt-4 flex max-w-full min-w-0 items-baseline gap-1 overflow-hidden">
+				<span ref={bar} className="whitespace-pre" aria-hidden="true">
+					<span className="text-ink">{'█'.repeat(lim)}</span>
+					<span className="text-muted">{'▓'.repeat(buy)}</span>
+					<span className="text-dim">{'░'.repeat(Math.max(0, rest))}</span>
+				</span>
+				{s.short && <b className="shrink-0 text-bad"><Icon name="warning" size={16} /></b>}
+			</div>
 			{s.short && (
 				<p className="mt-2 uppercase" role="alert">
-					<Problem>Не хватает {fmt(-s.rest!)} — перенесите покупку или возьмите из целей</Problem>
+					<Problem>{t('plan.shortHint', { x: fmt(-s.rest!) })}</Problem>
 				</p>
 			)}
 		</section>

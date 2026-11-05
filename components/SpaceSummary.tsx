@@ -74,7 +74,7 @@ export function SpaceSummary() {
 				<b className={`text-[2.125rem] leading-tight tracking-tight ${left < 0 ? 'text-bad' : ''}`}>{fmt(Math.round(left))}</b>
 				<span className="text-xs text-muted">из {fmt(Math.round(limit))} {st.base}</span>
 			</p>
-			<AsciiBar value={limit - left} max={limit} bare={false} narrowWidth={24} label={label} />
+			<AsciiBar value={limit - left} max={limit} bare={false} label={label} />
 			<p className="text-xs text-muted">
 				{sub} · {abbr(key)} {day}/{days}
 				{overdueLink && <> · {overdueLink}</>}
