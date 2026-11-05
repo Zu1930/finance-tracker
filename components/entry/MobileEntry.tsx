@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useTracker } from '../TrackerProvider'
 import { useSpace } from '../SpaceProvider'
@@ -128,6 +128,27 @@ export function EntrySheetHost() {
 // ---------- Форма ----------
 const chip = 'tbox min-h-11 shrink-0 justify-center px-3'
 
+/**
+ * Видимая область: visualViewport (без панелей Safari и открытой системной клавиатуры), иначе null — тогда 100dvh.
+ * top — сдвиг видимой области (iOS прокручивает страницу под клавиатуру)
+ */
+function useVisible() {
+	const [v, setV] = useState<{ h: number; top: number } | null>(null)
+	useEffect(() => {
+		const vv = window.visualViewport
+		if (!vv) return
+		const upd = () => setV({ h: vv.height, top: vv.offsetTop })
+		upd()
+		vv.addEventListener('resize', upd)
+		vv.addEventListener('scroll', upd)
+		return () => {
+			vv.removeEventListener('resize', upd)
+			vv.removeEventListener('scroll', upd)
+		}
+	}, [])
+	return v
+}
+
 function MobileEntry({ req, scope0, onClose }: { req: Request; scope0: Scope; onClose: () => void }) {
 	const { isSolo } = useTracker()
 	const copy = req.copy
@@ -225,6 +246,18 @@ function MobileEntry({ req, scope0, onClose }: { req: Request; scope0: Scope; on
 	}
 	const dragging = drag.current !== null
 
+	// Высота — от видимой области; на низком экране (<700px) отступ сверху и клавиши меньше
+	const vis = useVisible()
+	const low = (vis?.h ?? 800) < 700
+	const gap = low ? 16 : 48
+	const top = (vis?.top ?? 0) + gap
+	// Тост, пока шторка открыта, — под её шапкой (правило в globals.css)
+	useEffect(() => {
+		const root = document.documentElement
+		root.style.setProperty('--entry-top', `${top}px`)
+		return () => void root.style.removeProperty('--entry-top')
+	}, [top])
+
 	return (
 		<>
 			<div
@@ -238,11 +271,17 @@ function MobileEntry({ req, scope0, onClose }: { req: Request; scope0: Scope; on
 				role="dialog"
 				aria-modal="true"
 				aria-label={t('entry.new')}
-				className="fixed inset-x-0 top-12 bottom-0 z-40 flex flex-col gap-2.5 border-t border-ink bg-panel px-4 pb-[calc(1rem+env(safe-area-inset-bottom,0rem))] text-sm motion-safe:animate-[sheet-up_.32s_cubic-bezier(.2,.8,.2,1)]"
-				style={{ transform: leaving ? 'translateY(100%)' : dy ? `translateY(${dy}px)` : undefined, transition: dragging ? 'none' : 'transform .22s cubic-bezier(.4,0,1,1)' }}
+				data-entry-sheet
+				data-low={low || undefined}
+				className="group fixed inset-x-0 top-12 z-40 flex h-[calc(100dvh-3rem)] flex-col border-t border-ink bg-panel px-4 text-sm motion-safe:animate-[sheet-up_.32s_cubic-bezier(.2,.8,.2,1)]"
+				style={{
+					...(vis && { top, height: vis.h - gap }),
+					transform: leaving ? 'translateY(100%)' : dy ? `translateY(${dy}px)` : undefined,
+					transition: dragging ? 'none' : 'transform .22s cubic-bezier(.4,0,1,1)',
+				}}
 			>
 				{/* Ручка и строка с кнопками — за них шторку можно смахнуть вниз */}
-				<div className="-mx-4 flex shrink-0 cursor-grab flex-col gap-2 px-4 pt-2 [touch-action:none]" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
+				<div className="-mx-4 flex shrink-0 cursor-grab flex-col gap-2 px-4 pt-2 pb-2.5 [touch-action:none]" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
 				<span aria-hidden="true" className="mx-auto block h-1 w-10 bg-line" />
 				<div className="flex items-center justify-between gap-2">
 					<div role="group" aria-label="Тип записи" className="flex">
@@ -301,89 +340,144 @@ function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave, onPlus, inco
 		form.setError('')
 	}
 
+	// Enter на внешней клавиатуре — запись
+	const saveRef = useRef(onSave)
+	saveRef.current = onSave
+	useEffect(() => {
+		const onKey = (e: KeyboardEvent) => {
+			if (e.key !== 'Enter' || e.isComposing) return
+			e.preventDefault()
+			saveRef.current()
+		}
+		document.addEventListener('keydown', onKey)
+		return () => document.removeEventListener('keydown', onKey)
+	}, [])
+	const [curOpen, setCurOpen] = useState(false)
+	// Фокус в заметке или курсе — открыта системная клавиатура: свои клавиши прячутся, «Записать» остаётся.
+	// Снятие фокуса — с задержкой, чтобы нажатие на «Записать» попало в ту же кнопку
+	const [typing, setTyping] = useState(false)
+	const isText = (el: Element | null) => el instanceof HTMLInputElement && !el.readOnly && el.type !== 'date'
+	const saveKey = 'tbox justify-center gap-1 border-ink bg-ink font-bold text-panel uppercase hover:bg-ink'
+	const onlyYou = !isSolo && kind === 'expense' && scope === 'personal'
+	// Личная трата в семье — замок в чипе вместо отдельной строки «Увидите только вы»
+	const scopeLabel = (
+		<span className="flex min-w-0 items-center gap-1.5">
+			<Icon name={spaceIcon(scope)} size={16} className="shrink-0" />
+			<span className="min-w-0 truncate">{SPACE[scope].name}</span>
+			{onlyYou && <span className="shrink-0 text-muted2"><Icon name="lock" size={16} label={t('space.onlyYouEntry')} /></span>}
+		</span>
+	)
+	const key = 'tbox h-[3.25rem] justify-center text-xl select-none group-data-low:h-11'
+
 	return (
-		// Ряды не сжимаются: на низком экране форма прокручивается, а не сплющивает ленту категорий
-		<div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain [&>*]:shrink-0">
-			<label className="flex items-baseline justify-center gap-2 pt-1">
-				<span className="sr-only">Сумма</span>
-				<input
-					readOnly
-					inputMode="none"
-					data-autofocus
-					className={`w-full min-w-0 bg-transparent text-center leading-tight font-bold outline-none ${expr.length > 14 ? 'text-[1.625rem]' : expr.length > 9 ? 'text-[2.125rem]' : 'text-[2.75rem]'}`}
-					value={`${kind === 'income' ? '+' : '−'}${expr || '0'}`}
-					aria-describedby="m-cur"
-				/>
-				<span id="m-cur" className="text-base text-muted">{form.currency}</span>
-			</label>
-			<p className="min-h-[1.125rem] text-center text-xs text-muted" aria-live="polite">{hasOp(expr) && value !== null ? `= ${fmt(value)}` : ''}</p>
-			<div className="grid grid-cols-[1.4fr_1fr_0.8fr] gap-1.5">
-				{toggleScope ? (
-					<button className={`${chip} border-ink font-bold`} title={t('entry.switchSpace')} onClick={() => { toggleScope(); form.setError('') }}>
-						<IconText name={spaceIcon(scope)} className="truncate">{SPACE[scope].name}</IconText>
-					</button>
-				) : !isSolo ? (
-					<span className={`${chip} border-ink font-bold`}><IconText name={spaceIcon(scope)} className="truncate">{SPACE[scope].name}</IconText></span>
-				) : <span />}
-				{/* Прозрачное поле даты поверх кнопки (как у валюты): на iOS showPicker у скрытого поля молча не срабатывает */}
-				<label className={`${chip} relative`}>
-					<IconText name="calendar">{dateLabel(form.date).toUpperCase()}</IconText>
-					<input
-						type="date"
-						aria-label={t('entry.date')}
-						className="absolute inset-0 h-full w-full opacity-0"
-						value={form.date}
-						onClick={(e) => { try { e.currentTarget.showPicker() } catch {} }}
-						onChange={(e) => e.target.value && form.setDate(e.target.value)}
-					/>
-				</label>
-				<label className={`${chip} relative`}>
-					<IconText name="currency">{form.currency}</IconText>
-					<select className="absolute inset-0 opacity-0" aria-label={t('entry.currency')} value={form.currency} onChange={(e) => form.setCur(e.target.value)}>
-						{st.currencies.map((c) => <option key={c} value={c}>{c}</option>)}
-					</select>
-				</label>
-			</div>
-			{form.isForeign && (
-				<div className="flex items-center gap-2 text-xs text-muted">
-					<label htmlFor="m-rate">1 {form.currency} =</label>
-					<input id="m-rate" className="tfield w-[12ch] py-1" inputMode="decimal" autoComplete="off" value={form.rate} onChange={(e) => form.setRate(amountChars(e.target.value))} />
-					<span>{st.base}</span>
-					<output className="text-ink">{form.conv}</output>
+		<>
+			{/* Середина: прокручивается, только если не помещается; сумма приклеена сверху */}
+			<div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain pb-2 [&>*]:shrink-0"
+				onFocus={(e) => isText(e.target) && setTyping(true)}
+				onBlur={() => setTimeout(() => setTyping(isText(document.activeElement)), 250)}>
+				<div className="sticky top-0 z-[1] bg-panel">
+					<label className="flex items-baseline justify-center gap-2">
+						<span className="sr-only">Сумма</span>
+						<input
+							readOnly
+							inputMode="none"
+							data-autofocus
+							className={`w-full min-w-0 bg-transparent text-center leading-tight font-bold outline-none ${expr.length > 14 ? 'text-[1.625rem]' : expr.length > 9 ? 'text-[2.125rem]' : 'text-[2.75rem]'}`}
+							value={`${kind === 'income' ? '+' : '−'}${expr || '0'}`}
+							aria-describedby="m-cur"
+						/>
+						<span id="m-cur" className="text-base text-muted">{form.currency}</span>
+					</label>
+					<p className="min-h-[1.125rem] text-center text-xs text-muted" aria-live="polite">
+						{[hasOp(expr) && value !== null ? `= ${fmt(value)}` : '', form.conv].filter(Boolean).join(' ')}
+					</p>
 				</div>
-			)}
-			{!isSolo && kind === 'expense' && scope === 'personal' && <p className="text-center text-[0.8125rem] text-muted2"><IconText name="lock">{t('space.onlyYouEntry')}</IconText></p>}
-			{!isSolo && kind === 'income' && incomeNote && <p className="text-[0.8125rem] text-muted"><IconText name="info">{t('income.personalNote')}</IconText></p>}
-			<div className="flex gap-1.5 overflow-x-auto pb-0.5" role="group" aria-label={kind === 'expense' ? 'Категория' : 'Источник'}>
-				{options.length === 0 && <span className="py-2 text-muted uppercase">Нет категорий — добавьте в лимитах</span>}
-				{options.map((o) => (
-					<button key={o.id} className={chip} aria-pressed={o.id === selected}
-						onClick={() => { (kind === 'expense' ? d.setCatId(o.id === selected ? null : o.id) : d.setSrcId(o.id)); form.setError('') }}>
-						{o.name.trim()}
+				{/* Ширина чипов — по содержимому, при нехватке места сжимаются поровну с обрезкой */}
+				<div data-chips className="flex gap-1.5 [&>*]:flex-[1_1_auto]">
+					{toggleScope ? (
+						<button className={`${chip} min-w-0 border-ink px-2 font-bold`} title={t('entry.switchSpace')} onClick={() => { toggleScope(); form.setError('') }}>{scopeLabel}</button>
+					) : !isSolo ? (
+						<span className={`${chip} min-w-0 border-ink px-2 font-bold`}>{scopeLabel}</span>
+					) : <span />}
+					{/* Прозрачное поле даты поверх кнопки (как у валюты): на iOS showPicker у скрытого поля молча не срабатывает */}
+					<label className={`${chip} relative min-w-0 px-2`}>
+						<span className="truncate">{dateLabel(form.date).toUpperCase()}</span>
+						<input
+							type="date"
+							aria-label={t('entry.date')}
+							className="absolute inset-0 h-full w-full opacity-0"
+							value={form.date}
+							onClick={(e) => { try { e.currentTarget.showPicker() } catch {} }}
+							onChange={(e) => e.target.value && form.setDate(e.target.value)}
+						/>
+					</label>
+					{/* Валюта и курс в одном чипе: нажатие открывает выбор валюты и поле курса */}
+					<button className={`${chip} min-w-0 flex-none! px-2`} aria-expanded={curOpen} aria-controls="m-curp" aria-label={`${t('entry.currency')}: ${form.currency}${form.isForeign ? `, 1 ${form.currency} = ${form.rate} ${st.base}` : ''}`} onClick={() => setCurOpen(!curOpen)}>
+						<span className="truncate">{form.isForeign && form.rate ? `${form.currency} · ${form.rate}` : form.currency}</span>
 					</button>
-				))}
+				</div>
+				{curOpen && (
+					<div id="m-curp" className="flex flex-col gap-2">
+						<div className="flex gap-1.5 overflow-x-auto" role="group" aria-label={t('entry.currency')}>
+							{st.currencies.map((c) => (
+								<button key={c} className={chip} aria-pressed={c === form.currency} onClick={() => { form.setCur(c); if (c === st.base) setCurOpen(false) }}>{c}</button>
+							))}
+						</div>
+						{form.isForeign && (
+							<div className="flex items-center gap-2 text-xs text-muted">
+								<label htmlFor="m-rate">1 {form.currency} =</label>
+								<input id="m-rate" className="tfield w-[12ch] py-1" inputMode="decimal" autoComplete="off" value={form.rate} onChange={(e) => form.setRate(amountChars(e.target.value))} />
+								<span>{st.base}</span>
+							</div>
+						)}
+					</div>
+				)}
+				{!isSolo && kind === 'income' && incomeNote && <p className="text-[0.8125rem] text-muted"><IconText name="info">{t('income.personalNote')}</IconText></p>}
+				<div className="flex gap-1.5 overflow-x-auto pb-0.5" role="group" aria-label={kind === 'expense' ? 'Категория' : 'Источник'}>
+					{options.length === 0 && <span className="py-2 text-muted uppercase">Нет категорий — добавьте в лимитах</span>}
+					{options.map((o) => (
+						<button key={o.id} className={chip} aria-pressed={o.id === selected}
+							onClick={() => { (kind === 'expense' ? d.setCatId(o.id === selected ? null : o.id) : d.setSrcId(o.id)); form.setError('') }}>
+							{o.name.trim()}
+						</button>
+					))}
+				</div>
+				<PlanChips d={d} className="flex gap-1.5 overflow-x-auto" />
+				<input className="tfield shrink-0 border-line2 py-1" placeholder="Заметка" aria-label="Заметка" autoComplete="off" enterKeyHint="done" value={form.note} onChange={(e) => form.setNote(e.target.value)} />
 			</div>
-			<PlanChips d={d} className="flex gap-1.5 overflow-x-auto" />
-			<input className="tfield shrink-0 border-line2 py-1" placeholder="Заметка" aria-label="Заметка" autoComplete="off" value={form.note} onChange={(e) => form.setNote(e.target.value)} />
-			<div className="mt-auto grid grid-cols-4 gap-1.5" role="group" aria-label="Клавиатура суммы">
-				{KEYS.map((k) => (
-					<button
-						key={k}
-						className="tbox h-[3.25rem] justify-center text-xl select-none [@media(max-height:700px)]:h-11"
-						aria-label={k === BACKSPACE ? undefined : k === '=' ? 'Посчитать' : k === '−' ? 'Минус' : k === '+' ? 'Плюс' : k === ',' ? 'Запятая' : k}
-						onPointerDown={k === BACKSPACE ? () => { cleared.current = false; holdTimer.current = setTimeout(() => { cleared.current = true; setExpr(press(expr, 'clear')) }, 500) } : undefined}
-						onPointerUp={k === BACKSPACE ? () => clearTimeout(holdTimer.current) : undefined}
-						onPointerLeave={k === BACKSPACE ? () => clearTimeout(holdTimer.current) : undefined}
-						onContextMenu={(e) => e.preventDefault()}
-						onClick={() => tap(k)}
-					>
-						{k === BACKSPACE ? <Icon name="backspace" size={24} label={t('entry.eraseHold')} /> : k}
-					</button>
-				))}
+			{/* Низ закреплён: ошибка и клавиатура с записью — всегда видны и под большим пальцем */}
+			<div className="shrink-0 border-t border-line pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom,0rem))]">
+				{form.error && <p className="pb-1.5 uppercase" role="alert"><Problem>{form.error.replace(/\.$/, '')}</Problem></p>}
+				{typing ? (
+					<button className={`${saveKey} h-11 w-full text-[0.9375rem]`} onClick={onSave}><Icon name="check" size={20} />Записать</button>
+				) : (
+				<div className="grid grid-cols-4 gap-1.5 group-data-low:gap-1" role="group" aria-label="Клавиатура суммы">
+					{KEYS.map((k) => (
+						<Fragment key={k}>
+							<button
+								className={key}
+								aria-label={k === BACKSPACE ? undefined : k === '−' ? 'Минус' : k === '+' ? 'Плюс' : k === ',' ? 'Запятая' : k}
+								onPointerDown={k === BACKSPACE ? () => { cleared.current = false; holdTimer.current = setTimeout(() => { cleared.current = true; setExpr(press(expr, 'clear')) }, 500) } : undefined}
+								onPointerUp={k === BACKSPACE ? () => clearTimeout(holdTimer.current) : undefined}
+								onPointerLeave={k === BACKSPACE ? () => clearTimeout(holdTimer.current) : undefined}
+								onContextMenu={(e) => e.preventDefault()}
+								onClick={() => tap(k)}
+							>
+								{k === BACKSPACE ? <Icon name="backspace" size={24} label={t('entry.eraseHold')} /> : k}
+							</button>
+							{/* После 9 — «Записать» в четвёртой колонке на две нижние строки */}
+							{k === '9' && (
+								<button className={`${saveKey} row-span-2 flex-col text-[0.8125rem]`} onClick={onSave}>
+									<Icon name="check" size={24} />
+									Записать
+								</button>
+							)}
+						</Fragment>
+					))}
+				</div>
+				)}
 			</div>
-			<p className="min-h-5 uppercase" role="alert"><Problem>{form.error.replace(/\.$/, '')}</Problem></p>
-			<button className="tbox h-[3.25rem] shrink-0 justify-center border-ink bg-ink text-[0.9375rem] font-bold text-panel hover:bg-ink" onClick={onSave}>[ Записать ]</button>
-		</div>
+		</>
 	)
 }
 
@@ -408,7 +502,8 @@ function Voice({ d, scope, listen, onClose, onEdit }: {
 	}
 
 	return (
-		<div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain [&>*]:shrink-0">
+		<>
+		<div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain pb-2 [&>*]:shrink-0">
 			{!isSolo && (
 				<p className="flex flex-wrap items-center gap-x-2 text-xs text-muted uppercase">
 					По умолчанию — <IconText name={spaceIcon(scope)}>{SPACE[scope].name}</IconText> · «себе» → <IconText name="space-personal">{SPACE.personal.name}</IconText>
@@ -471,16 +566,20 @@ function Voice({ d, scope, listen, onClose, onEdit }: {
 					})}
 				</ul>
 			)}
-			<div className="mt-auto flex flex-col items-center gap-2.5 pt-2">
+		</div>
+		{/* Низ закреплён, как у клавиш: «Говорить» и «Записать N» */}
+		<div className="flex shrink-0 flex-col gap-2.5 border-t border-line pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0rem))]">
+			<div className="flex flex-col items-center gap-2">
 				<MicButton on={listening} onClick={q.toggleMic} />
 				<span className="text-xs text-muted uppercase">{micHint}</span>
 			</div>
 			{rows.length > 0 && (
-				<button className="tbox h-[3.25rem] shrink-0 justify-center border-ink bg-ink text-[0.9375rem] font-bold text-panel hover:bg-ink disabled:opacity-50" disabled={!q.canWrite} onClick={() => void write()}>
-					[ Записать {rows.length} ]
+				<button className="tbox h-[3.25rem] justify-center gap-2 border-ink bg-ink text-[0.9375rem] font-bold text-panel uppercase hover:bg-ink disabled:opacity-50 group-data-low:h-11" disabled={!q.canWrite} onClick={() => void write()}>
+					<Icon name="check" size={20} />Записать {rows.length}
 				</button>
 			)}
 		</div>
+		</>
 	)
 }
 
@@ -489,7 +588,7 @@ function MicButton({ on, onClick }: { on: boolean; onClick: () => void }) {
 	return (
 		<button
 			data-autofocus
-			className={`flex h-[7.5rem] w-[7.5rem] flex-col items-center justify-center gap-2 border-2 text-[0.9375rem] font-bold uppercase ${on ? 'border-ink bg-ink text-panel' : 'border-line2 text-ink'}`}
+			className={`flex h-[7.5rem] w-[7.5rem] flex-col group-data-low:h-24 group-data-low:w-24 items-center justify-center gap-2 border-2 text-[0.9375rem] font-bold uppercase ${on ? 'border-ink bg-ink text-panel' : 'border-line2 text-ink'}`}
 			aria-pressed={on}
 			onClick={onClick}
 		>

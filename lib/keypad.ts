@@ -1,10 +1,11 @@
 /**
- * Своя клавиатура суммы на телефоне: 1 2 3 + / 4 5 6 − / 7 8 9 ⌫ / , 0 00 =.
+ * Своя клавиатура суммы на телефоне: 1 2 3 + / 4 5 6 − / 7 8 9 ЗАПИСАТЬ / , 0 ⌫ (запись — на две нижние строки).
+ * «00» и «=» в раскладке нет, press их по-прежнему понимает.
  * Выражение хранится с «+» и «−»; в форму уходит строка для parseAmount (lib/utils.ts). Тесты — lib/keypad.test.mjs
  */
 export const BACKSPACE = "⌫";
-export const KEYS = ["1", "2", "3", "+", "4", "5", "6", "−", "7", "8", "9", BACKSPACE, ",", "0", "00", "="] as const;
-export type Key = (typeof KEYS)[number] | "clear";
+export const KEYS = ["1", "2", "3", "+", "4", "5", "6", "−", "7", "8", "9", ",", "0", BACKSPACE] as const;
+export type Key = (typeof KEYS)[number] | "00" | "=" | "clear";
 
 const MAX = 24;
 const OPS = /[+−]$/;

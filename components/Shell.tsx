@@ -215,6 +215,7 @@ function ShellBody({ children }: { children: ReactNode }) {
 				<div
 					role="status"
 					key={toastState.id}
+					data-toast
 					// Мобильный: над нижней панелью и кнопкой «+» (52px + 26px + отступ + safe-area), на всю ширину минус поля
 					className="fixed inset-x-4 bottom-[calc(5.75rem+env(safe-area-inset-bottom,0rem))] z-50 flex flex-wrap items-center gap-x-6 gap-y-1 bg-ink px-4 py-2 text-panel uppercase sm:inset-x-auto sm:bottom-[calc(1rem+env(safe-area-inset-bottom,0rem))] sm:left-1/2 sm:w-max sm:max-w-[calc(100%-2rem)] sm:-translate-x-1/2"
 				>

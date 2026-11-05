@@ -152,3 +152,6 @@
   .l-doc { display: grid; align-items: start; column-gap: 2.5rem; grid-template-columns: minmax(0, 72ch); grid-template-areas: "main"; }
   @media (width >= 120rem) { .l-doc:has(> [data-area="help"]) { grid-template-columns: minmax(0, 72ch) 320px; grid-template-areas: "main help"; } }
 }
+
+/* Тост, пока открыта шторка ввода: сверху под её шапкой (--entry-top ставит шторка), не поверх клавиатуры */
+html:has([data-entry-sheet]) [data-toast] { top: calc(var(--entry-top, 3rem) + 4.25rem); bottom: auto; }
