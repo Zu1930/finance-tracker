@@ -14,6 +14,6 @@ export async function POST(req: Request) {
     return created(await getRepos().goals.create(ctx, g), g);
   } catch (e) {
     console.error(e);
-    return fail(500, "Не удалось создать копилку.");
+    return fail(500, "Не удалось создать цель.");
   }
 }

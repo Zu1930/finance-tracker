@@ -3,11 +3,12 @@
 import { useEffect, useRef } from 'react'
 import { useTracker } from './TrackerProvider'
 import { useSpace } from './SpaceProvider'
-import { SPACE, SPACE_IDS, spaceLeft, type Space } from '@/lib/space'
+import { SPACE, SPACE_IDS, type Space } from '@/lib/space'
+import { living } from '@/lib/plan-view'
 import { Icon } from './icons/Icon'
 import { IconText, spaceIcon } from './icons/IconText'
 import { t } from '@/lib/i18n'
-import { curMonthKey, fmt } from '@/lib/utils'
+import { curMonthKey, fmt, todayStr } from '@/lib/utils'
 
 /** Описание строки выбора бюджета */
 export function spaceDesc(s: Space, names: string[]) {
@@ -82,7 +83,7 @@ export function SpaceSwitcher() {
 							<b className="uppercase">:: {t('space.choose')}</b>
 							<button className="ib -mr-2" onClick={() => setOpen(false)}><Icon name="close" size={20} label={t('action.close')} /></button>
 						</div>
-						{SPACE_IDS.map((s) => (
+						{SPACE_IDS.map((s, i) => (
 							<button
 								key={s}
 								aria-pressed={space === s}
@@ -94,7 +95,10 @@ export function SpaceSwitcher() {
 									<b className="uppercase">{SPACE[s].name}</b>
 									<span className="truncate text-xs opacity-75">{spaceDesc(s, names)}</span>
 								</span>
-								<span className="text-xs opacity-75">{fmt(Math.round(spaceLeft(data, s, key).left))}</span>
+								<span className="flex items-center gap-2 text-xs opacity-75">
+									{fmt(Math.round(living(data, s, key, todayStr()).left))}
+									<kbd className="kbd max-sm:hidden">Alt {i + 1}</kbd>
+								</span>
 							</button>
 						))}
 					</div>

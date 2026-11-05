@@ -6,7 +6,7 @@ export const ARTICLES = [
   { id: "family", title: "Семья", soloTitle: "Пригласить партнёра" },
   { id: "plan", title: "План месяца" },
   { id: "recurring", title: "Обязательные платежи" },
-  { id: "savings", title: "Счета и сверка" },
+  { id: "savings", title: "Счета и остатки" },
   { id: "currency", title: "Валюты" },
   { id: "voice", title: "Голос и Siri" },
   { id: "install", title: "Приложение на телефоне" },

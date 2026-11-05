@@ -157,7 +157,7 @@ export async function completeOnboarding(db: Db, ctx: Ctx, draft: WelcomeDraft, 
           const res = applyReconcile(raw.savings, ctx.userId, { balances: Object.fromEntries(created.map((a) => [a.id, a.balance])), versions: Object.fromEntries(seen.map((a) => [a.id, a.version])), day: today },
             raw.settings!.base, raw.settings!.rates, flowsOf(raw.hashes), { id: uid(), at: now });
           if ("error" in res) throw new Abort(res.status, res.error);
-          if (!(await r.recons.add(ctx, res.recon, seen, res.changed, 0))) throw new Abort(409, "Не удалось сохранить сверку, повторите.");
+          if (!(await r.recons.add(ctx, res.recon, seen, res.changed, 0))) throw new Abort(409, "Не удалось сохранить остатки, повторите.");
         }
       }
 

@@ -71,12 +71,12 @@ export function Review({ householdId }: { householdId: string }) {
 							</ul>
 						)}
 
-						<h2 className="sec mt-8">Семейные копилки</h2>
+						<h2 className="sec mt-8">Семейные цели</h2>
 						{v.goals.length === 0 ? <p className="mt-2 text-muted">// Нет</p> : (
 							<ul className="mt-2">
 								{v.goals.map((g) => (
 									<Row key={g.id} title={g.name} sub={`${fmt(g.allocated)} из ${fmt(g.target)} ${g.currency}`}>
-										{copied.has(`copy-goal:${g.id}`) ? <span className="text-muted">Создана у вас</span> : <button className="tb max-sm:whitespace-normal" disabled={busy} onClick={() => void step('copy-goal', g.id, `Копилка «${g.name}» создана у вас`)}>Создать такую же у себя</button>}
+										{copied.has(`copy-goal:${g.id}`) ? <span className="text-muted">Создана у вас</span> : <button className="tb max-sm:whitespace-normal" disabled={busy} onClick={() => void step('copy-goal', g.id, `Цель «${g.name}» создана у вас`)}>Создать такую же у себя</button>}
 									</Row>
 								))}
 							</ul>

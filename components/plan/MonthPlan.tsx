@@ -126,7 +126,7 @@ export function PlanSummary({ month }: { month: string }) {
 			</p>
 			{s.short && (
 				<p className="mt-2 uppercase" role="alert">
-					<Problem>Не хватает {fmt(-s.rest!)} — перенесите покупку или возьмите из копилки</Problem>
+					<Problem>Не хватает {fmt(-s.rest!)} — перенесите покупку или возьмите из целей</Problem>
 				</p>
 			)}
 		</section>

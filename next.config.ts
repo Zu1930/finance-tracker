@@ -11,6 +11,9 @@ const nextConfig: NextConfig = {
     return [
       { source: "/income", destination: "/?mode=income", permanent: false },
       { source: "/goals", destination: "/savings", permanent: false },
+      // «График» стал «Итогами»
+      { source: "/chart", destination: "/summary", permanent: false },
+      { source: "/archive/:id/chart", destination: "/archive/:id/summary", permanent: false },
     ];
   },
 };

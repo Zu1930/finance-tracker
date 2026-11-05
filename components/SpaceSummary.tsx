@@ -6,21 +6,22 @@ import { useSpace, useSpaceData } from './SpaceProvider'
 import { AsciiBar } from './AsciiBar'
 import { dueRows } from './recurring/DueBlock'
 import { abbr, byAuthor, monthExpense } from '@/lib/metrics'
-import { inSpace, spaceLeft } from '@/lib/space'
+import { inSpace } from '@/lib/space'
+import { living } from '@/lib/plan-view'
 import { Icon } from './icons/Icon'
 import { IconText } from './icons/IconText'
 import { t } from '@/lib/i18n'
 import type { ReactNode } from 'react'
 import { curMonthKey, fmt, monthName, monthTitle, todayStr } from '@/lib/utils'
 
-/** Итог бюджета: верх ленты на мобильном, полоса метрик на десктопе */
-export function SpaceSummary({ desktop = false }: { desktop?: boolean }) {
+/** Итог бюджета: верх ленты на мобильном */
+export function SpaceSummary() {
 	const { data, isSolo } = useTracker()
 	const { view, readOnly } = useSpace()
 	const sd = useSpaceData()
 	const st = data.settings!
 	const key = curMonthKey()
-	const { limit, left } = spaceLeft(data, view, key)
+	const { limit, left } = living(data, view, key, todayStr())
 	const now = new Date()
 	const day = now.getDate()
 	const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
@@ -31,10 +32,7 @@ export function SpaceSummary({ desktop = false }: { desktop?: boolean }) {
 	const overdue = dueRows(data, todayStr()).filter((r) => r.status === 'overdue' && inSpace(r.payment.scope, view)).length
 
 	const month = monthName(key).toUpperCase()
-	const label = isSolo ? `Осталось в лимитах · ${month}`
-		: view === 'family' ? `Осталось в семейных лимитах · ${month}`
-		: view === 'personal' ? `Осталось в моих лимитах · ${month}`
-		: 'Осталось всего · семья + моё'
+	const label = `${t('budget.canSpend')} · ${!isSolo && view === 'all' ? 'семья + моё' : month}`
 	let sub: ReactNode
 	if (!isSolo && view === 'family') {
 		const by = byAuthor(data.familyExpenses[key] ?? [])
@@ -42,8 +40,8 @@ export function SpaceSummary({ desktop = false }: { desktop?: boolean }) {
 	} else if (!isSolo && view === 'all') {
 		sub = (
 			<span className="inline-flex flex-wrap items-center gap-x-2">
-				<Icon name="space-family" size={16} />{t('space.family')} {fmt(Math.round(spaceLeft(data, 'family', key).left))} ·
-				<Icon name="space-personal" size={16} />{t('space.mine')} {fmt(Math.round(spaceLeft(data, 'personal', key).left))}
+				<Icon name="space-family" size={16} />{t('space.family')} {fmt(Math.round(living(data, 'family', key, todayStr()).left))} ·
+				<Icon name="space-personal" size={16} />{t('space.mine')} {fmt(Math.round(living(data, 'personal', key, todayStr()).left))}
 			</span>
 		)
 	} else sub = paceText
@@ -53,8 +51,7 @@ export function SpaceSummary({ desktop = false }: { desktop?: boolean }) {
 		<Link href="/#due" className="text-warn hover:underline">{overdue} не {overdue === 1 ? 'отмечен' : 'отмечены'}</Link>
 	)
 
-	if (desktop)
-		return (
+	return (
 			<div className="border-y border-dashed border-line py-3 uppercase">
 				<div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 text-muted">
 					<span>

@@ -81,7 +81,7 @@ function leftOf(all: Category[], list: Expense[], items: PlanItem[], key: string
   return { limit, left: cats.reduce((a, c) => a + c.limit - (spent[c.id] ?? 0), 0) };
 }
 
-/** Остаток по лимитам бюджета в месяце; all — сумма семьи и моего */
+/** «Можно потратить» бюджета в месяце; all — сумма семьи и моего */
 export function spaceLeft(d: TrackerData, space: Space, key: string): Left {
   const plan = d.plans[key];
   if (space === "family")

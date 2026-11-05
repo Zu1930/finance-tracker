@@ -1,19 +1,18 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useTracker } from '../TrackerProvider'
 import { useSpace } from '../SpaceProvider'
-import { ReadOnlyPick } from '../SpaceSwitcher'
 import { useNarrow } from '../AsciiBar'
 import { EntryForm, useAltPick, type EntryMode } from './EntryForm'
 import { useEntryDraft } from './useEntryDraft'
-import { ExpenseSummary } from './ExpenseSummary'
-import { IncomeBalance } from './IncomeBalance'
-import { RecentLogs } from './RecentLogs'
+import { MonthFeed } from './MonthFeed'
+import { CanSpend, PlanRow } from '../limits/MobileLimits'
+import { Icon } from '../icons/Icon'
 import { Feed } from './Feed'
-import { fmt, termName } from '@/lib/utils'
+import { curMonthKey, fmt, isMac, termName } from '@/lib/utils'
 import { itemLeft } from '@/lib/plan'
 import { DueBlock } from '../recurring/DueBlock'
 import { QuickEntry } from './QuickEntry'
@@ -23,7 +22,7 @@ import type { ParsedEntry } from '@/lib/quick-entry/parse'
 import { IconText } from '../icons/IconText'
 import { t } from '@/lib/i18n'
 
-/** Телефон — лента с итогом (ввод — формой поверх неё по «+»), десктоп — страница ввода */
+/** Телефон — лента с итогом (ввод — формой поверх неё по «+»), десктоп — ввод, лента месяца и итог рядом */
 export function EntryPage() {
 	return useNarrow() ? <Feed /> : <DesktopEntry />
 }
@@ -42,6 +41,7 @@ function DesktopEntry() {
 	const rootRef = useRef<HTMLDivElement>(null)
 	const d = useEntryDraft(scope, mode)
 	const { form } = d
+	const [formOpen, setFormOpen] = useState(!!data.mySettings.hideQuickEntry || mode === 'income')
 
 	const go = (m: EntryMode, focusAmount: boolean) => {
 		if (m !== mode) {
@@ -73,6 +73,7 @@ function DesktopEntry() {
 	// Трата из голосового ввода → обычная форма; у неё может быть другой бюджет
 	const editParsed = (p: ParsedEntry) => {
 		d.fillParsed(p)
+		setFormOpen(true)
 		if (p.scope !== scope) setSpace(p.scope)
 		go('expense', true)
 	}
@@ -89,26 +90,11 @@ function DesktopEntry() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [focus])
 
-	if (readOnly)
-		return (
-			<WithSetupCard>
-				<h1 className="sr-only">Всё вместе — только просмотр</h1>
-				<ReadOnlyPick />
-				<RecentLogs />
-			</WithSetupCard>
-		)
-
-	return (
-		<WithSetupCard>
-			<DueBlock />
-			{mode === 'expense' && !data.mySettings.hideQuickEntry && (
-				<>
-					<QuickEntry familyCats={isSolo ? [] : d.familyCats} personalCats={d.personalCats} defaultScope={scope} onEdit={editParsed} />
-					<Hint id="voice" className="mb-4" />
-				</>
-			)}
-			{!isSolo && <Hint id="family" className="mb-4" />}
-			<div ref={rootRef}>
+	const cur = curMonthKey()
+	const formBlock = (
+		<details className="border-t border-dashed border-line pt-3" open={formOpen} onToggle={(e) => setFormOpen(e.currentTarget.open)}>
+			<summary className="cursor-pointer text-muted uppercase">:: {t('cmd.form')} <span className="text-[13px] text-muted2 normal-case">{t('cmd.formHint')}</span></summary>
+			<div ref={rootRef} className="mt-3">
 				<h1 className="sr-only">
 					{mode === 'income' ? 'Новый доход' : isSolo ? 'Новый расход' : scope === 'personal' ? 'Новый личный расход' : 'Новый семейный расход'}
 				</h1>
@@ -123,7 +109,6 @@ function DesktopEntry() {
 						</div>
 					)}
 					{!isSolo && scope === 'personal' && <p className="text-muted2"><IconText name="lock">{t('space.onlyYouEntry')}</IconText></p>}
-					<p className="ml-auto text-muted2 uppercase touch:hidden">{incomeOk ? 'Alt + ← → · ' : ''}{isSolo ? '' : 'Бюджет: Alt + 1 2 3'}</p>
 				</div>
 				<EntryForm
 					mode={mode}
@@ -144,14 +129,42 @@ function DesktopEntry() {
 					}
 				/>
 			</div>
+		</details>
+	)
 
-			{mode === 'expense' && hasMine && <Hint id="entry" className="mt-4" />}
-			{mode === 'expense' ? (
-				<ExpenseSummary scope={scope} cats={d.cats} sel={d.cats.find((c) => c.id === d.catId)} />
-			) : (
-				<IncomeBalance />
-			)}
-			<RecentLogs />
+	return (
+		<WithSetupCard>
+			{/* Ввод | лента | колонка 300px; уже 1280px колонка уходит под ленту */}
+			<div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)_300px]">
+				<section aria-label={t('nav.entry')} className="flex min-w-0 flex-col gap-3.5">
+					{readOnly ? (
+						<div className="flex flex-col gap-2.5 border border-dashed border-line p-4">
+							<h1><IconText name="view">{t('cmd.readOnly')}</IconText></h1>
+							<div className="flex flex-wrap gap-1.5">
+								<button className="tb" onClick={() => setSpace('family')}><IconText name="space-family">{t('cmd.toFamily')}</IconText></button>
+								<button className="tb" onClick={() => setSpace('personal')}><IconText name="space-personal">{t('cmd.toPersonal')}</IconText></button>
+							</div>
+						</div>
+					) : (
+						<>
+							{!data.mySettings.hideQuickEntry && (
+								<QuickEntry familyCats={isSolo ? [] : d.familyCats} personalCats={d.personalCats} defaultScope={scope} onEdit={editParsed} />
+							)}
+							<Hint id="voice" />
+							{!isSolo && <Hint id="family" />}
+							{formBlock}
+							{mode === 'expense' && hasMine && <Hint id="entry" />}
+						</>
+					)}
+				</section>
+				<MonthFeed />
+				<aside aria-label={t('budget.canSpend')} className="flex flex-col gap-4 lg:col-start-2 xl:col-start-auto">
+					<CanSpend month={cur} />
+					{!readOnly && <DueBlock />}
+					<PlanRow month={cur} />
+					<p className="flex gap-2 text-[13px] text-muted2"><Icon name="shortcut" size={16} className="shrink-0" />{t('cmd.keysHint', { k: isMac() ? '⌘ K' : 'Ctrl + K' })}</p>
+				</aside>
+			</div>
 		</WithSetupCard>
 	)
 }

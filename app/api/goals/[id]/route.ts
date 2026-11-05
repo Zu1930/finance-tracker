@@ -3,7 +3,7 @@ import { getRepos } from "@/lib/data";
 import { fail, isVersion, updated } from "@/lib/records";
 import { goalDeleteError } from "@/lib/savings";
 
-const CONFLICT = "Копилку изменил другой пользователь, проверьте и повторите.";
+const CONFLICT = "Цель изменил другой пользователь, проверьте и повторите.";
 const scopeOf = (v: unknown) => (v === "personal" ? "personal" : "family");
 
 /** Имя и цель: { scope, version, name?, target? }. Права как у счетов */

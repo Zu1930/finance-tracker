@@ -11,10 +11,11 @@ import { WithSetupCard } from '../onboarding/SetupCard'
 import { requestEntry } from './MobileEntry'
 import type { Expense, Income } from '@/lib/types'
 import { feedRows, groupByDay, type FeedRow } from '@/lib/space'
+import { REQUIRED } from '@/lib/summary'
 import { Icon } from '../icons/Icon'
 import { IconText, spaceIcon } from '../icons/IconText'
 import { t } from '@/lib/i18n'
-import { fmt, incomeSources, minus, termName, todayStr } from '@/lib/utils'
+import { fmt, incomeSources, minus, monthName, termName, todayStr } from '@/lib/utils'
 
 const PAGE = 40
 
@@ -38,9 +39,12 @@ export function Feed() {
 	const cats = new Map([...st.familyCategories, ...data.mySettings.personalCategories].map((c) => [c.id, c.name]))
 	const sources = new Map(incomeSources(st).map((s) => [s.id, s.name]))
 	const names = new Map([...Object.entries(data.names ?? {}), ...[data.me, ...(data.partner ? [data.partner] : [])].map((u) => [u.id, u.name] as const)])
-	// /?cat=<id> — из «Лимитов»: только траты этой категории
+	// /?cat=<id>[&scope=…][&month=YYYY-MM] — из «Лимитов» и «Итогов»: только траты этой категории (cat=required — обязательные)
 	const cat = params.get('cat')
-	const rows = feedRows(data, view).filter((r) => !cat || (r.kind === 'expense' && r.e.catId === cat))
+	const catScope = params.get('scope')
+	const inMonth = params.get('month')
+	const rows = feedRows(data, view).filter((r) => !cat || (r.kind === 'expense' && (cat === REQUIRED ? !!r.e.recurringId
+		: r.e.catId === cat && !r.e.recurringId && (!catScope || r.e.scope === catScope)) && (!inMonth || r.e.date.startsWith(inMonth))))
 	const days = groupByDay(rows.slice(0, shown), todayStr())
 	const withNames = !isSolo && view !== 'personal'
 	const actions = !readOnly && !data.readonly
@@ -59,7 +63,7 @@ export function Feed() {
 			{actions && !cat && <div className="mt-4"><DueBlock /></div>}
 			{cat && (
 				<div className="mt-4 flex items-center justify-between gap-3 border-b border-ink pb-2 uppercase">
-					<b className="truncate">{t('feed.byCategory', { x: termName(cats.get(cat) ?? '—') })}</b>
+					<b className="truncate">{t('feed.byCategory', { x: cat === REQUIRED ? t('summary.required') : termName(cats.get(cat) ?? '—') })}{inMonth && ` · ${monthName(inMonth)}`}</b>
 					<Link href="/" replace className="ib"><Icon name="close" size={20} label={t('feed.allEntries')} /></Link>
 				</div>
 			)}

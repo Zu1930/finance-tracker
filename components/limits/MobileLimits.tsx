@@ -52,38 +52,48 @@ export function MobileLimits() {
 	)
 }
 
-/** Текущий (и прошлые) месяц */
-function CurrentMonth({ month }: { month: string }) {
-	const { data, isSolo } = useTracker()
-	const { view, readOnly } = useSpace()
+/** «Можно потратить»: лимиты без обязательных, шкала и «на день можно». Телефон — «Лимиты», десктоп — колонка ввода */
+export function CanSpend({ month }: { month: string }) {
+	const { data } = useTracker()
+	const { view } = useSpace()
 	const today = todayStr()
 	const isCur = month === curMonthKey()
 	const { limit, left } = living(data, view, month, today)
 	const filled = limit > 0 ? Math.round(Math.min(1, Math.max(0, (limit - left) / limit)) * BAR) : left < 0 ? BAR : 0
 	const day = perDay(left, today)
 	const days = `${day.days} ${plural(day.days, 'дня', 'дней', 'дней')}`
+	return (
+		<section aria-label={t('budget.canSpend')} className="flex flex-col gap-1 pb-2.5">
+			<span className="text-xs text-muted uppercase">{t('budget.canSpend')}</span>
+			<div className="flex items-baseline gap-2">
+				<span className={`text-[32px] leading-tight font-bold tracking-tight ${left < 0 ? 'text-bad' : ''}`}>{left < 0 ? minus(-left) : fmt(left)}</span>
+				<span className="text-xs text-muted uppercase">{t('limits.of', { x: fmt(limit) })}</span>
+			</div>
+			{/* 30 равных ячеек на всю ширину: █ — заливка без щелей, ░ — символ; ширина не зависит от шрифта */}
+			<div aria-hidden="true" className="flex w-full leading-none">
+				{Array.from({ length: BAR }, (_, k) => (
+					k < filled ? <span key={k} className="flex-1 bg-ink" /> : <span key={k} className="flex-1 overflow-hidden text-center text-dim">░</span>
+				))}
+			</div>
+			{left < 0 ? (
+				<span className="text-xs text-bad uppercase">{t('limits.overLimits', { x: fmt(-left) })}</span>
+			) : isCur ? (
+				<span className="text-xs text-muted uppercase">{t('limits.perDay', { x: fmt(day.perDay), n: days })}</span>
+			) : null}
+		</section>
+	)
+}
+
+/** Текущий (и прошлые) месяц */
+function CurrentMonth({ month }: { month: string }) {
+	const { data } = useTracker()
+	const { readOnly } = useSpace()
+	const isCur = month === curMonthKey()
 	const editable = !readOnly && !data.readonly
 
 	return (
 		<>
-			<section aria-label={t('limits.leftToLive')} className="flex flex-col gap-1 pb-2.5">
-				<span className="text-xs text-muted uppercase">{t('limits.leftToLive')}</span>
-				<div className="flex items-baseline gap-2">
-					<span className={`text-[32px] leading-tight font-bold tracking-tight ${left < 0 ? 'text-bad' : ''}`}>{left < 0 ? minus(-left) : fmt(left)}</span>
-					<span className="text-xs text-muted uppercase">{t('limits.of', { x: fmt(limit) })}</span>
-				</div>
-				{/* 30 равных ячеек на всю ширину: █ — заливка без щелей, ░ — символ; ширина не зависит от шрифта */}
-				<div aria-hidden="true" className="flex w-full leading-none">
-					{Array.from({ length: BAR }, (_, k) => (
-						k < filled ? <span key={k} className="flex-1 bg-ink" /> : <span key={k} className="flex-1 overflow-hidden text-center text-dim">░</span>
-					))}
-				</div>
-				{left < 0 ? (
-					<span className="text-xs text-bad uppercase">{t('limits.overLimits', { x: fmt(-left) })}</span>
-				) : isCur ? (
-					<span className="text-xs text-muted uppercase">{t('limits.perDay', { x: fmt(day.perDay), n: days })}</span>
-				) : null}
-			</section>
+			<CanSpend month={month} />
 			<RequiredRow month={month} />
 			<PlanRow month={month} />
 			<Categories month={month} />
@@ -162,7 +172,7 @@ function RequiredRow({ month }: { month: string }) {
 }
 
 /** «План ноября · отложится ~X»: раскрывается в пример в столбик и строку с покупками месяца */
-function PlanRow({ month }: { month: string }) {
+export function PlanRow({ month }: { month: string }) {
 	const { data, isSolo } = useTracker()
 	const { view } = useSpace()
 	const [open, setOpen] = useState(false)

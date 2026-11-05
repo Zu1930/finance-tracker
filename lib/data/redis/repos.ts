@@ -146,11 +146,21 @@ export function redisRepos(users: User[]): Repos {
       },
 
       inMonth: async (ctx, scope, month) => Object.values((await redis().hgetall<Record<string, Expense>>(expenseKey(ctx, scope, month))) ?? {}),
+      // ponytail: Redis — только для отката; правка на месте там не работает
+      async update(ctx) {
+        me(ctx);
+        throw new Error("expenses.update: только Postgres");
+      },
     },
 
     incomes: {
       add: async (ctx, i) => (me(ctx), addEntry(K.incomes(i.date.slice(0, 7)), i)),
       remove: async (ctx, month, id) => (me(ctx), (await removeEntry(K.incomes(month), id)) as Income | null),
+      // ponytail: Redis — только для отката; правка на месте там не работает
+      async update(ctx) {
+        me(ctx);
+        throw new Error("incomes.update: только Postgres");
+      },
     },
 
     trash: {

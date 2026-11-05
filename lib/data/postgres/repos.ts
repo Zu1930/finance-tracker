@@ -4,6 +4,7 @@
  * (настройки участника, планы месяца), — под advisory-блокировкой по их ключу.
  * Формы объектов совпадают с Redis-реализацией: необязательные поля без значения не попадают в объект.
  */
+import { EDIT_CONFLICT, editExpense, editIncome, sameEntry, type EditResult } from "../../entry-edit.ts";
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, sql, type SQL } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import * as s from "./schema.ts";
@@ -436,6 +437,21 @@ export function postgresRepos(db: Db): Repos {
 
       inMonth: async (ctx, scope, month) =>
         (await db.select().from(s.expenses).where(and(own(s.expenses, ctx, scope), monthRange(s.expenses.date, month)))).map(toExpense),
+
+      update: (ctx, scope, month, seen, next) =>
+        db.transaction(async (tx): Promise<EditResult<Expense>> => {
+          const [row] = await tx.select().from(s.expenses)
+            .where(and(own(s.expenses, ctx, scope), eq(s.expenses.id, seen.id), monthRange(s.expenses.date, month))).for("update");
+          if (!row) return { ok: false, status: 404, error: "Запись не найдена." };
+          const cur = toExpense(row);
+          if (!sameEntry(cur, seen)) return { ok: false, status: 409, error: EDIT_CONFLICT };
+          const r = editExpense(cur, next, ctx.userId);
+          if (!r.ok) return r;
+          if (cur.planItemId && !r.entry.planItemId) await setPlanLink(tx, ctx.householdId, cur, false);
+          const { householdId: _h, id: _i, ...set } = expenseRow(ctx.householdId, r.entry);
+          await tx.update(s.expenses).set(set).where(and(eq(s.expenses.householdId, ctx.householdId), eq(s.expenses.id, cur.id)));
+          return r;
+        }),
     },
 
     incomes: {
@@ -448,6 +464,18 @@ export function postgresRepos(db: Db): Repos {
           const i = toIncome(row);
           await trash(tx, ctx, "income", i, null);
           return i;
+        }),
+      update: (ctx, month, seen, next) =>
+        db.transaction(async (tx): Promise<EditResult<Income>> => {
+          const where = and(eq(s.incomes.householdId, ctx.householdId), eq(s.incomes.id, seen.id));
+          const [row] = await tx.select().from(s.incomes).where(and(where, monthRange(s.incomes.date, month))).for("update");
+          if (!row) return { ok: false, status: 404, error: "Запись не найдена." };
+          const cur = toIncome(row);
+          if (!sameEntry(cur, seen)) return { ok: false, status: 409, error: EDIT_CONFLICT };
+          const r = editIncome(cur, next);
+          const { householdId: _h, id: _i, ...set } = incomeRow(ctx.householdId, r.entry);
+          await tx.update(s.incomes).set(set).where(where);
+          return r;
         }),
     },
 

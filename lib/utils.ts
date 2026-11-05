@@ -49,6 +49,8 @@ export const localDay = (iso: string) => {
 };
 /** 2026-10-01 → 01.10 */
 export const ddmm = (day: string) => `${day.slice(8, 10)}.${day.slice(5, 7)}`;
+/** ⌘ на macOS и iOS, Ctrl — остальные */
+export const isMac = () => typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
 export const MONTHS = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
 export const MONTHS_SHORT = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];

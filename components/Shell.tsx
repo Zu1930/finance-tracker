@@ -6,7 +6,7 @@ import { Suspense, useEffect, type ReactNode } from 'react'
 import { useTracker } from './TrackerProvider'
 import { SpaceProvider, useSpace } from './SpaceProvider'
 import { SpaceSwitcher } from './SpaceSwitcher'
-import { SpaceSummary } from './SpaceSummary'
+import { CommandPalette, Shortcuts, useHotkeyDialogs } from './CommandPalette'
 import { Setup } from './Setup'
 import { useDailyRates } from './useDailyRates'
 import { ThemeToggle } from './settings/ThemeSwitch'
@@ -17,19 +17,20 @@ import { Icon } from './icons/Icon'
 import { Problem } from './icons/IconText'
 import type { IconName } from './icons/icons'
 import { t } from '@/lib/i18n'
+import { isMac } from '@/lib/utils'
 
-const TABS = [
-	{ href: '/', label: 'Ввод' },
-	{ href: '/limits', label: 'Лимиты' },
-	{ href: '/savings', label: 'Сбережения' },
-	{ href: '/chart', label: 'График' }
+const TABS: { href: string; label: string; icon?: IconName }[] = [
+	{ href: '/', label: t('nav.entry'), icon: 'plus' },
+	{ href: '/limits', label: t('nav.limits'), icon: 'limits' },
+	{ href: '/savings', label: t('nav.money'), icon: 'money' },
+	{ href: '/summary', label: t('nav.summary'), icon: 'chart' }
 ]
 /** Мобильный: лента вместо ввода, «Деньги» — сбережения; по центру — кнопка «+» */
 const MOBILE_TABS: { href: string; label: string; icon?: IconName }[] = [
 	{ href: '/', label: t('nav.feed'), icon: 'feed' },
 	{ href: '/limits', label: t('nav.limits'), icon: 'limits' },
 	{ href: '/savings', label: t('nav.money'), icon: 'money' },
-	{ href: '/chart', label: t('nav.chart'), icon: 'chart' }
+	{ href: '/summary', label: t('nav.summary'), icon: 'chart' }
 ]
 
 /** Бюджет выбирается один раз для всего экрана: контекст — над шапкой, лентой и формой */
@@ -66,7 +67,9 @@ function ShellBody({ children }: { children: ReactNode }) {
 		if (status === 'ready' && welcome) window.location.replace('/welcome')
 	}, [status, welcome])
 
-	// Ctrl + , (⌘ + , на macOS) — настройки, ? — помощь. В полях ввода не перехватываем
+	// Ctrl + , (⌘ + , на macOS) — настройки, ? — горячие клавиши, ⌘/Ctrl + K — палитра. В полях ввода не перехватываем
+	const dialogs = useHotkeyDialogs()
+	const { setOpen: setDialog } = dialogs
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
 			const help = e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey
@@ -74,11 +77,12 @@ function ShellBody({ children }: { children: ReactNode }) {
 			const el = e.target as HTMLElement | null
 			if (el?.closest('input, textarea, select, [contenteditable="true"]')) return
 			e.preventDefault()
-			router.push(help ? '/help' : '/settings')
+			if (help) setDialog('keys')
+			else router.push('/settings')
 		}
 		document.addEventListener('keydown', onKey)
 		return () => document.removeEventListener('keydown', onKey)
-	}, [router])
+	}, [router, setDialog])
 
 	let body: ReactNode
 	if (status === 'loading')
@@ -104,7 +108,7 @@ function ShellBody({ children }: { children: ReactNode }) {
 	// Архив: свои вкладки внутри /archive/<id>, только чтение
 	const ro = data.readonly
 	const base = ro ? `/archive/${ro.householdId}` : ''
-	const shown = ro ? [{ href: base, label: 'Лимиты' }, { href: `${base}/chart`, label: 'График' }, { href: `${base}/logs`, label: 'Логи' }, { href: '/settings/data', label: '← Выход' }] : TABS
+	const shown = ro ? [{ href: base, label: 'Лимиты' }, { href: `${base}/summary`, label: t('nav.summary') }, { href: `${base}/logs`, label: 'Логи' }, { href: '/settings/data', label: '← Выход' }] : TABS
 	const tabs = (mobile: boolean) =>
 		(mobile && !ro ? MOBILE_TABS : (shown as typeof MOBILE_TABS)).map((tab) => (
 			<Link
@@ -113,11 +117,11 @@ function ShellBody({ children }: { children: ReactNode }) {
 				className={
 					mobile
 						? 'flex min-h-[52px] flex-col items-center justify-center gap-1 border-t-2 border-transparent py-1.5 text-[11px] text-muted uppercase aria-[current=page]:border-ink aria-[current=page]:font-bold aria-[current=page]:text-ink'
-						: 'tb'
+						: 'tbox min-h-10 gap-2 px-3 text-muted uppercase aria-[current=page]:border-ink aria-[current=page]:bg-ink aria-[current=page]:font-bold aria-[current=page]:text-panel'
 				}
 				aria-current={pathname === tab.href ? 'page' : undefined}
 			>
-				{mobile && tab.icon && <Icon name={tab.icon} size={20} />}
+				{tab.icon && <Icon name={tab.icon} size={mobile ? 20 : 16} />}
 				{tab.label}
 			</Link>
 		))
@@ -128,7 +132,7 @@ function ShellBody({ children }: { children: ReactNode }) {
 		<div className="mx-auto flex min-h-dvh max-w-280 flex-col sm:block sm:min-h-0">
 			<div className="flex-1 px-4 pt-5 pb-6 sm:px-12 sm:pb-10">
 				<header className="flex flex-nowrap items-center gap-x-6 gap-y-3 pb-4 sm:flex-wrap">
-					<div className="mr-auto min-w-0">
+					<div className="mr-auto min-w-0 sm:mr-0">
 						{/* Бюджет — слева; без выбора (solo, архив) — название приложения */}
 						{switchable && ready ? (
 							<SpaceSwitcher />
@@ -146,11 +150,18 @@ function ShellBody({ children }: { children: ReactNode }) {
 							</p>
 						)}
 					</div>
-					<nav className="hidden flex-wrap gap-2 sm:flex" aria-label="Разделы">
+					<nav className="hidden flex-wrap gap-1 sm:flex" aria-label="Разделы">
 						{tabs(false)}
 					</nav>
-					{/* Тема и настройки — отдельно от вкладок, справа */}
-					<div className="flex shrink-0 items-center gap-2">
+					{/* Палитра, помощь, тема и настройки — отдельно от вкладок, справа */}
+					<div className="flex shrink-0 items-center gap-2 sm:ml-auto">
+						{ready && (
+							<button className="tbox min-h-10 justify-between gap-2.5 px-3 text-muted max-lg:hidden lg:min-w-[220px]" onClick={() => setDialog('palette')}>
+								<Icon name="search" size={16} />
+								<span>{t('palette.open')}</span>
+								<kbd className="kbd">{isMac() ? '⌘ K' : 'Ctrl K'}</kbd>
+							</button>
+						)}
 						<Link
 							href="/help"
 							className="ib aria-[current=page]:text-ink"
@@ -171,12 +182,8 @@ function ShellBody({ children }: { children: ReactNode }) {
 						</Link>
 					</div>
 				</header>
-				{/* Итог: на десктопе — полоса метрик, на мобильном — верх ленты */}
-				{ready ? (
-					<div className="max-sm:hidden"><SpaceSummary desktop /></div>
-				) : (
-					<hr className="dash" />
-				)}
+				{/* Итог бюджета: на десктопе — колонка рядом с лентой, на мобильном — верх ленты */}
+				<hr className={`dash ${ready ? 'max-sm:hidden' : ''}`} />
 				{(offline || queued > 0) && (
 					<p className="mt-3 text-warn uppercase" role="status">
 						{offline ? <Icon name="warning" size={16} className="mr-2" /> : null}
@@ -200,6 +207,8 @@ function ShellBody({ children }: { children: ReactNode }) {
 					</>
 				)}
 			</nav>
+			{ready && dialogs.open === 'palette' && <CommandPalette onClose={() => setDialog(null)} />}
+			{dialogs.open === 'keys' && <Shortcuts onClose={() => setDialog(null)} />}
 			{toastState && (
 				<div
 					role="status"

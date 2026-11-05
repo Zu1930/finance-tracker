@@ -3,6 +3,7 @@
  * Изоляцию обеспечивает реализация: чужой household и чужие личные данные недоступны по построению.
  * Исключение — system: служебные методы до того, как известен пользователь (вход по токену, cron, пуши).
  */
+import type { EditResult } from "../entry-edit.ts";
 import type { RawStore } from "../store.ts";
 import type { TokenRecord } from "../quick-entry/api.ts";
 import type { PlanBulk } from "../plan.ts";
@@ -54,11 +55,17 @@ export interface ExpensesRepo {
   /** В корзину на 10 минут; связь с пунктом плана снимается. null — не найдена */
   remove(ctx: Ctx, scope: Scope, month: string, id: string): Promise<Expense | null>;
   inMonth(ctx: Ctx, scope: Scope, month: string): Promise<Expense[]>;
+  /**
+   * Правка на месте одной транзакцией: seen — запись, как её видел клиент (иначе 409), перенос между бюджетами
+   * и месяцами; смена категории или бюджета отвязывает план и регулярный (lib/entry-edit.ts)
+   */
+  update(ctx: Ctx, scope: Scope, month: string, seen: Expense, next: Expense): Promise<EditResult<Expense>>;
 }
 
 export interface IncomesRepo {
   add(ctx: Ctx, i: Income): Promise<void>;
   remove(ctx: Ctx, month: string, id: string): Promise<Income | null>;
+  update(ctx: Ctx, month: string, seen: Income, next: Income): Promise<EditResult<Income>>;
 }
 
 export interface TrashRepo {

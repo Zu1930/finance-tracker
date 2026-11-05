@@ -90,6 +90,8 @@
 /* > МЕТКА */
 @utility lbl { @apply uppercase text-muted; &::before { content: "> "; content: "> " / ""; } }
 @utility dash { @apply border-0 border-t border-dashed border-line; }
+/* Клавиша в подсказке: ⌘ K, ENTER, ALT 1 */
+@utility kbd { @apply inline-block border border-line px-1 text-[11px] leading-4 font-normal not-italic text-muted uppercase; }
 /* Группа переключателей: на мобильном — равные ячейки на всю ширину, на десктопе — в строку */
 @utility tgroup { @apply grid auto-cols-fr grid-flow-col gap-2 sm:flex sm:flex-wrap; }
 /* Кнопка без квадратных скобок на мобильном (ячейки нижней панели, валюты, категории) */

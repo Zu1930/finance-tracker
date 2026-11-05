@@ -240,7 +240,7 @@ export const CHECKLIST = [
   { id: "categories", title: "Категории и лимиты", action: "Поправить", href: "/limits#categories" },
   { id: "recurring", title: "Обязательные платежи", action: "Добавить", href: "/limits#recurring" },
   { id: "expense", title: "Первая трата", action: "Записать", href: "/?focus=amount" },
-  { id: "savings", title: "Счета и первая сверка", action: "Настроить", href: "/savings" },
+  { id: "savings", title: "Счета и их остатки", action: "Настроить", href: "/savings" },
   { id: "pwa", title: "Приложение на телефоне", action: "Как", href: "/help/install" },
   { id: "voice", title: "Голос и Siri", action: "Включить", href: "/settings/input" },
 ] as const;

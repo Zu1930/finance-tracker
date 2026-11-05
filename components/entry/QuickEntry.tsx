@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
 import { useTracker } from '../TrackerProvider'
 import type { Category, Expense } from '@/lib/types'
 import { parsePhrase, type ParsedEntry, type QuickScope } from '@/lib/quick-entry/parse'
@@ -10,7 +9,7 @@ import { entryProblem, toExpense } from '@/lib/quick-entry/entry'
 import { fmt, minus, termName, todayStr, uid } from '@/lib/utils'
 import { SPACE, glyph } from '@/lib/space'
 import { Icon } from '../icons/Icon'
-import { IconText, Problem, spaceIcon } from '../icons/IconText'
+import { Problem, spaceIcon } from '../icons/IconText'
 import { t } from '@/lib/i18n'
 import { dateLabel } from './EntryForm'
 
@@ -179,12 +178,15 @@ type Props = {
 	onEdit: (p: ParsedEntry) => void
 }
 
-/** Строка «● Голос» над формой на десктопе. Разбор всегда показывается перед записью; доходы, регулярные и плановые здесь не вводятся */
+/**
+ * Командная строка на десктопе: «> кофе 350 и такси 800», под ней разбор существующим парсером, Enter — записать,
+ * Esc — очистить, «/» — фокус в строку. Доходы, регулярные и плановые — в форме ниже
+ */
 export function QuickEntry({ familyCats, personalCats, defaultScope, onEdit }: Props) {
 	const q = useQuickEntry(familyCats, personalCats, defaultScope)
-	const { text, setText, phrase, setPhrase, rows, hide, setPicked, rowErr, other, setOther, listening, hint, inputRef, toggleMic, write, canWrite, catName, st, isSolo } = q
+	const { text, setText, phrase, setPhrase, rows, hide, setPicked, rowErr, listening, hint, inputRef, toggleMic, write, canWrite, catName, st, isSolo } = q
 
-	// «/» — в поле (если фокус не в другом поле), Alt + M — микрофон
+	// «/» — в строку (если фокус не в другом поле), Alt + M — микрофон; ?focus=cmd — из палитры команд
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
 			if (e.altKey && e.code === 'KeyM') {
@@ -200,33 +202,40 @@ export function QuickEntry({ familyCats, personalCats, defaultScope, onEdit }: P
 		document.addEventListener('keydown', onKey)
 		return () => document.removeEventListener('keydown', onKey)
 	})
+	useEffect(() => {
+		const focus = () => inputRef.current?.focus()
+		window.addEventListener(FOCUS_CMD, focus)
+		if (new URLSearchParams(window.location.search).get('focus') === 'cmd') {
+			focus()
+			window.history.replaceState(null, '', window.location.pathname)
+		}
+		return () => window.removeEventListener(FOCUS_CMD, focus)
+	}, [inputRef])
 
 	return (
-		<section className="mb-6" aria-label="Голосовой ввод">
-			<div className="flex items-center gap-3">
-				<button
-					// Без aria-pressed: tbox инвертирует нажатую кнопку, а запись должна быть красной
-					className={`tb mbare h-[52px] w-[52px] shrink-0 sm:h-auto sm:min-h-11 sm:w-auto ${listening ? 'border-bad text-bad hover:bg-transparent' : ''}`}
-					onClick={toggleMic}
-				>
-					{/* REC: микрофон мигает, пока идёт запись; при «уменьшить движение» — просто красный */}
-					<span className={`inline-flex items-center gap-2 ${listening ? 'motion-safe:animate-[rec_1.2s_ease-in-out_infinite]' : ''}`}>
-						<Icon name="mic" size={20} />
-						{listening ? 'Слушаю…' : t('entry.voice')}
-					</span>
-				</button>
-				<span aria-hidden="true" className="text-muted">&gt;</span>
-				<label htmlFor="quick" className="sr-only">Траты одной фразой</label>
+		<section className="flex flex-col gap-3.5" aria-label={t('cmd.title')}>
+			<div className="flex items-baseline justify-between gap-3">
+				<h2 className="sec">{t('cmd.title')}</h2>
+				{!isSolo && <span className="text-right text-xs text-muted uppercase">{t('cmd.default', { x: SPACE[defaultScope].name.toLowerCase() })}</span>}
+			</div>
+			<div className="flex items-center gap-2.5">
+				<b aria-hidden="true" className="text-xl">&gt;</b>
 				<input
 					id="quick"
 					ref={inputRef}
-					className="tfield flex-1"
-					placeholder="кофе 350 и такси 800"
+					className="min-w-0 flex-1 border-b-2 border-ink bg-transparent py-1 text-xl outline-none placeholder:text-dim"
+					aria-label={t('cmd.label')}
+					placeholder={t('cmd.placeholder')}
 					autoComplete="off"
 					enterKeyHint="done"
 					value={text}
 					onChange={(e) => setText(e.target.value)}
 					onKeyDown={(e) => {
+						if (e.key === 'Escape' && text) {
+							e.preventDefault()
+							setText('')
+							return setPhrase('')
+						}
 						if (e.key !== 'Enter') return
 						e.preventDefault()
 						// Разбор отстаёт на 150 мс — Enter сразу после ввода разбирает текущий текст
@@ -234,64 +243,40 @@ export function QuickEntry({ familyCats, personalCats, defaultScope, onEdit }: P
 						else void write()
 					}}
 				/>
-				<span className="hidden text-muted2 uppercase sm:block touch:hidden">Alt + M · /</span>
-				<Link href="/settings/input/siri" className="ib"><Icon name="help" size={20} label={t('voice.help')} /></Link>
+				<button className={`ib ${listening ? 'text-bad motion-safe:animate-[rec_1.2s_ease-in-out_infinite]' : ''}`} onClick={toggleMic}>
+					<Icon name={listening ? 'stop' : 'mic'} size={20} label={listening ? t('voice.stopRec') : t('voice.start')} />
+				</button>
 			</div>
-			{hint === 'keyboard' && <p className="mt-2 text-muted uppercase">Микрофон клавиатуры: нажмите 🎤 на клавиатуре</p>}
-			{hint === 'denied' && <p className="mt-2 uppercase" role="alert"><Problem>Нет доступа к микрофону — разрешите в настройках браузера</Problem></p>}
+			{hint === 'keyboard' && <p className="text-muted uppercase">Микрофон клавиатуры: нажмите 🎤 на клавиатуре</p>}
+			{hint === 'denied' && <p className="uppercase" role="alert"><Problem>Нет доступа к микрофону — разрешите в настройках браузера</Problem></p>}
 
-			{rows.length > 0 && (
+			{rows.length === 0 ? (
+				<p className="text-[13px] text-muted2">{t('cmd.hint')}</p>
+			) : (
 				<>
-					<ul className="mt-3" aria-live="polite">
+					<ul aria-live="polite">
 						{rows.map(({ i, p }) => {
 							const problem = entryProblem(p, st)
 							const unsure = p.categoryConfidence !== 'high'
-							const cat = (
-								<span className={unsure ? 'text-warn' : ''}>
-									{unsure && '? '}
-									{catName(p.categoryId)}
-								</span>
-							)
-							const amount = problem === 'Нет суммы' ? '—' : `−${fmt(p.amount ?? 0)} ${p.currency}`
 							const reason = scopeReasonText(p, defaultScope)
-							const meta = [...(isSolo ? [] : [SPACE[p.scope].name]), dateLabel(p.date), ...(reason ? [reason] : [])]
-							const mark = !isSolo && <Icon name={spaceIcon(p.scope)} size={16} className={`mr-2 ${p.scope === 'personal' ? 'text-muted' : ''}`} />
+							const meta = [dateLabel(p.date), ...(reason ? [reason] : []), ...(p.note ? [p.note] : [])].join(' · ')
 							const err = problem ?? rowErr[i]
-							const cats = p.scope === 'personal' ? personalCats : familyCats
 							return (
-								<li key={i} className="border-b border-dashed border-line2 py-1 uppercase">
-									<div className="flex items-center gap-2">
-										<button className="min-w-0 flex-1 text-left hover:bg-hover" onClick={() => { hide(i); onEdit(p) }} aria-label={`Править вручную: ${p.raw}`}>
-											{/* Мобильный: две строки, как логи */}
-											<span className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 sm:hidden">
-												<span className="truncate">{mark}{cat}</span>
-												<b className="text-right">{amount}</b>
-												<span className="col-span-2 truncate text-xs text-muted">{[...meta, ...(p.note ? [p.note] : [])].join(' · ')}</span>
-											</span>
-											<span className="hidden min-w-0 truncate sm:block">
-												{mark}<b>{amount}</b> → {cat} · {meta.join(' · ')}
-												{p.note && <span className="ml-2 text-muted normal-case">// {p.note}</span>}
-											</span>
+								<li key={i} className="border-b border-dashed border-line2 py-2">
+									<div className="grid grid-cols-[20px_minmax(0,1fr)_auto_auto] items-baseline gap-x-2.5">
+										<span className={p.scope === 'personal' ? 'text-muted' : ''}>{!isSolo && <Icon name={spaceIcon(p.scope)} size={16} />}</span>
+										<button className="min-w-0 text-left uppercase hover:underline" onClick={() => { hide(i); onEdit(p) }} aria-label={`${t('cmd.toForm')}: ${p.raw}`}>
+											<span className={`block truncate ${unsure ? 'text-warn' : ''}`}>{unsure && '? '}{catName(p.categoryId)}</span>
+											<span className="block truncate text-xs text-muted normal-case">{meta}</span>
 										</button>
-										<button className="ib" onClick={() => hide(i)}><Icon name="close" size={20} label={t('voice.removeRow')} /></button>
+										<b>{problem === 'Нет суммы' ? '—' : `−${fmt(p.amount ?? 0)} ${p.currency}`}</b>
+										<button className="ib -my-2" onClick={() => hide(i)}><Icon name="close" size={16} label={t('voice.removeRow')} /></button>
 									</div>
 									{err && <p role="alert"><Problem>{err}</Problem></p>}
 									{unsure && (
-										<div className="mt-1 mb-1 flex flex-wrap gap-2" role="group" aria-label="Категория">
+										<div className="mt-1 flex flex-wrap gap-2" role="group" aria-label="Категория">
 											{p.candidates.map((id) => (
-												<button key={id} className="tb" aria-pressed={p.categoryId === id} onClick={() => setPicked((m) => ({ ...m, [i]: id }))}>
-													{catName(id)}
-												</button>
-											))}
-											<button className="tb" aria-expanded={other === i} onClick={() => setOther(other === i ? null : i)}>Другая</button>
-										</div>
-									)}
-									{other === i && (
-										<div className="mt-1 mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-											{cats.map((c) => (
-												<button key={c.id} className="tbox min-h-11 px-2 py-2 text-left" onClick={() => { setPicked((m) => ({ ...m, [i]: c.id })); setOther(null) }}>
-													<span className="min-w-0 [overflow-wrap:anywhere]">{termName(c.name)}</span>
-												</button>
+												<button key={id} className="tb" aria-pressed={p.categoryId === id} onClick={() => setPicked((m) => ({ ...m, [i]: id }))}>{catName(id)}</button>
 											))}
 										</div>
 									)}
@@ -299,11 +284,17 @@ export function QuickEntry({ familyCats, personalCats, defaultScope, onEdit }: P
 							)
 						})}
 					</ul>
-					<button className="tb mt-3 h-[52px] text-base font-bold max-sm:w-full sm:h-auto sm:px-6 sm:py-2" disabled={!canWrite} onClick={() => void write()}>
-						{rows.length > 1 ? `Записать ${rows.length}` : 'Записать'}
-					</button>
+					<div className="flex items-center justify-between gap-3">
+						<span className="text-xs text-muted uppercase"><kbd className="kbd">Enter</kbd> {t('cmd.write')} · <kbd className="kbd">Esc</kbd> {t('cmd.clear')}</span>
+						<button className="tbox min-h-11 border-ink bg-ink px-4 font-bold text-panel uppercase hover:bg-ink" disabled={!canWrite} onClick={() => void write()}>
+							{t('cmd.writeN', { n: rows.length })}
+						</button>
+					</div>
 				</>
 			)}
 		</section>
 	)
 }
+
+/** Событие «фокус в командную строку» — из палитры команд, когда строка уже на экране */
+export const FOCUS_CMD = 'ft:focus-cmd'
