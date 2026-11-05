@@ -328,13 +328,11 @@ function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave, onPlus, inco
 	const { form } = d
 	const st = form.st
 	const holdTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-	const cleared = useRef(false)
 	const options = kind === 'expense' ? d.cats : d.sources
 	const selected = kind === 'expense' ? d.catId : d.src.id
 	const value = evalExpr(expr)
 
 	const tap = (k: Key) => {
-		if (k === BACKSPACE && cleared.current) return void (cleared.current = false)
 		if (k === '+' && !expr && kind === 'expense') return onPlus()
 		setExpr(press(expr, k))
 		form.setError('')
@@ -367,7 +365,13 @@ function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave, onPlus, inco
 			{onlyYou && <span className="shrink-0 text-muted2"><Icon name="lock" size={16} label={t('space.onlyYouEntry')} /></span>}
 		</span>
 	)
-	const key = 'tbox h-[3.25rem] justify-center text-xl select-none group-data-low:h-11'
+	const key = 'key tbox h-[3.25rem] justify-center text-xl select-none group-data-low:h-11'
+	// Отклик: is-pressed на нажатие (мгновенно), снимается на отпускание/отмену/уход пальца; вибро на Android
+	const press_ = (on: boolean) => (e: React.PointerEvent<HTMLElement>) => {
+		e.currentTarget.classList.toggle('is-pressed', on)
+		if (on) navigator.vibrate?.(8)
+	}
+	const fx = { onPointerDown: press_(true), onPointerUp: press_(false), onPointerCancel: press_(false), onPointerLeave: press_(false), onContextMenu: (e: React.SyntheticEvent) => e.preventDefault() }
 
 	return (
 		<>
@@ -457,17 +461,24 @@ function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave, onPlus, inco
 							<button
 								className={key}
 								aria-label={k === BACKSPACE ? undefined : k === '−' ? 'Минус' : k === '+' ? 'Плюс' : k === ',' ? 'Запятая' : k}
-								onPointerDown={k === BACKSPACE ? () => { cleared.current = false; holdTimer.current = setTimeout(() => { cleared.current = true; setExpr(press(expr, 'clear')) }, 500) } : undefined}
-								onPointerUp={k === BACKSPACE ? () => clearTimeout(holdTimer.current) : undefined}
-								onPointerLeave={k === BACKSPACE ? () => clearTimeout(holdTimer.current) : undefined}
-								onContextMenu={(e) => e.preventDefault()}
-								onClick={() => tap(k)}
+								{...fx}
+								// Символ вводится на нажатие, не на click; ⌫ — стереть один, удержание 500 мс — всё
+								onPointerDown={(e) => {
+									fx.onPointerDown(e)
+									tap(k)
+									if (k === BACKSPACE) holdTimer.current = setTimeout(() => setExpr(''), 500)
+								}}
+								onPointerUp={(e) => { fx.onPointerUp(e); clearTimeout(holdTimer.current) }}
+								onPointerCancel={(e) => { fx.onPointerCancel(e); clearTimeout(holdTimer.current) }}
+								onPointerLeave={(e) => { fx.onPointerLeave(e); clearTimeout(holdTimer.current) }}
+								// Клавиатурный Enter/пробел на сфокусированной клавише (detail 0); касание уже обработано на pointerdown
+								onClick={(e) => e.detail === 0 && tap(k)}
 							>
 								{k === BACKSPACE ? <Icon name="backspace" size={24} label={t('entry.eraseHold')} /> : k}
 							</button>
 							{/* После 9 — «Записать» в четвёртой колонке на две нижние строки */}
 							{k === '9' && (
-								<button className={`${saveKey} row-span-2 flex-col text-[0.8125rem]`} onClick={onSave}>
+								<button className={`key ${saveKey} row-span-2 flex-col text-[0.8125rem]`} {...fx} onClick={onSave}>
 									<Icon name="check" size={24} />
 									Записать
 								</button>

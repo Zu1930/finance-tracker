@@ -155,3 +155,12 @@
 
 /* Тост, пока открыта шторка ввода: сверху под её шапкой (--entry-top ставит шторка), не поверх клавиатуры */
 html:has([data-entry-sheet]) [data-toast] { top: calc(var(--entry-top, 3rem) + 4.25rem); bottom: auto; }
+
+/* Клавиши шторки ввода: мгновенная инверсия на нажатие, плавный возврат; только transform и цвета.
+   Вне @layer — иначе утилиты tbox (transition, text-ink) перебивают */
+.key { touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: transform 120ms ease-out, background-color 120ms ease-out, color 120ms ease-out, border-color 120ms ease-out; }
+.key.is-pressed { background-color: var(--ink); color: var(--panel); transform: scale(0.96); transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .key { transition: none; }
+  .key.is-pressed { transform: none; }
+}
