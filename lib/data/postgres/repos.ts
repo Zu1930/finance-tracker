@@ -41,7 +41,7 @@ const monthRange = (col: typeof s.expenses.date | typeof s.incomes.date, month: 
 /** Транзакционная блокировка по ключу — для документов, строки которых может ещё не быть */
 const lock = (tx: Db, key: string) => tx.execute(sql`select pg_advisory_xact_lock(hashtext(${key}))`);
 
-// ---------- Строки ↔ объекты (строки — и для переноса из Redis: lib/data/migrate.ts) ----------
+// ---------- Строки ↔ объекты ----------
 const toCategory = (r: typeof s.categories.$inferSelect): Category => ({
   id: r.id, name: r.name, limit: r.limit,
   ...(r.archived && { archived: true }), ...(r.since && { since: r.since }), ...(r.archivedFrom && { archivedFrom: r.archivedFrom }), ...(r.history && { history: r.history }),

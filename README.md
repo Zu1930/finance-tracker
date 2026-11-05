@@ -106,8 +106,7 @@ npm run reset-password -- masha@example.com --production
 ## Деплой на Vercel
 
 1. Залейте проект в GitHub и импортируйте репозиторий в Vercel (New Project). Настройки сборки по умолчанию.
-2. В проекте на Vercel: **Storage → Create Database → Upstash for Redis** (Marketplace), бесплатный план,
-   подключите к проекту. Переменные `KV_REST_API_URL` и `KV_REST_API_TOKEN` появятся сами.
+2. В проекте на Vercel: **Storage → Create Database → Neon** (Postgres) и подключите к проекту.
 3. **Settings → Environment Variables**, добавьте:
    - `DATABASE_URL`, `DATABASE_URL_UNPOOLED` — Postgres (появятся сами при подключении Neon через Storage);
    - `BETTER_AUTH_SECRET` — длинная случайная строка (`openssl rand -hex 32`);
