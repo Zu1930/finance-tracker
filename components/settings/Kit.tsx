@@ -46,7 +46,7 @@ export function OnceReveal({ value, until, note, onHide }: { value: string; unti
 export function DangerZone({ title, children, action, href }: { title: string; children: ReactNode; action: string; href: string }) {
 	return (
 		<section className="mt-7 border border-dashed border-bad p-4">
-			<h2 className="text-[13px] font-bold text-bad uppercase">:: {title}</h2>
+			<h2 className="text-[0.8125rem] font-bold text-bad uppercase">:: {title}</h2>
 			<p className="mt-2 text-muted2">{children}</p>
 			<Link href={href} className="tb mt-3 border border-bad text-bad uppercase max-sm:h-11 max-sm:w-full">{action}</Link>
 		</section>

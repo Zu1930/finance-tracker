@@ -26,6 +26,9 @@ const store: QuickStore = {
     return { settings: view.settings, personalCategories: view.mySettings.personalCategories, expenses: visibleExpenses(view) };
   },
   write: async (userId, e) => getRepos().expenses.add(await ctxOfToken(userId), e),
+  writeIncome: async (userId, i) => {
+    if (!(await getRepos().incomes.add(await ctxOfToken(userId), i))) throw new Error(`Доход ${i.id} уже записан другим участником`);
+  },
 };
 
 /**

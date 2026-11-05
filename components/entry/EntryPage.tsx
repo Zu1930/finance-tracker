@@ -9,6 +9,7 @@ import { useNarrow } from '../AsciiBar'
 import { EntryForm, useAltPick, type EntryMode } from './EntryForm'
 import { useEntryDraft } from './useEntryDraft'
 import { MonthFeed } from './MonthFeed'
+import { MiniLimits } from './MiniLimits'
 import { CanSpend, PlanRow } from '../limits/MobileLimits'
 import { Icon } from '../icons/Icon'
 import { Feed } from './Feed'
@@ -21,6 +22,7 @@ import { Hint } from '../onboarding/Hint'
 import type { ParsedEntry } from '@/lib/quick-entry/parse'
 import { IconText } from '../icons/IconText'
 import { t } from '@/lib/i18n'
+import { incomeAllowed, incomeSwitch } from '@/lib/space'
 
 /** Телефон — лента с итогом (ввод — формой поверх неё по «+»), десктоп — ввод, лента месяца и итог рядом */
 export function EntryPage() {
@@ -29,21 +31,25 @@ export function EntryPage() {
 
 /**
  * Ввод трат и поступлений на десктопе. Бюджет — из переключателя в шапке; режим живёт в URL: /?mode=income.
- * Доход — семейный, поэтому только в бюджете «Семья» (и у solo). В «всё вместе» вместо формы — выбор бюджета
+ * Доход — личный, поэтому переключатель «Доход» только в бюджете «Личное» (и у solo). Сумма с «+» или доход из
+ * командной строки в «Семье» переключают бюджет на личный с подсказкой. В «всё вместе» вместо формы — выбор бюджета
  */
 function DesktopEntry() {
 	const { data, isSolo } = useTracker()
 	const { entryScope, readOnly, setSpace } = useSpace()
 	const params = useSearchParams()
 	const scope = entryScope ?? 'family'
-	const incomeOk = isSolo || scope === 'family'
+	const incomeOk = incomeAllowed(scope, isSolo)
 	const mode: EntryMode = params.get('mode') === 'income' && incomeOk ? 'income' : 'expense'
 	const rootRef = useRef<HTMLDivElement>(null)
 	const d = useEntryDraft(scope, mode)
 	const { form } = d
 	const [formOpen, setFormOpen] = useState(!!data.mySettings.hideQuickEntry || mode === 'income')
+	// Доход начат в «Семье» и переключён в «Личное» — объяснить почему
+	const [incomeNote, setIncomeNote] = useState(false)
 
 	const go = (m: EntryMode, focusAmount: boolean) => {
+		if (m === 'expense') setIncomeNote(false)
 		if (m !== mode) {
 			form.setError('')
 			// Без похода на сервер: useSearchParams видит history.replaceState, и переключение работает без связи
@@ -70,10 +76,21 @@ function DesktopEntry() {
 		form.setError('')
 	}, !isSolo)
 
-	// Трата из голосового ввода → обычная форма; у неё может быть другой бюджет
+	/** Доход в «Семье»: бюджет — личный, тип — доход, под переключателем — почему */
+	const toIncome = (focusAmount: boolean) => {
+		const sw = incomeSwitch(scope, isSolo)
+		if (sw.note) {
+			setSpace(sw.scope)
+			setIncomeNote(true)
+		}
+		go('income', focusAmount)
+	}
+
+	// Трата или доход из голосового ввода → обычная форма; у неё может быть другой бюджет
 	const editParsed = (p: ParsedEntry) => {
 		d.fillParsed(p)
 		setFormOpen(true)
+		if (p.kind === 'income') return toIncome(true)
 		if (p.scope !== scope) setSpace(p.scope)
 		go('expense', true)
 	}
@@ -93,7 +110,7 @@ function DesktopEntry() {
 	const cur = curMonthKey()
 	const formBlock = (
 		<details className="border-t border-dashed border-line pt-3" open={formOpen} onToggle={(e) => setFormOpen(e.currentTarget.open)}>
-			<summary className="cursor-pointer text-muted uppercase">:: {t('cmd.form')} <span className="text-[13px] text-muted2 normal-case">{t('cmd.formHint')}</span></summary>
+			<summary className="cursor-pointer text-muted uppercase">:: {t('cmd.form')} <span className="text-[0.8125rem] text-muted2 normal-case">{t('cmd.formHint')}</span></summary>
 			<div ref={rootRef} className="mt-3">
 				<h1 className="sr-only">
 					{mode === 'income' ? 'Новый доход' : isSolo ? 'Новый расход' : scope === 'personal' ? 'Новый личный расход' : 'Новый семейный расход'}
@@ -110,13 +127,14 @@ function DesktopEntry() {
 					)}
 					{!isSolo && scope === 'personal' && <p className="text-muted2"><IconText name="lock">{t('space.onlyYouEntry')}</IconText></p>}
 				</div>
+				{mode === 'income' && incomeNote && <p className="mt-2 text-muted"><IconText name="info">{t('income.personalNote')}</IconText></p>}
 				<EntryForm
 					mode={mode}
 					form={form}
 					options={mode === 'expense' ? d.cats : d.sources}
 					selectedId={mode === 'expense' ? d.catId : d.src.id}
 					onPick={(id) => (mode === 'expense' ? d.setCatId(d.catId === id ? null : id) : d.setSrcId(id))}
-					onPlus={() => incomeOk && go('income', false)}
+					onPlus={() => toIncome(false)}
 					onSubmit={d.submit}
 					extra={<PlanChips d={d} />}
 					empty={
@@ -134,9 +152,9 @@ function DesktopEntry() {
 
 	return (
 		<WithSetupCard>
-			{/* Ввод | лента | колонка 300px; уже 1280px колонка уходит под ленту */}
-			<div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)_300px]">
-				<section aria-label={t('nav.entry')} className="flex min-w-0 flex-col gap-3.5">
+			{/* Ввод | лента | колонка; раскладка по ступеням — .l-entry в app/globals.css */}
+			<div className="l-entry">
+				<section aria-label={t('nav.entry')} className="flex min-w-0 flex-col gap-3.5 [grid-area:entry]">
 					{readOnly ? (
 						<div className="flex flex-col gap-2.5 border border-dashed border-line p-4">
 							<h1><IconText name="view">{t('cmd.readOnly')}</IconText></h1>
@@ -158,12 +176,14 @@ function DesktopEntry() {
 					)}
 				</section>
 				<MonthFeed />
-				<aside aria-label={t('budget.canSpend')} className="flex flex-col gap-4 lg:col-start-2 xl:col-start-auto">
+				<aside aria-label={t('budget.canSpend')} className="flex flex-col gap-4 [grid-area:aside]">
 					<CanSpend month={cur} />
 					{!readOnly && <DueBlock />}
 					<PlanRow month={cur} />
-					<p className="flex gap-2 text-[13px] text-muted2"><Icon name="shortcut" size={16} className="shrink-0" />{t('cmd.keysHint', { k: isMac() ? '⌘ K' : 'Ctrl + K' })}</p>
+					<p className="flex gap-2 text-[0.8125rem] text-muted2"><Icon name="shortcut" size={16} className="shrink-0" />{t('cmd.keysHint', { k: isMac() ? '⌘ K' : 'Ctrl + K' })}</p>
 				</aside>
+				{/* 1920+: четвёртая колонка — мини-лимиты выбранного бюджета */}
+				<MiniLimits className="hidden huge:flex [grid-area:mini]" />
 			</div>
 		</WithSetupCard>
 	)

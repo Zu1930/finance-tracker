@@ -83,6 +83,8 @@ const EMPTY: TrackerData = {
   familyExpenses: {},
   myExpenses: {},
   incomes: {},
+  incomeTotals: {},
+  partnerIncomeDaily: {},
   partnerPersonalTotals: {},
   partnerPersonalDaily: {},
   partnerPlannedDaily: {},

@@ -57,9 +57,26 @@
   --font-mono: var(--font-jetbrains), ui-monospace, "SF Mono", Menlo, monospace;
 }
 
+/*
+ * Ступени ширины десктопа — только здесь. lg 1280 — стандартный xl Tailwind (80rem), его не трогаем:
+ * существующие lg:/xl: остаются как были. Дальше: wide 1600, huge 1920, giant 2400.
+ * Брейкпоинты в rem считаются от 16px браузера, а не от font-size у html, поэтому масштаб ниже их не сдвигает
+ */
+@theme {
+  --breakpoint-wide: 100rem;
+  --breakpoint-huge: 120rem;
+  --breakpoint-giant: 150rem;
+}
+
 @layer base {
   :root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
   html{scroll-padding-top:env(safe-area-inset-top,0px)}
+  /* Масштаб больших экранов: текст тела (text-sm = 0.875rem) 14 → 15 → 16 → 17px; отступы, иконки и размеры в rem растут с ним */
+  @media (width >= 100rem) { html { font-size: 107.142857%; } }
+  @media (width >= 120rem) { html { font-size: 114.285714%; } }
+  @media (width >= 150rem) { html { font-size: 121.428571%; } }
+  /* Текст — не длиннее ~80 символов в строке, даже в широкой колонке */
+  main p { max-width: 72ch; }
   body{@apply bg-panel text-ink font-mono text-sm leading-[1.55] sm:leading-normal tabular-nums min-h-full antialiased}
   /* iOS Safari зумит страницу при фокусе в поле мельче 16px. Утилиты (крупная сумма) перекрывают базовый слой */
   @media (width < 40rem) { input, select, textarea { font-size: 16px; } }
@@ -91,7 +108,7 @@
 @utility lbl { @apply uppercase text-muted; &::before { content: "> "; content: "> " / ""; } }
 @utility dash { @apply border-0 border-t border-dashed border-line; }
 /* Клавиша в подсказке: ⌘ K, ENTER, ALT 1 */
-@utility kbd { @apply inline-block border border-line px-1 text-[11px] leading-4 font-normal not-italic text-muted uppercase; }
+@utility kbd { @apply inline-block border border-line px-1 text-[0.6875rem] leading-4 font-normal not-italic text-muted uppercase; }
 /* Группа переключателей: на мобильном — равные ячейки на всю ширину, на десктопе — в строку */
 @utility tgroup { @apply grid auto-cols-fr grid-flow-col gap-2 sm:flex sm:flex-wrap; }
 /* Кнопка без квадратных скобок на мобильном (ячейки нижней панели, валюты, категории) */
@@ -103,3 +120,32 @@
 
 /* Индикатор записи голосового ввода: мягкое мигание точки */
 @keyframes rec { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+@keyframes side-in { from { transform: translateX(100%); } to { transform: none; } }
+
+/*
+ * Раскладки десктопных страниц — именованные области: на каждой ступени меняется только сетка, разметка та же.
+ * Колонки фиксированной ширины — в px (как в макете), остальное делится fr. До lg (64rem) — одна колонка по порядку разметки
+ */
+@layer components {
+  /* Ввод: ввод | лента | «Можно потратить»; на huge+ — четвёртая колонка мини-лимитов */
+  .l-entry { display: grid; align-items: start; gap: 2rem; grid-template-areas: "entry" "feed" "aside"; }
+  @media (width >= 64rem) { .l-entry { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); grid-template-areas: "entry feed" ". aside"; } }
+  @media (width >= 80rem) { .l-entry { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr) 300px; grid-template-areas: "entry feed aside"; } }
+  @media (width >= 100rem) { .l-entry { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) 340px; } }
+  @media (width >= 120rem) { .l-entry { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) 340px 320px; grid-template-areas: "entry feed aside mini"; } }
+
+  /* Лимиты: на wide+ слева 380px — итог, план, обязательные; справа — категории */
+  @media (width >= 100rem) { .l-limits { display: grid; align-items: start; column-gap: 2.5rem; grid-template-columns: 380px minmax(0, 1fr); grid-template-areas: "side main"; } }
+
+  /* Деньги: всего и цели | счета над «как менялось»; на huge+ — три колонки */
+  .l-money { display: grid; align-items: start; column-gap: 3rem; row-gap: 0.75rem; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto 1fr; grid-template-areas: "main side" "main hist"; }
+  @media (width >= 120rem) { .l-money { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: auto; grid-template-areas: "main side hist"; } }
+
+  /* Итоги: главное | по месяцам над итогами прошлого месяца; на huge+ — третья колонка: итоги и сравнение со средним */
+  .l-summary { display: grid; align-items: start; column-gap: 3rem; row-gap: 1rem; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); grid-template-rows: auto 1fr; grid-template-areas: "main months" "main side"; }
+  @media (width >= 120rem) { .l-summary { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 0.9fr); grid-template-rows: auto; grid-template-areas: "main months side"; } }
+
+  /* Раздел настроек: текст до 72ch; на huge+ справа 320px — подсказка из статьи помощи */
+  .l-doc { display: grid; align-items: start; column-gap: 2.5rem; grid-template-columns: minmax(0, 72ch); grid-template-areas: "main"; }
+  @media (width >= 120rem) { .l-doc:has(> [data-area="help"]) { grid-template-columns: minmax(0, 72ch) 320px; grid-template-areas: "main help"; } }
+}

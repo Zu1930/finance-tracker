@@ -47,7 +47,7 @@ export function WithSetupCard({ children }: { children: ReactNode }) {
 	return (
 		<>
 			<div className="mb-4 lg:hidden">{card(true)}</div>
-			<div className="lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start lg:gap-8">
+			<div className="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-8">
 				<div className="min-w-0">{children}</div>
 				<aside className="sticky top-4 hidden lg:block">{card(false)}</aside>
 			</div>

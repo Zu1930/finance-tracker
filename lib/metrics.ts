@@ -4,7 +4,7 @@
  * Месяцы — ключи YYYY-MM. Только type-импорты: файл запускается напрямую через node --test.
  * Считается по семье: семейные траты + мои личные + личные суммы партнёра + доходы обоих.
  */
-import type { TrackerData } from "./types.ts";
+import type { TrackerData, User } from "./types.ts";
 import { linkedByItem, plannedForecast } from "./plan.ts";
 import { dueNow, occurrences, recurringTotal, type Occurrence } from "./recurring.ts";
 
@@ -38,7 +38,29 @@ function partnerSpent(data: TrackerData, key: string, untilDay?: number): number
 /** Расходы семьи за месяц; untilDay — только записи с 1-го по этот день включительно */
 export const monthExpense = (data: TrackerData, key: string, untilDay?: number) =>
   sumBase(data.familyExpenses[key] ?? [], untilDay) + sumBase(data.myExpenses[key] ?? [], untilDay) + partnerSpent(data, key, untilDay);
-export const monthIncome = (data: TrackerData, key: string, untilDay?: number) => sumBase(data.incomes[key] ?? [], untilDay);
+/**
+ * Доходы бюджета за месяц: мои записи + суммы остальных участников (их записей у меня нет).
+ * В личном бюджете spaceData обнуляет чужие суммы — остаются только мои
+ */
+export const monthIncome = (data: TrackerData, key: string, untilDay?: number) => sumBase(data.incomes[key] ?? [], untilDay) + othersIncome(data, key, untilDay);
+function othersIncome(data: TrackerData, key: string, untilDay?: number): number {
+  if (untilDay !== undefined) return Object.entries(data.partnerIncomeDaily?.[key] ?? {}).reduce((a, [day, v]) => (Number(day) <= untilDay ? a + v : a), 0);
+  return Object.entries(data.incomeTotals?.[key] ?? {}).reduce((a, [id, v]) => (id === data.me.id ? a : a + v), 0);
+}
+/** Участники семьи по порядку вступления (memberIds из /api/data; в архиве — все, кто писал) */
+export function familyMembers(data: TrackerData): User[] {
+  const known = new Map<string, string>(Object.entries(data.names ?? {}));
+  for (const u of [data.me, data.partner]) if (u) known.set(u.id, u.name);
+  const ids = data.memberIds ?? (data.names ? Object.keys(data.names) : [data.me.id, ...(data.partner ? [data.partner.id] : [])]);
+  return ids.map((id) => ({ id, name: known.get(id) ?? "—" }));
+}
+
+/** Доходы каждого участника за месяц: мои — по записям (видны сразу после ввода), остальных — суммами */
+export function incomeByMember(data: TrackerData, key: string): Record<string, number> {
+  const out: Record<string, number> = { ...(data.incomeTotals?.[key] ?? {}) };
+  out[data.me.id] = sumBase(data.incomes[key] ?? []);
+  return out;
+}
 
 const planItems = (data: TrackerData, key: string) => {
   const p = data.plans[key];
@@ -95,10 +117,10 @@ export function completedMonths(today: string, n: number): string[] {
 /** Месяц учитывается в средних, только если в нём есть хоть одна трата или поступление */
 const hasRecords = (data: TrackerData, key: string) =>
   (data.familyExpenses[key]?.length ?? 0) + (data.myExpenses[key]?.length ?? 0) + (data.incomes[key]?.length ?? 0) > 0 ||
-  (data.partnerPersonalTotals[key] ?? 0) > 0;
+  (data.partnerPersonalTotals[key] ?? 0) > 0 || monthIncome(data, key) > 0;
 
-/** expense — все траты, regular — без связанных с планом */
-export type Average = { income: number; expense: number; regular: number; months: number };
+/** expense — все траты, regular — без связанных с планом; incomeBy — средний доход каждого участника (в сумме — income) */
+export type Average = { income: number; incomeBy: Record<string, number>; expense: number; regular: number; months: number };
 
 /** Средние доход и расход за n завершённых месяцев с записями; null — таких месяцев нет */
 export function average(data: TrackerData, today: string, n = 3): Average | null {
@@ -107,7 +129,9 @@ export function average(data: TrackerData, today: string, n = 3): Average | null
   const income = keys.reduce((a, k) => a + monthIncome(data, k), 0);
   const expense = keys.reduce((a, k) => a + monthExpense(data, k), 0);
   const regular = keys.reduce((a, k) => a + monthRegular(data, k), 0);
-  return { income: income / keys.length, expense: expense / keys.length, regular: regular / keys.length, months: keys.length };
+  const incomeBy: Record<string, number> = {};
+  for (const k of keys) for (const [id, v] of Object.entries(incomeByMember(data, k))) incomeBy[id] = (incomeBy[id] ?? 0) + v / keys.length;
+  return { income: income / keys.length, incomeBy, expense: expense / keys.length, regular: regular / keys.length, months: keys.length };
 }
 
 /** (доход − расход) / доход; null при нулевом доходе */

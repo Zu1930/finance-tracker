@@ -17,7 +17,7 @@ function SetupLink({ mobile }: { mobile: boolean }) {
 	if (!ob || ob.status === 'pending' || !ob.dismissed) return null
 	return (
 		<button
-			className={mobile ? 'flex min-h-[52px] w-full items-center gap-3 border-b border-dashed border-line2 text-left uppercase' : 'mt-5 flex min-h-9 w-full items-baseline justify-between gap-3 px-2 py-1.5 text-left uppercase hover:bg-hover'}
+			className={mobile ? 'flex min-h-[3.25rem] w-full items-center gap-3 border-b border-dashed border-line2 text-left uppercase' : 'mt-5 flex min-h-9 w-full items-baseline justify-between gap-3 px-2 py-1.5 text-left uppercase hover:bg-hover'}
 			onClick={() => {
 				patchOnboarding({ dismiss: false })
 				router.push('/')
@@ -57,9 +57,9 @@ function HelpMenu() {
 /** Каркас как у настроек: меню слева на десктопе, текст до 720px */
 export function HelpFrame({ children }: { children: ReactNode }) {
 	return (
-		<div className="sm:grid sm:grid-cols-[260px_1fr] sm:gap-10">
+		<div className="sm:grid sm:grid-cols-[16.25rem_1fr] sm:gap-10">
 			<HelpMenu />
-			<div className="min-w-0 max-w-[720px]">{children}</div>
+			<div className="min-w-0 max-w-[72ch]">{children}</div>
 		</div>
 	)
 }
@@ -73,11 +73,11 @@ export function HelpIndex() {
 	}, [router])
 	return (
 		<div className="sm:hidden">
-			<h1 className="text-[22px] font-bold uppercase">Помощь</h1>
+			<h1 className="text-[1.375rem] font-bold uppercase">Помощь</h1>
 			<ul className="mt-4">
 				{ARTICLES.map((a) => (
 					<li key={a.id}>
-						<Link href={`/help/${a.id}`} className="flex min-h-[52px] items-center gap-3 border-b border-dashed border-line2 uppercase">
+						<Link href={`/help/${a.id}`} className="flex min-h-[3.25rem] items-center gap-3 border-b border-dashed border-line2 uppercase">
 							<span className="flex-1">{articleTitle(a.id, isSolo)}</span>
 							<span aria-hidden="true" className="text-muted">›</span>
 						</Link>
@@ -112,8 +112,8 @@ export function Article({ id, md }: { id: ArticleId; md: string }) {
 			<Link href="/help" className="mb-4 inline-flex min-h-11 items-center gap-2 text-muted uppercase hover:text-ink sm:hidden"><Icon name="back" size={20} />{t('nav.help')}</Link>
 			{blocks.map((b, i) =>
 				b.t === 'h' ? (
-					b.level === 1 ? <h1 key={i} className="text-[22px] font-bold uppercase">{isSolo && id === 'family' ? articleTitle(id, true) : <InlineText parts={b.text} />}</h1>
-					: <h2 key={i} className="sec mt-7 text-[13px]"><InlineText parts={b.text} /></h2>
+					b.level === 1 ? <h1 key={i} className="text-[1.375rem] font-bold uppercase">{isSolo && id === 'family' ? articleTitle(id, true) : <InlineText parts={b.text} />}</h1>
+					: <h2 key={i} className="sec mt-7 text-[0.8125rem]"><InlineText parts={b.text} /></h2>
 				)
 				: b.t === 'p' ? <p key={i} className="mt-3 max-w-[64ch]"><InlineText parts={b.text} /></p>
 				: (() => {
@@ -126,5 +126,25 @@ export function Article({ id, md }: { id: ArticleId; md: string }) {
 				})(),
 			)}
 		</article>
+	)
+}
+
+/**
+ * Подсказка к разделу настроек (колонка справа на 1920+): текст статьи помощи без заголовка, мельче и приглушённо,
+ * со ссылкой на статью целиком
+ */
+export function HelpAside({ id, md }: { id: ArticleId; md: string }) {
+	const { isSolo } = useTracker()
+	const blocks = parseMarkdown(forAudience(md, isSolo)).filter((b) => b.t !== 'h' || b.level > 1)
+	return (
+		<aside data-area="help" aria-label={t('nav.help')} className="hidden flex-col gap-2 border-l border-dashed border-line pl-5 text-[0.8125rem] text-muted [grid-area:help] huge:flex">
+			<h2 className="sec">{articleTitle(id, isSolo)}</h2>
+			{blocks.map((b, i) =>
+				b.t === 'h' ? <h3 key={i} className="mt-2 font-bold uppercase"><InlineText parts={b.text} /></h3>
+				: b.t === 'p' ? <p key={i}><InlineText parts={b.text} /></p>
+				: <ul key={i} className="list-['–_'] space-y-1 pl-5">{b.items.map((it, k) => <li key={k}><InlineText parts={it} /></li>)}</ul>
+			)}
+			<Link href={`/help/${id}`} className="mt-1 uppercase underline underline-offset-4 hover:text-ink">{t('help.readAll')}</Link>
+		</aside>
 	)
 }

@@ -7,7 +7,8 @@ import type { Expense, Income } from "@/lib/types";
 /**
  * Удаление: ?kind=expense|income&scope=family|personal&month=YYYY-MM.
  * Личная трата ищется только у текущего пользователя — чужую удалить нельзя.
- * Семейные траты и доходы может удалить любой из двоих: бюджет общий. Связь с пунктом плана снимается
+ * Семейные траты может удалить любой из двоих: бюджет общий. Доход — личный: удалить может только автор (403).
+ * Связь с пунктом плана снимается
  */
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await requireUser(req);
@@ -19,9 +20,12 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     return NextResponse.json({ error: "Неверные параметры." }, { status: 400 });
   }
   try {
-    const entry = kind === "income"
-      ? await getRepos().incomes.remove(ctx, month, id)
-      : await getRepos().expenses.remove(ctx, scope === "personal" ? "personal" : "family", month, id);
+    if (kind === "income") {
+      const r = await getRepos().incomes.remove(ctx, month, id);
+      if (!r.ok) return NextResponse.json({ error: r.status === 403 ? "Чужой доход удалить нельзя." : "Запись не найдена." }, { status: r.status });
+      return NextResponse.json({ entry: r.entry });
+    }
+    const entry = await getRepos().expenses.remove(ctx, scope === "personal" ? "personal" : "family", month, id);
     if (!entry) return NextResponse.json({ error: "Запись не найдена." }, { status: 404 });
     return NextResponse.json({ entry });
   } catch (e) {
@@ -32,7 +36,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
 
 /**
  * Правка на месте: { kind, scope, month, seen, entry }. seen — запись, как её видел клиент: изменилась — 409.
- * Права — как на удаление (личная ищется только у текущего пользователя); перенести между семьёй и личным может
+ * Права — как на удаление (личная трата ищется только у текущего пользователя, доход меняет только автор); перенести между семьёй и личным может
  * только автор. Смена категории или бюджета отвязывает трату от пункта плана и регулярного платежа
  */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {

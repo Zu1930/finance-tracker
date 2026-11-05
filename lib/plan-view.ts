@@ -89,6 +89,8 @@ export type WizardInput = {
   withIncome: boolean;
   incomeOverride: number | null;
   average: number | null;
+  /** Средний доход каждого участника — подсказка «Среднее за 3 месяца: Влад X, Маша Y» */
+  averageBy: Record<string, number> | null;
   /** Категории scope, действующие в месяце */
   cats: Category[];
   /** Поправки лимитов месяца из документа scope */
@@ -137,6 +139,7 @@ export function wizardInput(d: TrackerData, scope: Scope, solo: boolean, month: 
     month, scope, withIncome,
     incomeOverride: withIncome ? plan.incomeOverride : null,
     average: withIncome ? (average(d, today)?.income ?? null) : null,
+    averageBy: withIncome ? (average(d, today)?.incomeBy ?? null) : null,
     cats,
     overrides: fam ? plan.familyOverrides : plan.myOverrides,
     familyOverrides: plan.familyOverrides,

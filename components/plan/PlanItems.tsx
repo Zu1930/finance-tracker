@@ -124,12 +124,12 @@ function NewItem({ month }: { month: string }) {
 	return (
 		<div className="mt-4">
 			<div className="flex flex-wrap items-end gap-x-6 gap-y-3">
-				<div className="flex min-w-[200px] flex-[2_1_200px] items-center gap-3">
+				<div className="flex min-w-[12.5rem] flex-[2_1_12.5rem] items-center gap-3">
 					<label htmlFor="item-name" className="lbl">Name</label>
 					<input id="item-name" className="tfield flex-1" placeholder="например, пылесос" value={name}
 						onChange={(e) => setName(e.target.value)} onKeyDown={onEnter} />
 				</div>
-				<div className="flex min-w-[160px] flex-[1_1_160px] items-center gap-3">
+				<div className="flex min-w-[10rem] flex-[1_1_10rem] items-center gap-3">
 					<label htmlFor="item-sum" className="lbl">Sum</label>
 					<input id="item-sum" className="tfield flex-1 text-right" inputMode="decimal" placeholder={st.base} value={sum}
 						onChange={(e) => setSum(amountChars(e.target.value))} onKeyDown={onEnter} />

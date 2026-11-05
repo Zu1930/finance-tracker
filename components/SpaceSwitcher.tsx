@@ -77,7 +77,7 @@ export function SpaceSwitcher() {
 						ref={boxRef}
 						role="dialog"
 						aria-label={t('space.budget')}
-						className="fixed inset-x-0 top-0 z-40 flex flex-col gap-1 border-b border-ink bg-panel p-4 pt-[calc(16px+env(safe-area-inset-top,0px))] sm:absolute sm:top-full sm:right-auto sm:left-0 sm:mt-2 sm:w-[420px] sm:border sm:pt-4"
+						className="fixed inset-x-0 top-0 z-40 flex flex-col gap-1 border-b border-ink bg-panel p-4 pt-[calc(1rem+env(safe-area-inset-top,0rem))] sm:absolute sm:top-full sm:right-auto sm:left-0 sm:mt-2 sm:w-[26.25rem] sm:border sm:pt-4"
 					>
 						<div className="mb-1 flex items-center justify-between">
 							<b className="uppercase">:: {t('space.choose')}</b>
@@ -87,7 +87,7 @@ export function SpaceSwitcher() {
 							<button
 								key={s}
 								aria-pressed={space === s}
-								className="tbox grid min-h-16 grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-x-3 px-3 py-2 text-left normal-case"
+								className="tbox grid min-h-16 grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-x-3 px-3 py-2 text-left normal-case"
 								onClick={() => pick(s)}
 							>
 								<Icon name={spaceIcon(s)} size={20} />

@@ -116,7 +116,7 @@ function ShellBody({ children }: { children: ReactNode }) {
 				href={tab.href}
 				className={
 					mobile
-						? 'flex min-h-[52px] flex-col items-center justify-center gap-1 border-t-2 border-transparent py-1.5 text-[11px] text-muted uppercase aria-[current=page]:border-ink aria-[current=page]:font-bold aria-[current=page]:text-ink'
+						? 'flex min-h-[3.25rem] flex-col items-center justify-center gap-1 border-t-2 border-transparent py-1.5 text-[0.6875rem] text-muted uppercase aria-[current=page]:border-ink aria-[current=page]:font-bold aria-[current=page]:text-ink'
 						: 'tbox min-h-10 gap-2 px-3 text-muted uppercase aria-[current=page]:border-ink aria-[current=page]:bg-ink aria-[current=page]:font-bold aria-[current=page]:text-panel'
 				}
 				aria-current={pathname === tab.href ? 'page' : undefined}
@@ -128,8 +128,10 @@ function ShellBody({ children }: { children: ReactNode }) {
 	const ready = status === 'ready' && !!data.settings && !ro
 
 	return (
-		// Мобильный: колонка на всю высоту экрана, нижняя панель вкладок прилипает к низу
-		<div className="mx-auto flex min-h-dvh max-w-280 flex-col sm:block sm:min-h-0">
+		// Мобильный: колонка на всю высоту экрана, нижняя панель вкладок прилипает к низу.
+		// Десктоп: панель 1120 → 1440 (wide) → 1840 (huge) → 2200 (giant), в px — не растёт с масштабом шрифта; поля страницы 24 / 32 / 40
+		<div className="xl:px-6 wide:px-8 huge:px-10">
+		<div className="mx-auto flex min-h-dvh max-w-280 flex-col sm:block sm:min-h-0 wide:max-w-[1440px] huge:max-w-[1840px] giant:max-w-[2200px]">
 			<div className="flex-1 px-4 pt-5 pb-6 sm:px-12 sm:pb-10">
 				<header className="flex flex-nowrap items-center gap-x-6 gap-y-3 pb-4 sm:flex-wrap">
 					<div className="mr-auto min-w-0 sm:mr-0">
@@ -156,7 +158,7 @@ function ShellBody({ children }: { children: ReactNode }) {
 					{/* Палитра, помощь, тема и настройки — отдельно от вкладок, справа */}
 					<div className="flex shrink-0 items-center gap-2 sm:ml-auto">
 						{ready && (
-							<button className="tbox min-h-10 justify-between gap-2.5 px-3 text-muted max-lg:hidden lg:min-w-[220px]" onClick={() => setDialog('palette')}>
+							<button className="tbox min-h-10 justify-between gap-2.5 px-3 text-muted max-lg:hidden lg:min-w-[13.75rem]" onClick={() => setDialog('palette')}>
 								<Icon name="search" size={16} />
 								<span>{t('palette.open')}</span>
 								<kbd className="kbd">{isMac() ? '⌘ K' : 'Ctrl K'}</kbd>
@@ -195,7 +197,7 @@ function ShellBody({ children }: { children: ReactNode }) {
 				<main className="pt-6"><HintsProvider>{body}</HintsProvider></main>
 			</div>
 			<nav
-				className={`sticky bottom-0 z-10 grid items-end border-t border-line bg-panel pb-[env(safe-area-inset-bottom,0px)] sm:hidden ${ro || !ready ? 'grid-cols-4' : 'grid-cols-[1fr_1fr_84px_1fr_1fr]'}`}
+				className={`sticky bottom-0 z-10 grid items-end border-t border-line bg-panel pb-[env(safe-area-inset-bottom,0rem)] sm:hidden ${ro || !ready ? 'grid-cols-4' : 'grid-cols-[1fr_1fr_5.25rem_1fr_1fr]'}`}
 				aria-label="Разделы"
 			>
 				{ro || !ready ? tabs(true) : (
@@ -214,7 +216,7 @@ function ShellBody({ children }: { children: ReactNode }) {
 					role="status"
 					key={toastState.id}
 					// Мобильный: над нижней панелью и кнопкой «+» (52px + 26px + отступ + safe-area), на всю ширину минус поля
-					className="fixed inset-x-4 bottom-[calc(92px+env(safe-area-inset-bottom,0px))] z-50 flex flex-wrap items-center gap-x-6 gap-y-1 bg-ink px-4 py-2 text-panel uppercase sm:inset-x-auto sm:bottom-[calc(16px+env(safe-area-inset-bottom,0px))] sm:left-1/2 sm:w-max sm:max-w-[calc(100%-32px)] sm:-translate-x-1/2"
+					className="fixed inset-x-4 bottom-[calc(5.75rem+env(safe-area-inset-bottom,0rem))] z-50 flex flex-wrap items-center gap-x-6 gap-y-1 bg-ink px-4 py-2 text-panel uppercase sm:inset-x-auto sm:bottom-[calc(1rem+env(safe-area-inset-bottom,0rem))] sm:left-1/2 sm:w-max sm:max-w-[calc(100%-2rem)] sm:-translate-x-1/2"
 				>
 					<span>&gt; {toastState.msg}</span>
 					{toastState.actionLabel && (
@@ -230,6 +232,7 @@ function ShellBody({ children }: { children: ReactNode }) {
 					)}
 				</div>
 			)}
+		</div>
 		</div>
 	)
 }

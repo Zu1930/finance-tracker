@@ -5,7 +5,7 @@ import { useTracker } from '../TrackerProvider'
 import { inField } from '../SpaceProvider'
 import { Problem } from '../icons/IconText'
 import { useNarrow } from '../AsciiBar'
-import { amountChars, ddmm, fmt, numIn, parseAmount, parseRate, termName, todayStr } from '@/lib/utils'
+import { amountChars, ddmm, fmt, numIn, parseAmount, parseRate, todayStr } from '@/lib/utils'
 
 /** На мобильном фокус в сумму сам не переводим: выскочит клавиатура и закроет форму */
 const isDesktop = () => window.matchMedia('(min-width: 640px)').matches
@@ -27,18 +27,16 @@ export type EntryMode = 'expense' | 'income'
 /** Что в форме зависит от режима */
 const MODE_UI: Record<
 	EntryMode,
-	{ amountLabel: string; optionsTitle: string; grid: string; notePlaceholder: string }
+	{ amountLabel: string; optionsTitle: string; notePlaceholder: string }
 > = {
 	expense: {
 		amountLabel: 'Amount −',
 		optionsTitle: 'Category',
-		grid: 'grid-cols-2 sm:grid-cols-4',
 		notePlaceholder: 'необязательно'
 	},
 	income: {
 		amountLabel: 'Amount +',
 		optionsTitle: 'Source',
-		grid: 'grid-cols-2 sm:grid-cols-5',
 		notePlaceholder: 'например: аванс, проект, возврат'
 	}
 }
@@ -228,23 +226,21 @@ export function EntryForm({
 		}
 	}
 
+	// Размеры — от ширины колонки, где стоит форма (свёрнутая форма на десктопе бывает уже 360px), а не от экрана
 	return (
-		<>
+		<div className="@container">
 			<div className="mt-6 flex flex-wrap items-end gap-x-6 gap-y-3">
-				<div className="flex min-w-0 flex-[1_1_280px] items-baseline gap-4">
+				<div className="flex w-full min-w-0 flex-col gap-1 @min-[480px]:w-auto @min-[480px]:flex-[1_1_17.5rem] @min-[480px]:flex-row @min-[480px]:items-baseline @min-[480px]:gap-4">
 					<label
 						htmlFor="amount"
-						className="lbl shrink-0 font-bold text-ink max-sm:sr-only sm:text-[28px]"
+						className="lbl shrink-0 text-base font-bold text-ink @min-[480px]:text-[1.75rem]"
 					>
 						{ui.amountLabel}
 					</label>
-					<span aria-hidden="true" className="shrink-0 text-[26px] leading-none font-bold sm:hidden">
-						{mode === 'expense' ? '−' : '+'}
-					</span>
 					<input
 						id="amount"
 						ref={amountRef}
-						className="tfield min-h-0 w-0 flex-1 border-b-2 border-ink pt-0 pb-1 text-[40px] leading-none font-bold sm:text-[44px]"
+						className="tfield min-h-0 w-full flex-1 border-b-2 border-ink pt-0 pb-1 text-[2.5rem] leading-none font-bold sm:text-[2.75rem]"
 						inputMode="decimal"
 						autoComplete="off"
 						placeholder="0"
@@ -257,15 +253,16 @@ export function EntryForm({
 						onKeyDown={onEnter}
 					/>
 				</div>
+				{/* Валюты переносятся на новую строку целиком и не сжимаются */}
 				<div
-					className="tgroup max-sm:w-full"
+					className="flex shrink-0 flex-wrap gap-2"
 					role="group"
 					aria-label="Валюта"
 				>
 					{st.currencies.map((c) => (
 						<button
 							key={c}
-							className="tb tb-tight mbare h-11 sm:h-auto"
+							className="tb tb-tight shrink-0"
 							aria-pressed={c === currency}
 							onClick={() => form.setCur(c)}
 						>
@@ -304,12 +301,14 @@ export function EntryForm({
 			{options.length === 0 && empty ? (
 				<div className="mt-3">{empty}</div>
 			) : (
-			<div className={`mt-3 grid gap-2 ${ui.grid}`}>
+			<div className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(8.75rem,1fr))] items-stretch gap-2">
 				{options.map((o, i) => (
 					<button
 						key={o.id}
 						aria-pressed={o.id === selectedId}
-						className="tbox min-h-11 gap-2 px-2 py-2 text-left sm:px-3"
+						title={o.name}
+						aria-label={o.name}
+						className="tbox min-h-11 gap-2 px-2 py-2 text-left @min-[480px]:px-3"
 						onClick={() => {
 							onPick(o.id)
 							form.setError('')
@@ -319,13 +318,14 @@ export function EntryForm({
 						{i < 9 && (
 							<span
 								aria-hidden="true"
-									className="shrink-0 max-sm:hidden touch:hidden"
-								>
-									[{i + 1}]
+								className="hidden shrink-0 @min-[480px]:inline touch:hidden"
+							>
+								[{i + 1}]
 							</span>
 						)}
-						<span className="min-w-0 [overflow-wrap:anywhere]">
-							{termName(o.name)}
+						{/* С пробелами, перенос только по словам, не больше двух строк */}
+						<span className="line-clamp-2 min-w-0 text-ellipsis break-normal hyphens-none">
+							{o.name.trim()}
 						</span>
 					</button>
 				))}
@@ -334,7 +334,7 @@ export function EntryForm({
 			{extra}
 
 			<div className="mt-8 flex flex-wrap items-end gap-x-6 gap-y-4">
-				<div className="flex min-w-[240px] flex-[2_1_240px] items-center gap-3">
+				<div className="flex min-w-[15rem] flex-[2_1_15rem] items-center gap-3">
 					<label
 						htmlFor="note"
 						className="lbl max-sm:sr-only"
@@ -351,10 +351,10 @@ export function EntryForm({
 						onKeyDown={onEnter}
 					/>
 				</div>
-				<div className={`flex-[1_1_200px] items-center gap-3 ${showDate ? 'flex' : 'max-sm:sr-only sm:flex'}`}>
+				<div className={`flex-[1_1_12.5rem] items-center gap-3 ${showDate ? 'flex' : 'max-sm:sr-only sm:flex'}`}>
 					<label
 						htmlFor="date"
-						className="lbl"
+						className="lbl shrink-0 whitespace-nowrap"
 					>
 						Date
 					</label>
@@ -378,14 +378,14 @@ export function EntryForm({
 				</div>
 			</div>
 			{/* Мобильный: кнопка с датой прилипает над нижней панелью, пока видна форма */}
-			<div className="sticky bottom-[calc(52px+env(safe-area-inset-bottom,0px))] z-[5] -mx-4 mt-4 bg-panel px-4 pt-1 pb-3 sm:hidden">
+			<div className="sticky bottom-[calc(3.25rem+env(safe-area-inset-bottom,0rem))] z-[5] -mx-4 mt-4 bg-panel px-4 pt-1 pb-3 sm:hidden">
 				<div className="flex justify-end">
 					<button className="min-h-11 text-xs text-muted uppercase underline underline-offset-4" onClick={pickDate}>
 						Другая дата
 					</button>
 				</div>
 				<button
-					className="tb h-[52px] w-full text-base font-bold"
+					className="tb h-[3.25rem] w-full text-base font-bold"
 					onClick={onSubmit}
 				>
 					{submitLabel}
@@ -397,6 +397,6 @@ export function EntryForm({
 			>
 				<Problem>{form.error.replace(/\.$/, '')}</Problem>
 			</p>
-		</>
+		</div>
 	)
 }

@@ -13,8 +13,8 @@ import type { Account, ReconView } from '@/lib/types'
 import { amountChars, ddmm, fmt, incomeSources, liveCats, localDay, numIn, parseAmount, signed, termName, todayStr, uid } from '@/lib/utils'
 
 const PARAM = 'balances'
-const H2 = 'text-[22px] leading-tight font-bold outline-none'
-const HINT = 'text-[13px] text-muted2'
+const H2 = 'text-[1.375rem] leading-tight font-bold outline-none'
+const HINT = 'text-[0.8125rem] text-muted2'
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', ',', '0', 'del']
 
 /** Счета, которые пользователь может обновить: семейные и свои личные, не в архиве — как в сверке на сервере */
@@ -95,7 +95,7 @@ function CheckResult({ r, prevDay, busy, head, onFix, onDone, targets }: {
 			<h2 ref={head} tabIndex={-1} className={H2}>{title}</h2>
 			<p className={HINT} role="status">{text}</p>
 			{v.kind !== 'first' && (
-				<div className="grid grid-cols-[20px_minmax(0,1fr)_auto] items-baseline gap-x-2.5 gap-y-1.5">
+				<div className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto] items-baseline gap-x-2.5 gap-y-1.5">
 					<span aria-hidden="true">+</span><span>{t('money.cameSince', { d: prevDay ? ddmm(prevDay) : '—' })}</span><b className="text-right">+{fmt(r.income ?? 0)}</b>
 					<span aria-hidden="true">−</span><span>{t('money.spentSince')}</span><b className="text-right">−{fmt(r.expense ?? 0)}</b>
 					<span aria-hidden="true" className={`${line} border-line`}>=</span><span className={`${line} border-line`}>{t('money.shouldGrow')}</span><b className={`${line} border-line text-right`}>{signed(r.expected ?? 0)}</b>
@@ -199,18 +199,18 @@ export function UpdateSheet({ onClose }: { onClose: () => void }) {
 						<h2 ref={head} tabIndex={-1} className={H2}>{t('money.howMuch', { x: a.name.toLowerCase() })}</h2>
 						<span className="text-xs text-muted uppercase">{t('money.was', { x: `${fmt(a.balance)} ${a.currency}`, d: ddmm(localDay(a.updatedAt)) })}</span>
 						<p className="py-3 text-center" aria-live="polite">
-							<b className={`text-[44px] leading-tight ${entry ? '' : 'text-dim'}`}>{entry ? grouped(entry) : fmt(vals[a.id] ?? a.balance)}</b>{' '}
+							<b className={`text-[2.75rem] leading-tight ${entry ? '' : 'text-dim'}`}>{entry ? grouped(entry) : fmt(vals[a.id] ?? a.balance)}</b>{' '}
 							<span className="text-base text-muted">{a.currency}</span>
 						</p>
 						<div className="mt-auto grid grid-cols-3 gap-1.5">
 							{KEYS.map((k) => (
-								<button key={k} className="tbox min-h-[52px] justify-center text-xl" onClick={() => press(k)} aria-label={k === 'del' ? t('entry.erase') : k}>
+								<button key={k} className="tbox min-h-[3.25rem] justify-center text-xl" onClick={() => press(k)} aria-label={k === 'del' ? t('entry.erase') : k}>
 									{k === 'del' ? <Icon name="backspace" size={20} /> : k}
 								</button>
 							))}
 						</div>
 						<div className="grid grid-cols-2 gap-1.5">
-							<button className={`${BTN} min-h-[52px] uppercase`} disabled={c.busy} onClick={() => commit(a.balance)}>{t('money.same')}</button>
+							<button className={`${BTN} min-h-[3.25rem] uppercase`} disabled={c.busy} onClick={() => commit(a.balance)}>{t('money.same')}</button>
 							<button className={`${PRIMARY} uppercase`} disabled={c.busy || (entry !== '' && typed === null)} onClick={() => commit(typed ?? vals[a.id] ?? a.balance)}>
 								{i + 1 < n ? t('money.next') : t('money.toCheck')}
 							</button>

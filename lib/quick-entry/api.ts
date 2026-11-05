@@ -2,11 +2,11 @@
  * POST /api/quick для Siri / Быстрых команд: токены и обработчик без Redis — хранилище передаётся снаружи,
  * поэтому обработчик проверяется тестами (api.test.mjs) на хранилище в памяти
  */
-import type { Category, Expense, Settings } from "../types.ts";
-import { activeCats, fmt, liveCats, minus, safeEqual, uid } from "../utils.ts";
+import type { Category, Expense, Income, Settings } from "../types.ts";
+import { activeCats, fmt, incomeSources, liveCats, minus, safeEqual, uid } from "../utils.ts";
 import { parsePhrase, type ParsedEntry } from "./parse.ts";
 import { buildDictionary } from "./dictionary.ts";
-import { entryProblem, toExpense, tratyWord } from "./entry.ts";
+import { entryProblem, toExpense, toIncome, tratyWord } from "./entry.ts";
 
 /** ft:u:<userId>:tokens, поле = id токена. Сам токен не хранится — только SHA-256 */
 export type TokenRecord = { name: string; hash: string; createdAt: string; lastUsedAt: string | null };
@@ -30,6 +30,8 @@ export type QuickStore = {
   /** Видимое пользователю: настройки, его личные категории, семейные траты обоих и его личные */
   context: (userId: string) => Promise<{ settings: Settings | null; personalCategories: Category[]; expenses: Expense[] }>;
   write: (userId: string, e: Expense) => Promise<void>;
+  /** Доход — всегда личный владельца токена */
+  writeIncome: (userId: string, i: Income) => Promise<void>;
 };
 
 type Reply = { status: number; body: Record<string, unknown> };
@@ -66,19 +68,38 @@ export async function handleQuick(auth: string | null, body: unknown, store: Qui
     dictionary: buildDictionary(expenses, today),
     // Для Siri текущий бюджет — семья; у solo семейных категорий нет — личное
     defaultScope: family.length ? "family" : "personal",
+    incomeSources: incomeSources(st),
   });
   if (!entries.length) return { status: 200, body: { ok: false, summary: "Не расслышал трату.", entries } };
   const problems = entries.map((p) => problemOf(p, st)).filter(Boolean);
   if (problems.length) return { status: 200, body: { ok: false, summary: `${problems.join(". ")}.`, entries } };
 
-  const cats = [...family, ...personal];
+  const names = new Map([...family, ...personal, ...incomeSources(st)].map((c) => [c.id, c.name.toUpperCase()]));
   if (!b.commit) {
-    const list = entries.map((p) => `−${fmt(p.amount!)} ${p.currency} ${cats.find((c) => c.id === p.categoryId)!.name.toUpperCase()} (${p.scope === "personal" ? "личное" : "семья"})`);
+    const list = entries.map((p) => p.kind === "income"
+      ? `+${fmt(p.amount!)} ${p.currency} ${names.get(p.categoryId!)} (доход, личное)`
+      : `−${fmt(p.amount!)} ${p.currency} ${names.get(p.categoryId!)} (${p.scope === "personal" ? "личное" : "семья"})`);
     return { status: 200, body: { ok: true, summary: `${list.join(", ")}. Записать?`, entries } };
   }
-  // Разобрано заново и без ошибок — пишем от имени владельца токена
-  const written = entries.map((p, i) => toExpense(p, st, userId, uid(), now.getTime() + i)!);
-  for (const e of written) await store.write(userId, e);
-  const sum = written.reduce((s, e) => s + e.base, 0);
-  return { status: 200, body: { ok: true, summary: `Записано: ${written.length} ${tratyWord(written.length)}, ${minus(sum)} ${st.base}`, entries } };
+  // Разобрано заново и без ошибок — пишем от имени владельца токена; доход — его личный
+  const spent: Expense[] = [];
+  let got = 0;
+  for (const [i, p] of entries.entries()) {
+    const id = uid(), ts = now.getTime() + i;
+    if (p.kind === "income") {
+      const inc = toIncome(p, st, userId, id, ts)!;
+      await store.writeIncome(userId, inc);
+      got += inc.base;
+    } else {
+      const e = toExpense(p, st, userId, id, ts)!;
+      await store.write(userId, e);
+      spent.push(e);
+    }
+  }
+  const sum = spent.reduce((s, e) => s + e.base, 0);
+  const parts = [
+    ...(spent.length ? [`${spent.length} ${tratyWord(spent.length)}, ${minus(sum)} ${st.base}`] : []),
+    ...(got ? [`доход +${fmt(got)} ${st.base}`] : []),
+  ];
+  return { status: 200, body: { ok: true, summary: `Записано: ${parts.join("; ")}`, entries } };
 }

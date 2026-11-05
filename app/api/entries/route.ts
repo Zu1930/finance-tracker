@@ -6,7 +6,7 @@ import { prepareEntry, type Kind } from "@/lib/store";
 import type { Expense, Income } from "@/lib/types";
 
 /**
- * Новая запись: { kind, entry }. Автор — из сессии, личная трата — в данных автора.
+ * Новая запись: { kind, entry }. Автор — из сессии, личная трата и доход — в данных автора.
  * Трата с planItemId: пункт ищется в её scope и месяце у пользователя сессии, совпадение категории
  * проверяется; трата и её id в пункте пишутся атомарно
  */
@@ -20,8 +20,9 @@ export async function POST(req: Request) {
   if (!entry) return NextResponse.json({ error: "Некорректная запись." }, { status: 400 });
   const repos = getRepos();
   try {
+    // Доход всегда личный: автор и владелец — пользователь сессии, scope от клиента не принимается
     if (kind === "income") {
-      await repos.incomes.add(ctx, entry as Income);
+      if (!(await repos.incomes.add(ctx, entry as Income))) return NextResponse.json({ error: "Нет доступа." }, { status: 403 });
       return NextResponse.json({ entry });
     }
     const e = entry as Expense;

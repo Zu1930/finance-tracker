@@ -131,6 +131,7 @@ export type RawStore = {
 
 export const EMPTY_SAVINGS: RawSavings = { accounts: {}, userAccounts: {}, goals: {}, userGoals: {}, recons: [] };
 
+const r2 = (x: number) => Math.round(x * 100) / 100;
 const byDate = <T extends { date: string; ts: number }>(a: T, b: T) => a.date.localeCompare(b.date) || a.ts - b.ts;
 const EMPTY_USER: UserSettings = { personalCategories: [], version: 0 };
 const NOBODY: User = { id: "", name: "" };
@@ -152,6 +153,8 @@ export function buildView(raw: RawStore, me: User, partnerOrNull: User | null, c
     familyExpenses: {},
     myExpenses: {},
     incomes: {},
+    incomeTotals: {},
+    partnerIncomeDaily: {},
     partnerPersonalTotals: {},
     partnerPersonalDaily: {},
     partnerPlannedDaily: {},
@@ -168,7 +171,21 @@ export function buildView(raw: RawStore, me: User, partnerOrNull: User | null, c
     if (!k) continue;
     const items = Object.values(hash ?? {});
     if (k.kind === "family") view.familyExpenses[k.month] = (items as Expense[]).sort(byDate);
-    else if (k.kind === "incomes") view.incomes[k.month] = (items as Income[]).sort(byDate);
+    else if (k.kind === "incomes") {
+      // Доходы личные: записи — только мои; остальным — суммы по людям за месяц и по дням
+      const totals: Record<string, number> = {};
+      const daily: Record<string, number> = {};
+      for (const i of items as Income[]) {
+        totals[i.authorId] = r2((totals[i.authorId] ?? 0) + i.base);
+        if (i.authorId === me.id) continue;
+        const day = String(Number(i.date.slice(8, 10)));
+        daily[day] = r2((daily[day] ?? 0) + i.base);
+      }
+      const mine = (items as Income[]).filter((i) => i.authorId === me.id);
+      if (mine.length) view.incomes[k.month] = mine.sort(byDate);
+      if (Object.keys(totals).length) view.incomeTotals[k.month] = totals;
+      if (Object.keys(daily).length) view.partnerIncomeDaily[k.month] = daily;
+    }
     else if (k.userId === me.id) view.myExpenses[k.month] = (items as Expense[]).sort(byDate);
     else if (k.userId === partner.id) {
       let total = 0;

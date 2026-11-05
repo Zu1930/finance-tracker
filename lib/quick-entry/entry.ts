@@ -1,5 +1,5 @@
 /** Разобранная трата → запись Expense и подписи. Общее для страницы ввода и /api/quick */
-import type { Expense, Settings } from "../types.ts";
+import type { Expense, Income, Settings } from "../types.ts";
 import type { ParsedEntry } from "./parse.ts";
 
 const NAMES: Record<string, string> = { USD: "доллары", EUR: "евро", RSD: "динары", RUB: "рубли" };
@@ -14,12 +14,19 @@ export function entryProblem(p: ParsedEntry, st: Pick<Settings, "base" | "rates"
 
 /** Запись по разбору; курс — последний известный из настроек. null — записать нельзя */
 export function toExpense(p: ParsedEntry, st: Pick<Settings, "base" | "rates">, authorId: string, id: string, ts: number): Expense | null {
-  if (entryProblem(p, st) || !p.categoryId || p.amount === null) return null;
+  if (p.kind === "income" || entryProblem(p, st) || !p.categoryId || p.amount === null) return null;
   const rate = p.currency === st.base ? 1 : st.rates[p.currency]!;
   return {
     id, amount: p.amount, currency: p.currency, rate, base: Math.round(p.amount * rate * 100) / 100,
     catId: p.categoryId, note: p.note.slice(0, 140), date: p.date, ts, scope: p.scope, authorId,
   };
+}
+
+/** Доход по разбору: всегда личный, автор — тот, кто записывает (сессия или владелец токена Siri) */
+export function toIncome(p: ParsedEntry, st: Pick<Settings, "base" | "rates">, authorId: string, id: string, ts: number): Income | null {
+  if (p.kind !== "income" || entryProblem(p, st) || !p.categoryId || p.amount === null) return null;
+  const rate = p.currency === st.base ? 1 : st.rates[p.currency]!;
+  return { id, amount: p.amount, currency: p.currency, rate, base: Math.round(p.amount * rate * 100) / 100, sourceId: p.categoryId, note: p.note.slice(0, 140), date: p.date, ts, authorId };
 }
 
 /** 1 трата, 2 траты, 5 трат */

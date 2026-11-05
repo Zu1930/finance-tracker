@@ -4,7 +4,7 @@ import { useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { useTracker } from '../TrackerProvider'
 import { useSpace } from '../SpaceProvider'
-import { useNarrow } from '../AsciiBar'
+import { HUGE, useMedia, useNarrow } from '../AsciiBar'
 import { BTN } from '../limits/parts'
 import { Icon } from '../icons/Icon'
 import { IconText } from '../icons/IconText'
@@ -17,7 +17,7 @@ import type { Category, Scope } from '@/lib/types'
 import { MONTHS_GEN, curMonthKey, fmt, monthName, monthTitle, shiftMonth, todayStr } from '@/lib/utils'
 
 const META = 'text-xs text-muted uppercase'
-const HINT = 'text-[13px] text-muted2'
+const HINT = 'text-[0.8125rem] text-muted2'
 const MONTHS = 6
 const gen = (m: string) => MONTHS_GEN[Number(m.slice(5, 7)) - 1]
 
@@ -70,14 +70,16 @@ export function SummaryView() {
 				<ByMonth month={month} onPick={setMonth} />
 			</div>
 		)
+	// Десктоп: колонки — .l-summary в app/globals.css; на 1920+ — третья: итоги прошлого месяца и сравнение со средним
 	return (
 		<div className="pb-10">
 			<div className="max-w-md">{nav}</div>
-			<div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-x-12">
-				<div className="flex flex-col gap-2.5"><Main month={month} /></div>
-				<div className="flex flex-col gap-4">
-					<ByMonth month={month} onPick={setMonth} tall />
+			<div className="l-summary">
+				<div className="flex flex-col gap-2.5 [grid-area:main]"><Main month={month} /></div>
+				<ByMonth month={month} onPick={setMonth} tall className="[grid-area:months]" />
+				<div className="flex flex-col gap-4 [grid-area:side]">
 					{recap}
+					<VsAverage month={month} className="hidden huge:flex" />
 				</div>
 			</div>
 		</div>
@@ -109,10 +111,10 @@ function Main({ month }: { month: string }) {
 			<section aria-label={t('summary.where')} className="flex flex-col gap-1 pt-1 pb-1.5">
 				<span className={META}>{s.current ? t('summary.spentSince', { m: gen(month) }) : t('summary.spentIn', { m })}</span>
 				<p className="flex items-baseline gap-2">
-					<b className="text-[32px] leading-tight tracking-tight">{fmt(Math.round(s.spent))}</b>
+					<b className="text-[2rem] leading-tight tracking-tight">{fmt(Math.round(s.spent))}</b>
 					<span className={META}>{st.base}</span>
 				</p>
-				{headline && <p className="text-[15px]">{headline}</p>}
+				{headline && <p className="text-[0.9375rem]">{headline}</p>}
 			</section>
 			<div className="mt-1.5 flex justify-between">
 				<h2 className="sec">{t('summary.where')}</h2>
@@ -131,7 +133,7 @@ function Main({ month }: { month: string }) {
 									<span className="min-w-0 truncate uppercase">{name(r.key)} <span className="text-xs text-muted">{r.share}%</span></span>
 									<span className="flex shrink-0 items-baseline gap-3">
 										<b>{fmt(Math.round(r.amount))}</b>
-										<span className={`min-w-[62px] text-right text-xs uppercase ${d?.warn ? 'text-warn' : 'text-muted'}`}>
+										<span className={`min-w-[3.875rem] text-right text-xs uppercase ${d?.warn ? 'text-warn' : 'text-muted'}`}>
 											{!d ? (s.avg !== null ? t('summary.new') : '') : d.kind === 'same' ? t('summary.same') : `${d.kind === 'up' ? '▲ +' : '▼ −'}${d.pct}%`}
 										</span>
 									</span>
@@ -151,16 +153,19 @@ function Main({ month }: { month: string }) {
 }
 
 /** :: ПО МЕСЯЦАМ — столбцы трат, риска дохода; столбец выбирает месяц */
-function ByMonth({ month, onPick, tall = false }: { month: string; onPick: (m: string) => void; tall?: boolean }) {
+function ByMonth({ month, onPick, tall = false, className = '' }: { month: string; onPick: (m: string) => void; tall?: boolean; className?: string }) {
 	const sd = useSummaryData()
 	const cur = curMonthKey()
-	const list = bars(sd, todayStr(), MONTHS)
+	// 1920+: 12 месяцев и выше; иначе 6
+	const huge = useMedia(HUGE) && tall
+	const list = bars(sd, todayStr(), huge ? 12 : MONTHS)
+	const cols = { gridTemplateColumns: `repeat(${list.length}, minmax(0, 1fr))` }
 	const max = Math.max(1, ...list.flatMap((b) => [b.expense, b.income]))
 	const withIncome = list.some((b) => b.income > 0)
 	return (
-		<section aria-label={t('summary.byMonth')} className="mt-3.5">
+		<section aria-label={t('summary.byMonth')} className={`mt-3.5 ${className}`}>
 			<h2 className="sec">{t('summary.byMonth')}</h2>
-			<div className={`mt-2 grid grid-cols-6 items-end gap-2 border-b border-line pt-2 ${tall ? 'h-[220px]' : 'h-[150px]'}`}>
+			<div style={cols} className={`mt-2 grid items-end gap-2 border-b border-line pt-2 ${tall ? 'h-[13.75rem] huge:h-[360px]' : 'h-[9.375rem]'}`}>
 				{list.map((b) => (
 					<button key={b.key} className="relative flex h-full items-end" aria-pressed={b.key === month}
 						aria-label={t('summary.barAria', { m: monthName(b.key), x: fmt(Math.round(b.expense)), y: fmt(Math.round(b.income)) })} onClick={() => onPick(b.key)}>
@@ -169,8 +174,9 @@ function ByMonth({ month, onPick, tall = false }: { month: string; onPick: (m: s
 					</button>
 				))}
 			</div>
-			<div className="grid grid-cols-6 gap-2">
-				{list.map((b) => <span key={b.key} className={`text-center text-[11px] ${b.key === month ? 'font-bold' : 'text-muted'}`}>{abbr(b.key)}</span>)}
+			<div style={cols} className="grid gap-2">
+				{/* Подписи не мельче 12px */}
+				{list.map((b) => <span key={b.key} className={`text-center text-xs ${b.key === month ? 'font-bold' : 'text-muted'}`}>{abbr(b.key)}</span>)}
 			</div>
 			<p className={`mt-1.5 flex flex-wrap gap-x-3.5 ${META}`}>
 				<span>█ {t('summary.legendSpent')}</span>
@@ -178,6 +184,35 @@ function ByMonth({ month, onPick, tall = false }: { month: string; onPick: (m: s
 				<span>□ {t('summary.legendNow')}</span>
 			</p>
 			<p className={`mt-1 ${HINT}`}>{t('summary.pickHint')}</p>
+		</section>
+	)
+}
+
+/** 1920+: этот месяц против среднего по крупнейшим категориям — сумма, среднее и разница */
+function VsAverage({ month, className = '' }: { month: string; className?: string }) {
+	const sd = useSummaryData()
+	const name = useNames()
+	const s = summary(sd, month, todayStr())
+	const top = s.rows.filter((r) => r.avg !== null).slice(0, 6)
+	if (s.avg === null || top.length === 0) return null
+	return (
+		<section aria-label={t('summary.vsAvgTitle')} className={`mt-3.5 flex-col gap-1 ${className}`}>
+			<h2 className="sec">{t('summary.vsAvgTitle')}</h2>
+			<ul className="mt-2">
+				{top.map((r) => {
+					const d = deltaOf(r)
+					return (
+						<li key={r.key} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-x-3 border-b border-dashed border-line2 py-2 uppercase">
+							<span className="truncate">{name(r.key)}</span>
+							<span className="text-right"><b>{fmt(Math.round(r.amount))}</b> <span className={META}>/ {fmt(Math.round(r.avg!))}</span></span>
+							<span className={`min-w-[3.875rem] text-right text-xs ${d?.warn ? 'text-warn' : 'text-muted'}`}>
+								{!d ? '' : d.kind === 'same' ? t('summary.same') : `${d.kind === 'up' ? '▲ +' : '▼ −'}${d.pct}%`}
+							</span>
+						</li>
+					)
+				})}
+			</ul>
+			<p className={`mt-1.5 ${HINT}`}>{t('summary.vsAvgHint')}</p>
 		</section>
 	)
 }

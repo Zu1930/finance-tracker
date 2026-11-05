@@ -2,7 +2,7 @@
  * Разбор фразы голосового ввода: «кофе 350 и такси 800» → траты. Только правила, без внешних сервисов.
  * Чистые функции: работают и на клиенте (страница ввода), и на сервере (/api/quick)
  */
-import type { Category } from "../types.ts";
+import type { Category, IncomeSource } from "../types.ts";
 
 export type QuickScope = "family" | "personal";
 /** слово заметки → categoryId → сколько раз встречалось */
@@ -17,16 +17,20 @@ export type ParseContext = {
   dictionary: Dictionary;
   /** Бюджет по умолчанию — текущий бюджет формы; для Siri в семье — family */
   defaultScope: QuickScope;
+  /** Источники дохода; нет — доходы не распознаются */
+  incomeSources?: IncomeSource[];
 };
 
 export type ParsedEntry = {
+  /** «зарплата 2100 евро», «+2100» — доход: всегда личный, categoryId — источник */
+  kind: "expense" | "income";
   raw: string;
   amount: number | null;
   currency: string;
   date: string;
   scope: QuickScope;
   /** Почему этот бюджет: слово во фразе («себе», «общее»), категория есть только в одном бюджете, по умолчанию */
-  scopeReason: "word" | "category" | "default";
+  scopeReason: "word" | "category" | "default" | "income";
   /** Слово, выбравшее бюджет (для scopeReason = word) */
   scopeWord: string;
   categoryId: string | null;
@@ -47,7 +51,9 @@ function tokenize(text: string): Tok[] {
     .replace(/[—–−!?…:"«»()]/g, " ")
     .replace(/\.(?!\d)|(?<!\d)\./g, " ")
     .replace(/,(?!\d)|(?<!\d),/g, " , ")
-    .replace(/([€$₽;])/g, " $1 ");
+    .replace(/([€$₽;])/g, " $1 ")
+    // «+2100» — доход: «+» отдельным словом
+    .replace(/(^|\s)\+(?=\d)/g, "$1+ ");
   const toks: Tok[] = s.split(/\s+/).filter(Boolean).map((raw) => ({ raw, w: normWord(raw) }));
   // Разделитель тысяч пробелом: «1 200», «12 500 000»
   for (let i = 0; i < toks.length - 1; i++) {
@@ -217,6 +223,11 @@ function takeScope(toks: Tok[]): { scope: QuickScope; word: string } | null {
   return null;
 }
 
+// ---------- Доход ----------
+/** Слова дохода: «зарплата», «зп», «аванс», «премия», «получил», «пришло», «поступление», «доход» */
+const isIncomeWord = (w: string) =>
+  w === "зп" || w === "аванс" || /^(зарплат|преми|получил|поступ|доход)/.test(w) || /^пришл[аио]$/.test(w);
+
 // ---------- Категория ----------
 /** Одно слово с точностью до окончания: общее начало от 4 символов; короткие — только целиком */
 export function sameWord(a: string, b: string): boolean {
@@ -264,6 +275,9 @@ function parsePiece(toks: Tok[], ctx: ParseContext): ParsedEntry {
   const raw = toks.map((t) => t.raw).join(" ");
   const date = takeDate(toks, ctx.today);
   const explicitScope = takeScope(toks);
+  const plus = toks.findIndex((t) => !t.used && t.w === "+");
+  if (plus >= 0) toks[plus].used = true;
+  const income = !!ctx.incomeSources?.length && (plus >= 0 || toks.some((t) => !t.used && isIncomeWord(t.w)));
 
   // Сумма: помеченная валютой, иначе последняя; остальные числа остаются в заметке
   const nums = findNumbers(toks);
@@ -279,6 +293,26 @@ function parsePiece(toks: Tok[], ctx: ParseContext): ParsedEntry {
   }
   if (num) for (let i = num.start; i <= num.end; i++) toks[i].used = true;
 
+  const errors: ParsedEntry["errors"] = [];
+  if (!num || !(num.value > 0)) errors.push("NO_AMOUNT");
+  if (!ctx.currencies.includes(currency)) errors.push("UNKNOWN_CURRENCY");
+  const amount = num && num.value > 0 ? num.value : null;
+  const noteOf = (skip?: Set<number>) => toks
+    .filter((t, i) => !t.used && !skip?.has(i) && t.w !== "," && t.w !== ";")
+    .map((t) => t.raw)
+    .join(" ")
+    .replace(/^((и|в|во|на|за|плюс|еще|ещё)\s+)+|(\s+(и|в|во|на|за))+$/gi, "");
+
+  // Доход: всегда личный; источник — по названию во фразе, иначе первый
+  if (income) {
+    const src = scoreCategories(ctx.incomeSources!.map((x) => ({ id: x.id, name: x.name, limit: 0 })), toks, {})
+      .filter((s) => s.score > 0).sort((a, b) => b.score - a.score)[0];
+    return {
+      kind: "income", raw, amount, currency, date, scope: "personal", scopeReason: "income", scopeWord: "",
+      categoryId: src?.id ?? ctx.incomeSources![0].id, categoryConfidence: "high", candidates: [], note: noteOf(src?.nameWords), errors,
+    };
+  }
+
   // Бюджет: слово во фразе; иначе — бюджет, только в чьих категориях нашлось совпадение; иначе — по умолчанию
   const fam = scoreCategories(ctx.familyCategories, toks, ctx.dictionary);
   const per = scoreCategories(ctx.personalCategories, toks, ctx.dictionary);
@@ -291,18 +325,12 @@ function parsePiece(toks: Tok[], ctx: ParseContext): ParsedEntry {
   const categoryConfidence = !lead ? "none" : lead.score >= 3 && lead.score - (second?.score ?? 0) >= 2 ? "high" : "low";
 
   // Заметка: всё неиспользованное в исходном виде, кроме названия категории, знаков и связок по краям
-  const note = toks
-    .filter((t, i) => !t.used && !lead?.nameWords.has(i) && t.w !== "," && t.w !== ";")
-    .map((t) => t.raw)
-    .join(" ")
-    .replace(/^((и|в|во|на|за|плюс|еще|ещё)\s+)+|(\s+(и|в|во|на|за))+$/gi, "");
+  const note = noteOf(lead?.nameWords);
 
-  const errors: ParsedEntry["errors"] = [];
-  if (!num || !(num.value > 0)) errors.push("NO_AMOUNT");
-  if (!ctx.currencies.includes(currency)) errors.push("UNKNOWN_CURRENCY");
   return {
+    kind: "expense",
     raw,
-    amount: num && num.value > 0 ? num.value : null,
+    amount,
     currency,
     date,
     scope,

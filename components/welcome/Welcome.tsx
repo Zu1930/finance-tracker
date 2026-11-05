@@ -335,7 +335,7 @@ export function Welcome({ userId }: { userId: string }) {
 function Frame({ children, progress }: { children: ReactNode; progress?: string }) {
 	return (
 		<div className="px-4 pb-10">
-			<main className="mx-auto mt-6 max-w-[680px] sm:mt-[8vh]">
+			<main className="mx-auto mt-6 max-w-[42.5rem] sm:mt-[8vh]">
 				<header className="mb-6 flex items-baseline justify-between gap-4">
 					<b className="lowercase">&gt; spend.log</b>
 					{progress && <span className="text-muted" aria-label={`Вопрос ${progress.split(' ')[1]}`}>{progress}</span>}
@@ -386,7 +386,7 @@ function CatTile({ name, limit, on, scope, toggle, flip }: { name: string; limit
 				{name}
 			</span>
 			<span className="flex shrink-0 items-baseline justify-between gap-2 font-normal opacity-70">
-				{scope && <span className="text-[11px]">{scope === 'family' ? 'СЕМ' : 'ЛИЧН'}</span>}
+				{scope && <span className="text-[0.6875rem]">{scope === 'family' ? 'СЕМ' : 'ЛИЧН'}</span>}
 				<span className="ml-auto">{limit}</span>
 			</span>
 		</button>

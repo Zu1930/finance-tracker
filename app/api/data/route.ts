@@ -21,6 +21,7 @@ export async function GET(req: Request) {
     if (isAdmin(ctx.userId)) view.admin = true;
     // Авторы записей — и ушедшие, и удалённые участники
     view.names = await householdNames(getDb(), ctx.householdId);
+    view.memberIds = (await getRepos().system.members(ctx.householdId)).map((u) => u.id);
     const review = await pendingReview(getDb(), ctx.userId);
     if (review) view.pendingReview = review;
     view.onboarding = await onboardingState(getDb(), ctx);

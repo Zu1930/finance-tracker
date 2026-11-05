@@ -3,7 +3,7 @@
 import { Fragment } from 'react'
 import { useTracker } from '../TrackerProvider'
 import { useSpace, useSpaceData } from '../SpaceProvider'
-import { useNarrow } from '../AsciiBar'
+import { WIDE, useMedia, useNarrow } from '../AsciiBar'
 import { CommitInput } from '../CommitInput'
 import { usePlan, withOverride } from './usePlan'
 import { limitsSum, monthLimit, planIncome, planSummary } from '@/lib/plan'
@@ -54,7 +54,9 @@ export function PlanSummary({ month }: { month: string }) {
 	}
 
 		// Шкала: █ лимиты (с регулярными внутри), ▓ покупки, ░ остаток. План больше дохода — делим по плану, справа +!!
-	const w = narrow ? 24 : BAR
+	// 1600+: план — в левой колонке «Лимитов» (380px), шкала короче
+	const side = useMedia(WIDE)
+	const w = narrow ? 24 : side ? 32 : BAR
 	const fixed = s.limits.total
 	const total = fixed + s.planned.total
 	const scale = income !== null && income > 0 && !s.short ? income : total

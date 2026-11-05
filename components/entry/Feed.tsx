@@ -9,13 +9,14 @@ import { SpaceSummary } from '../SpaceSummary'
 import { DueBlock } from '../recurring/DueBlock'
 import { WithSetupCard } from '../onboarding/SetupCard'
 import { requestEntry } from './MobileEntry'
+import { IncomeLine } from './IncomeLine'
 import type { Expense, Income } from '@/lib/types'
 import { feedRows, groupByDay, type FeedRow } from '@/lib/space'
 import { REQUIRED } from '@/lib/summary'
 import { Icon } from '../icons/Icon'
 import { IconText, spaceIcon } from '../icons/IconText'
 import { t } from '@/lib/i18n'
-import { fmt, incomeSources, minus, monthName, termName, todayStr } from '@/lib/utils'
+import { curMonthKey, fmt, incomeSources, minus, monthName, termName, todayStr } from '@/lib/utils'
 
 const PAGE = 40
 
@@ -68,6 +69,8 @@ export function Feed() {
 				</div>
 			)}
 			<section aria-label="Записи" className="pb-6">
+				{/* Доходы личные: в ◆ и ∑ — только сумма каждого за месяц */}
+				{withNames && !cat && <div className="mt-3"><IncomeLine month={inMonth ?? curMonthKey()} /></div>}
 				{days.length === 0 && <p className="mt-6 text-muted uppercase">// Записей пока нет</p>}
 				{days.map((d) => (
 					<div key={d.day}>
@@ -90,7 +93,7 @@ export function Feed() {
 								return (
 									<li key={k} className="border-b border-dashed border-line2">
 										<button
-											className={`grid w-full items-baseline gap-x-2.5 py-2 text-left uppercase ${isSolo ? 'grid-cols-[minmax(0,1fr)_auto]' : 'grid-cols-[18px_minmax(0,1fr)_auto]'}`}
+											className={`grid w-full items-baseline gap-x-2.5 py-2 text-left uppercase ${isSolo ? 'grid-cols-[minmax(0,1fr)_auto]' : 'grid-cols-[1.125rem_minmax(0,1fr)_auto]'}`}
 											aria-expanded={actions ? open === k : undefined}
 											disabled={!actions}
 											onClick={() => setOpen(open === k ? null : k)}

@@ -10,8 +10,9 @@ import { t } from '@/lib/i18n'
 import { unlinks } from '@/lib/entry-edit'
 import { SPACE, feedRows, groupByDay, type FeedRow } from '@/lib/space'
 import { REQUIRED } from '@/lib/summary'
+import { IncomeLine } from './IncomeLine'
 import type { Expense, Income, Scope } from '@/lib/types'
-import { amountChars, curMonthKey, fmt, incomeSources, liveCats, minus, monthName, numIn, parseAmount, termName, todayStr } from '@/lib/utils'
+import { amountChars, curMonthKey, ddmm, fmt, incomeSources, liveCats, minus, monthName, numIn, parseAmount, termName, todayStr } from '@/lib/utils'
 
 const META = 'text-xs text-muted uppercase'
 
@@ -35,9 +36,14 @@ export function MonthFeed() {
 	const days = groupByDay(rows, todayStr())
 	const canEdit = !readOnly && !data.readonly
 	const key = (r: FeedRow) => `${r.kind}-${r.e.id}`
+	const withNames = !isSolo && view !== 'personal'
+	// Строка: значок | категория с метой | сумма | правка; на 1920+ — колонки таблицы (у семьи и «всё вместе» — с автором)
+	const ROW = `grid items-baseline gap-x-2.5 px-1.5 grid-cols-[1.25rem_minmax(0,1fr)_auto_1.25rem] ${withNames
+		? 'huge:grid-cols-[3rem_1.25rem_minmax(0,1fr)_minmax(0,1.2fr)_5rem_auto_1.25rem]'
+		: 'huge:grid-cols-[3rem_1.25rem_minmax(0,1fr)_minmax(0,1.2fr)_auto_1.25rem]'}`
 
 	return (
-		<section aria-label={t('nav.feed')} className="flex min-w-0 flex-col">
+		<section aria-label={t('nav.feed')} className="flex min-w-0 flex-col [grid-area:feed]">
 			<div className="mb-1 flex items-baseline justify-between gap-3">
 				<h2 className="sec truncate">
 					{t('feed.month', { m: monthName(month), s: isSolo ? '' : SPACE[view].name })}
@@ -45,10 +51,19 @@ export function MonthFeed() {
 				</h2>
 				{canEdit && rows.length > 0 && <span className={`shrink-0 ${META}`}>{t('feed.clickToEdit')}</span>}
 			</div>
+			{/* Доходы личные: в ◆ и ∑ — только сумма каждого за месяц; правка доходов — только в ◇ */}
+			{!isSolo && view !== 'personal' && !cat && <IncomeLine month={month} />}
 			{days.length === 0 && <p className="mt-4 text-muted uppercase">// Записей пока нет</p>}
+			{/* 1920+: лента — таблица (дата, бюджет, категория, заметка, автор, сумма); та же разметка, другая сетка строки */}
+			{days.length > 0 && (
+				<div aria-hidden="true" className={`hidden ${ROW} border-b border-line pt-3 pb-1 text-xs text-muted huge:grid`}>
+					<span>{t('feed.colDate')}</span><span /><span>{t('feed.colWhat')}</span><span>{t('feed.colNote')}</span>
+					{withNames && <span>{t('feed.colWho')}</span>}<span className="text-right">{t('feed.colSum')}</span><span />
+				</div>
+			)}
 			{days.map((d) => (
 				<div key={d.day}>
-					<h3 className="flex justify-between px-1.5 pt-3 pb-1 text-xs text-muted">
+					<h3 className="flex justify-between px-1.5 pt-3 pb-1 text-xs text-muted huge:hidden">
 						<span>{d.title}</span>
 						<span>{d.spent > 0 ? minus(d.spent) : ''}</span>
 					</h3>
@@ -57,20 +72,21 @@ export function MonthFeed() {
 							const income = r.kind === 'income'
 							const e = r.e
 							const what = income ? sources.get((e as Income).sourceId) : cats.get((e as Expense).catId)
-							const meta = [
-								...(!isSolo && view !== 'personal' ? [names.get(e.authorId) ?? '—'] : []),
-								...(e.currency !== st.base ? [`${fmt(e.amount)} ${e.currency}`] : []),
-								...(e.note ? [e.note] : []),
-							].join(' · ')
+							const who = withNames ? [names.get(e.authorId) ?? '—'] : []
+							const note = [...(e.currency !== st.base ? [`${fmt(e.amount)} ${e.currency}`] : []), ...(e.note ? [e.note] : [])].join(' · ')
+							const meta = [...who, ...(note ? [note] : [])].join(' · ')
 							const k = key(r)
 							return (
 								<li key={k} className="border-b border-dashed border-line2">
-									<button className="grid w-full grid-cols-[20px_minmax(0,1fr)_auto_20px] items-baseline gap-x-2.5 px-1.5 py-2 text-left uppercase enabled:hover:bg-hover"
+									<button className={`${ROW} w-full py-2 text-left uppercase enabled:hover:bg-hover`}
 										disabled={!canEdit} aria-expanded={canEdit ? open === k : undefined} onClick={() => setOpen(open === k ? null : k)}>
+										<span className="hidden text-xs text-muted huge:block">{ddmm(e.date)}</span>
 										<span className={!income && (e as Expense).scope === 'personal' ? 'text-muted' : ''}>
 											{!isSolo && <Icon name={income ? 'income' : spaceIcon((e as Expense).scope)} size={16} />}
 										</span>
-										<span className="truncate">{termName(what ?? '—')} {meta && <span className="text-xs text-muted normal-case">{meta}</span>}</span>
+										<span className="truncate">{termName(what ?? '—')} {meta && <span className="text-xs text-muted normal-case huge:hidden">{meta}</span>}</span>
+										<span className="hidden truncate text-xs text-muted normal-case huge:block">{note}</span>
+										{withNames && <span className="hidden truncate text-xs text-muted huge:block">{who}</span>}
 										<b className="text-right">{income ? '+' : '−'}{fmt(e.base)}</b>
 										<span className="text-muted">{canEdit && <Icon name="note" size={16} />}</span>
 									</button>
@@ -160,9 +176,9 @@ function EditRow({ row, onDone }: { row: FeedRow; onDone: () => void }) {
 				<input className="tfield min-w-0 flex-1" placeholder={t('edit.note')} maxLength={140} value={note} onChange={(x) => setNote(x.target.value)}
 					onKeyDown={(x) => x.key === 'Enter' && void save()} />
 			</label>
-			{u?.plan && <p className="text-[13px] text-warn">{t('edit.unlinkPlan')}</p>}
-			{u?.recurring && <p className="text-[13px] text-warn">{t('edit.unlinkRecurring')}</p>}
-			{!income && !mine && !isSolo && <p className="text-[13px] text-muted2">{t('edit.notAuthor')}</p>}
+			{u?.plan && <p className="text-[0.8125rem] text-warn">{t('edit.unlinkPlan')}</p>}
+			{u?.recurring && <p className="text-[0.8125rem] text-warn">{t('edit.unlinkRecurring')}</p>}
+			{!income && !mine && !isSolo && <p className="text-[0.8125rem] text-muted2">{t('edit.notAuthor')}</p>}
 			<div className="flex items-center justify-between gap-2">
 				<button className="ib text-muted hover:text-bad" onClick={remove}><Icon name="trash" size={16} label={t('action.delete')} /></button>
 				<button className="tbox min-h-10 border-ink bg-ink px-4 font-bold text-panel uppercase hover:bg-ink" disabled={busy || !value || !(value > 0)} onClick={() => void save()}>

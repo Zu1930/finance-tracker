@@ -62,6 +62,7 @@ export const expenseRow = (householdId: string, e: Expense) => ({
   amount: r2(e.amount), currency: e.currency, rate: e.rate, base: r2(e.base), date: e.date, note: e.note, ts: new Date(e.ts),
   planItemId: e.planItemId ?? null, recurringId: e.recurringId ?? null, recurringMonth: e.recurringId ? e.recurringMonth ?? null : null,
 });
+const INCOME_NOT_YOURS = "Доход может менять только тот, кто его записал.";
 const toIncome = (r: typeof s.incomes.$inferSelect): Income => ({
   id: r.id, amount: r.amount, currency: r.currency, rate: r.rate, base: r.base, sourceId: r.sourceId, note: r.note, date: r.date, ts: r.ts.getTime(), authorId: r.authorId,
 });
@@ -455,21 +456,31 @@ export function postgresRepos(db: Db): Repos {
     },
 
     incomes: {
-      add: (ctx, i) => db.transaction((tx) => putIncome(tx, ctx, i)),
+      add: async (ctx, i) => {
+        const row = incomeRow(ctx.householdId, { ...i, authorId: ctx.userId });
+        // Повтор своей записи (офлайн-очередь) обновляет её; чужой доход с тем же id не трогается
+        const done = await db.insert(s.incomes).values(row)
+          .onConflictDoUpdate({ target: [s.incomes.householdId, s.incomes.id], set: { ...row }, setWhere: eq(s.incomes.authorId, ctx.userId) })
+          .returning({ id: s.incomes.id });
+        return done.length > 0;
+      },
       remove: (ctx, month, id) =>
         db.transaction(async (tx) => {
-          const [row] = await tx.delete(s.incomes)
-            .where(and(eq(s.incomes.householdId, ctx.householdId), eq(s.incomes.id, id), monthRange(s.incomes.date, month))).returning();
-          if (!row) return null;
+          const where = and(eq(s.incomes.householdId, ctx.householdId), eq(s.incomes.id, id), monthRange(s.incomes.date, month));
+          const [row] = await tx.select().from(s.incomes).where(where).for("update");
+          if (!row) return { ok: false as const, status: 404 as const };
+          if (row.authorId !== ctx.userId) return { ok: false as const, status: 403 as const };
+          await tx.delete(s.incomes).where(where);
           const i = toIncome(row);
-          await trash(tx, ctx, "income", i, null);
-          return i;
+          await trash(tx, ctx, "income", i, i.authorId);
+          return { ok: true as const, entry: i };
         }),
       update: (ctx, month, seen, next) =>
         db.transaction(async (tx): Promise<EditResult<Income>> => {
           const where = and(eq(s.incomes.householdId, ctx.householdId), eq(s.incomes.id, seen.id));
           const [row] = await tx.select().from(s.incomes).where(and(where, monthRange(s.incomes.date, month))).for("update");
           if (!row) return { ok: false, status: 404, error: "Запись не найдена." };
+          if (row.authorId !== ctx.userId) return { ok: false, status: 403, error: INCOME_NOT_YOURS };
           const cur = toIncome(row);
           if (!sameEntry(cur, seen)) return { ok: false, status: 409, error: EDIT_CONFLICT };
           const r = editIncome(cur, next);

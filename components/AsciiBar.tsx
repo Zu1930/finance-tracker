@@ -6,15 +6,23 @@ const NARROW = '(max-width: 639px)'
 /** На узких экранах шкала короче, чтобы влезть в 360px без горизонтального скролла */
 const NARROW_WIDTH = 20
 
-const subscribe = (cb: () => void) => {
-	const mq = window.matchMedia(NARROW)
-	mq.addEventListener('change', cb)
-	return () => mq.removeEventListener('change', cb)
+/** Совпадает ли медиазапрос; на сервере — false */
+export function useMedia(query: string) {
+	return useSyncExternalStore(
+		(cb) => {
+			const mq = window.matchMedia(query)
+			mq.addEventListener('change', cb)
+			return () => mq.removeEventListener('change', cb)
+		},
+		() => window.matchMedia(query).matches,
+		() => false
+	)
 }
-const isNarrow = () => window.matchMedia(NARROW).matches
 /** true на экранах уже 640px */
-export const useNarrow = () =>
-	useSyncExternalStore(subscribe, isNarrow, () => false)
+export const useNarrow = () => useMedia(NARROW)
+/** Ступени ширины десктопа (app/globals.css): wide 1600, huge 1920 */
+export const WIDE = '(width >= 100rem)'
+export const HUGE = '(width >= 120rem)'
 
 type Props = {
 	value: number
@@ -41,6 +49,7 @@ export function AsciiBar({
 	label
 }: Props) {
 	const narrow = useNarrow()
+	// Ширина — в символах, не 100% колонки: на больших экранах шкала растёт только вместе со шрифтом (14 → 17px)
 	const w = narrow ? Math.min(width, narrowWidth) : width
 	const pct = max > 0 ? (value / max) * 100 : value > 0 ? Infinity : 0
 	const shown = Number.isFinite(pct) ? Math.round(pct) : 100

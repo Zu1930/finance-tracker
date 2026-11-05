@@ -29,7 +29,7 @@ export function ExpenseSummary({ scope, cats, sel }: { scope: Scope; cats: Categ
 
 	return (
 		<section className="mt-6 border-t border-dashed border-line pt-4 sm:pt-6" aria-live="polite">
-			<p className={`text-[13px] uppercase sm:hidden ${tone}`}>
+			<p className={`text-[0.8125rem] uppercase sm:hidden ${tone}`}>
 				{title} · {left < 0 ? `Перерасход ${fmt(-left)} из ${fmt(limit)}` : `Осталось ${fmt(left)} из ${fmt(limit)}`}
 			</p>
 			<h2 className="sec max-sm:hidden">{title}</h2>

@@ -17,7 +17,7 @@ type Props = Omit<SVGProps<SVGSVGElement>, "children"> & {
  * С label — role="img" и aria-label; без — декоративная, aria-hidden.
  * В интерфейсе с dir="rtl" направленные иконки зеркалятся автоматически.
  */
-export function Icon({ name, size = 20, label, strokeWidth = 2, className, ...rest }: Props) {
+export function Icon({ name, size = 20, label, strokeWidth = 2, className, style, ...rest }: Props) {
   const icon = ICONS[name];
   const a11y = label ? { role: "img", "aria-label": label } : { "aria-hidden": true as const };
   return (
@@ -32,6 +32,8 @@ export function Icon({ name, size = 20, label, strokeWidth = 2, className, ...re
       strokeLinejoin="miter"
       focusable="false"
       data-icon={name}
+      // Размер в rem: на больших экранах иконка растёт вместе с текстом (html font-size), при 16px — те же 16/20/24/32
+      style={{ width: `${size / 16}rem`, height: `${size / 16}rem`, ...style }}
       className={["icon", icon.mirrorInRtl ? "icon-mirror-rtl" : "", className].filter(Boolean).join(" ")}
       {...a11y}
       {...rest}

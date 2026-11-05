@@ -81,10 +81,14 @@ export function useEntryDraft(scope: Scope, mode: EntryMode) {
 		setPlanId(null)
 	}
 
-	/** Трата из голосового ввода → форма для ручной правки (бюджет переключает вызывающий) */
+	/** Трата или доход из голосового ввода → форма для ручной правки (бюджет и тип переключает вызывающий) */
 	const fillParsed = (p: ParsedEntry) => {
-		form.fill({ amount: p.amount === null ? '' : numIn(p.amount), currency: p.currency, note: p.note, date: p.date }, defaultCur(p.scope) !== defaultCur(scope))
-		setCatIds((c) => ({ ...c, [p.scope]: p.categoryId }))
+		const to = p.kind === 'income' ? myCurrency : defaultCur(p.scope)
+		const now = mode === 'income' ? myCurrency : defaultCur(scope)
+		form.fill({ amount: p.amount === null ? '' : numIn(p.amount), currency: p.currency, note: p.note, date: p.date }, to !== now)
+		if (p.kind === 'income') {
+			if (p.categoryId) setSrcId(p.categoryId)
+		} else setCatIds((c) => ({ ...c, [p.scope]: p.categoryId }))
 	}
 
 	const mark = (sc: Scope) => (isSolo ? '' : `${glyph(sc)} `)

@@ -284,7 +284,14 @@ export type TrackerData = {
   savings: SavingsView;
   familyExpenses: Record<MonthKey, Expense[]>;
   myExpenses: Record<MonthKey, Expense[]>;
+  /** Доходы личные: только мои записи */
   incomes: Record<MonthKey, Income[]>;
+  /** Сумма base доходов каждого участника за месяц (и моих тоже) — видна всей семье, записей нет */
+  incomeTotals: Record<MonthKey, Record<string, number>>;
+  /** Доходы остальных участников по дням ("1".."31") — для сравнения 1–N дней; без записей */
+  partnerIncomeDaily: Record<MonthKey, Record<string, number>>;
+  /** Участники по порядку вступления — для строки «Доходы за месяц» */
+  memberIds?: string[];
   /** Личные траты партнёра — ТОЛЬКО суммы base за месяц */
   partnerPersonalTotals: Record<MonthKey, number>;
   /** То же по дням месяца ("1".."31") — для честного сравнения периодов; без записей и категорий */

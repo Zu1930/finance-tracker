@@ -62,9 +62,11 @@ export interface ExpensesRepo {
   update(ctx: Ctx, scope: Scope, month: string, seen: Expense, next: Expense): Promise<EditResult<Expense>>;
 }
 
+/** Доход личный: добавить, изменить и удалить может только автор (403 — чужой) */
 export interface IncomesRepo {
-  add(ctx: Ctx, i: Income): Promise<void>;
-  remove(ctx: Ctx, month: string, id: string): Promise<Income | null>;
+  /** false — запись с таким id уже есть у другого участника */
+  add(ctx: Ctx, i: Income): Promise<boolean>;
+  remove(ctx: Ctx, month: string, id: string): Promise<{ ok: true; entry: Income } | { ok: false; status: 403 | 404 }>;
   update(ctx: Ctx, month: string, seen: Income, next: Income): Promise<EditResult<Income>>;
 }
 

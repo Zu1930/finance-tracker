@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useTracker } from "./TrackerProvider";
 import { useSpace, useSpaceData } from "./SpaceProvider";
 import { CommitInput } from "./CommitInput";
-import { AsciiBar, useNarrow } from "./AsciiBar";
-import { MobileLimits } from "./limits/MobileLimits";
+import { AsciiBar, HUGE, WIDE, useMedia, useNarrow } from "./AsciiBar";
+import { CanSpend, MobileLimits } from "./limits/MobileLimits";
 import { Contribution } from "./entry/Contribution";
 import { CarryOver } from "./plan/CarryOver";
 import { PlanItems } from "./plan/PlanItems";
@@ -15,7 +15,7 @@ import { usePlan, withOverride } from "./plan/usePlan";
 import { RecurringSection } from "./recurring/RecurringSection";
 import { RecurringManager, openOnHash } from "./recurring/RecurringManager";
 import { Hint } from "./onboarding/Hint";
-import { byAuthor, fmtPct, monthExpense, monthIncome, monthOccurrences, savingsRate } from "@/lib/metrics";
+import { byAuthor, fmtPct, incomeByMember, monthExpense, monthIncome, monthOccurrences, savingsRate } from "@/lib/metrics";
 import { MAX_AHEAD, isMonth, itemStatus, linkedByItem, monthLimit, monthsAhead, planSpentByCat } from "@/lib/plan";
 import type { Category, Expense, PlanItem, Scope } from "@/lib/types";
 import { SPACE, spaceGroups } from "@/lib/space";
@@ -70,10 +70,14 @@ function DesktopLimits() {
       {ahead > 0 ? (
         <>
           <Hint id="plan" className="mt-6" />
+          <div className="l-limits">
+          <div className="[grid-area:side]">
           <PlanSummary month={month} />
           <ByGroup render={(only) => <RecurringSection month={month} future only={only} />} />
           <ByGroup render={(only) => <PlanItems month={month} withStatus={false} only={only} />} />
-          <PlanLimits month={month} />
+          </div>
+          <div className="[grid-area:main]"><PlanLimits month={month} /></div>
+          </div>
         </>
       ) : (
         <MonthLimits />
@@ -117,6 +121,10 @@ function MonthLimits() {
   return (
     <>
       {month === cur && !data.readonly && <CarryOver />}
+      {/* 1600+: слева 380px — итог, «Можно потратить», план и обязательные; справа — категории (.l-limits) */}
+      <div className="l-limits">
+      <div className="[grid-area:side]">
+      {month === cur && <div className="hidden wide:block"><CanSpend month={month} /></div>}
       <section className="mt-6 border-t border-dashed border-line pt-5">
         <h2 className="sec">Итог</h2>
         <dl className="mt-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2 uppercase sm:grid-cols-[12ch_minmax(0,1fr)] sm:gap-y-1">
@@ -125,7 +133,7 @@ function MonthLimits() {
           <dd className="max-sm:text-right">
             <b>{signed(income)} {st.base}</b>
             <span className="text-muted max-sm:hidden"> // </span>
-            <span className="max-sm:block max-sm:text-xs"><Contribution sums={byAuthor(data.incomes[month] ?? [])} sign="+" /></span>
+            <span className="max-sm:block max-sm:text-xs"><Contribution sums={incomeByMember(data, month)} sign="+" /></span>
           </dd>
           </>)}
           <dt className="text-muted">Расход</dt>
@@ -150,6 +158,8 @@ function MonthLimits() {
       {!data.readonly && <Hint id="limits" className="mt-6" />}
       {items.length > 0 && <ByGroup render={(only) => <PlanItems month={month} withStatus form={false} only={only} />} />}
 
+      </div>
+      <div className="[grid-area:main]">
       {showFamily && (
         <section className="mt-6 border-t border-dashed border-line pt-5">
           <h2 className="sec"><IconText name="space-family">{SPACE.family.name}</IconText></h2>
@@ -175,6 +185,8 @@ function MonthLimits() {
       <CategoriesBlock monthToggle={month === cur} />
       <RecurringManager />
       </>)}
+      </div>
+      </div>
     </>
   );
 }
@@ -242,15 +254,28 @@ function LimitBlocks({ cats, spent, contribution, planned, recurring }: {
   const { data, month } = useTracker();
   const base = data.settings!.base;
   const linked = linkedByItem([...(data.familyExpenses[month] ?? []), ...(data.myExpenses[month] ?? [])], planned);
+  // /limits#cat-<id> — из мини-лимитов на вводе: к этой категории и подсветить её
+  const [target, setTarget] = useState("");
+  // Карточки — по 320px, шкала в них короче на больших ступенях: символ █ шире буквы (его нет в подмножестве шрифта)
+  const wide = useMedia(WIDE), huge = useMedia(HUGE);
+  const barWidth = huge ? 22 : wide ? 28 : 32;
+  useEffect(() => {
+    const id = window.location.hash.match(/^#cat-(.+)$/)?.[1];
+    if (!id || !cats.some((c) => c.id === id)) return;
+    setTarget(id);
+    document.getElementById(`cat-${id}`)?.scrollIntoView({ block: "center" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
-    <div className="mt-2 grid grid-cols-1 gap-x-12 sm:grid-cols-2">
+    // Колонок столько, сколько помещается по 320px: 2 на 1280, 3 на 1920, 4 на 2400
+    <div className="mt-2 grid grid-cols-[repeat(auto-fill,minmax(min(320px,100%),1fr))] gap-x-12">
       {cats.map((c) => {
         const s = spent[c.id] ?? 0;
         const left = c.limit - s;
         return (
-          <section key={c.id} className="border-b border-dashed border-line2 py-4">
+          <section key={c.id} id={`cat-${c.id}`} className={`border-b border-dashed border-line2 py-4 ${target === c.id ? "-mx-2 bg-hover px-2" : ""}`}>
             <h3 className="font-bold uppercase">{termName(c.name)}</h3>
-            <div className="mt-2"><AsciiBar value={s} max={c.limit} label={c.name} /></div>
+            <div className="mt-2"><AsciiBar value={s} max={c.limit} width={barWidth} label={c.name} /></div>
             <p className={`mt-1 uppercase ${left < 0 ? "text-bad" : "text-muted"}`}>
               {left < 0 ? `Перерасход ${fmt(-left)} ${base}` : `Осталось ${fmt(left)} из ${fmt(c.limit)} ${base}`}
             </p>

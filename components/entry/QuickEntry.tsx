@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTracker } from '../TrackerProvider'
-import type { Category, Expense } from '@/lib/types'
+import type { Category, Expense, Income } from '@/lib/types'
 import { parsePhrase, type ParsedEntry, type QuickScope } from '@/lib/quick-entry/parse'
 import { buildDictionary, visibleExpenses } from '@/lib/quick-entry/dictionary'
-import { entryProblem, toExpense } from '@/lib/quick-entry/entry'
-import { fmt, minus, termName, todayStr, uid } from '@/lib/utils'
+import { entryProblem, toExpense, toIncome } from '@/lib/quick-entry/entry'
+import { fmt, incomeSources, minus, termName, todayStr, uid } from '@/lib/utils'
 import { SPACE, glyph } from '@/lib/space'
 import { Icon } from '../icons/Icon'
 import { Problem, spaceIcon } from '../icons/IconText'
@@ -33,6 +33,7 @@ const speechApi = (): (new () => Recognition) | undefined => {
 /** Почему у строки разбора другой бюджет, чем текущий: «себе», категория только личная */
 export function scopeReasonText(p: ParsedEntry, defaultScope: QuickScope): string | null {
 	if (p.scope === defaultScope) return null
+	if (p.kind === 'income') return t('income.personalMeta')
 	if (p.scopeReason === 'word') return `«${p.scopeWord}»`
 	if (p.scopeReason === 'category') return `категория только ${p.scope === 'personal' ? 'личная' : 'семейная'}`
 	return null
@@ -80,40 +81,46 @@ export function useQuickEntry(familyCats: Category[], personalCats: Category[], 
 				familyCategories: familyCats,
 				personalCategories: personalCats,
 				dictionary,
-				defaultScope
+				defaultScope,
+				incomeSources: incomeSources(st)
 			}),
-		[phrase, st.base, st.currencies, familyCats, personalCats, dictionary, defaultScope]
+		[phrase, st, familyCats, personalCats, dictionary, defaultScope]
 	)
 	const rows = parsed
 		.map((p, i) => ({ i, p: picked[i] ? { ...p, categoryId: picked[i], categoryConfidence: 'high' as const, candidates: [] } : p }))
 		.filter((r) => !hidden.has(r.i))
 	const blocked = rows.some((r) => r.p.categoryConfidence === 'none' || entryProblem(r.p, st))
 	const canWrite = rows.length > 0 && !blocked && !busy
-	const catName = (id: string | null) => termName([...familyCats, ...personalCats].find((c) => c.id === id)?.name ?? 'Категория')
+	const catName = (id: string | null) => termName([...familyCats, ...personalCats, ...incomeSources(st)].find((c) => c.id === id)?.name ?? 'Категория')
 	const hide = (i: number) => setHidden((h) => new Set(h).add(i))
 
 	/** true — записано всё */
 	const write = async (): Promise<boolean> => {
 		if (!canWrite) return false
 		setBusy(true)
-		const written: Expense[] = []
+		const written: ({ kind: 'expense'; e: Expense } | { kind: 'income'; e: Income })[] = []
 		const errors: Record<number, string> = {}
-		// По одной: упавшая не откатывает остальные, её ошибка — в её строке
+		// По одной: упавшая не откатывает остальные, её ошибка — в её строке. Доход — всегда личный мой, в любом бюджете
 		for (const { i, p } of rows) {
-			const e = toExpense(p, st, data.me.id, uid(), Date.now())!
-			const err = await addEntry('expense', e)
+			const w = p.kind === 'income'
+				? { kind: 'income' as const, e: toIncome(p, st, data.me.id, uid(), Date.now())! }
+				: { kind: 'expense' as const, e: toExpense(p, st, data.me.id, uid(), Date.now())! }
+			const err = await addEntry(w.kind, w.e)
 			if (err) errors[i] = err
 			else {
-				written.push(e)
+				written.push(w)
 				hide(i)
 			}
 		}
 		setRowErr(errors)
 		setBusy(false)
 		if (written.length) {
-			// ЗАПИСАНО 2: ◇ −350 · ◆ −800; в solo — сумма
-			const what = isSolo ? `${minus(written.reduce((s, e) => s + e.base, 0))} ${st.base}` : written.map((e) => `${glyph(e.scope)} ${minus(e.amount)}`).join(' · ')
-			toast(`Записано ${written.length}: ${what}`, 'Отменить', () => written.forEach((e) => removeEntry('expense', e)))
+			// ЗАПИСАНО 2: ◇ −350 · ◆ −800 · ◇ +2100; в solo — сумма трат и доход
+			const sign = (w: (typeof written)[number]) => (w.kind === 'income' ? `+${fmt(w.e.amount)}` : minus(w.e.amount))
+			const what = isSolo
+				? written.map((w) => `${sign(w)} ${w.e.currency}`).join(' · ')
+				: written.map((w) => `${glyph(w.kind === 'income' ? 'personal' : w.e.scope)} ${sign(w)}`).join(' · ')
+			toast(`Записано ${written.length}: ${what}`, 'Отменить', () => written.forEach((w) => removeEntry(w.kind, w.e)))
 		}
 		const ok = !Object.keys(errors).length
 		if (ok) {
@@ -251,7 +258,7 @@ export function QuickEntry({ familyCats, personalCats, defaultScope, onEdit }: P
 			{hint === 'denied' && <p className="uppercase" role="alert"><Problem>Нет доступа к микрофону — разрешите в настройках браузера</Problem></p>}
 
 			{rows.length === 0 ? (
-				<p className="text-[13px] text-muted2">{t('cmd.hint')}</p>
+				<p className="text-[0.8125rem] text-muted2">{t('cmd.hint')}</p>
 			) : (
 				<>
 					<ul aria-live="polite">
@@ -263,13 +270,13 @@ export function QuickEntry({ familyCats, personalCats, defaultScope, onEdit }: P
 							const err = problem ?? rowErr[i]
 							return (
 								<li key={i} className="border-b border-dashed border-line2 py-2">
-									<div className="grid grid-cols-[20px_minmax(0,1fr)_auto_auto] items-baseline gap-x-2.5">
+									<div className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto_auto] items-baseline gap-x-2.5">
 										<span className={p.scope === 'personal' ? 'text-muted' : ''}>{!isSolo && <Icon name={spaceIcon(p.scope)} size={16} />}</span>
 										<button className="min-w-0 text-left uppercase hover:underline" onClick={() => { hide(i); onEdit(p) }} aria-label={`${t('cmd.toForm')}: ${p.raw}`}>
 											<span className={`block truncate ${unsure ? 'text-warn' : ''}`}>{unsure && '? '}{catName(p.categoryId)}</span>
 											<span className="block truncate text-xs text-muted normal-case">{meta}</span>
 										</button>
-										<b>{problem === 'Нет суммы' ? '—' : `−${fmt(p.amount ?? 0)} ${p.currency}`}</b>
+										<b>{problem === 'Нет суммы' ? '—' : `${p.kind === 'income' ? '+' : '−'}${fmt(p.amount ?? 0)} ${p.currency}`}</b>
 										<button className="ib -my-2" onClick={() => hide(i)}><Icon name="close" size={16} label={t('voice.removeRow')} /></button>
 									</div>
 									{err && <p role="alert"><Problem>{err}</Problem></p>}

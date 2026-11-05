@@ -125,7 +125,7 @@ function EditPayment({ p, onDone }: { p: RecurringPayment; onDone: () => void })
 
 function Field({ label, id, grow, children }: { label: string; id: string; grow?: boolean; children: ReactNode }) {
 	return (
-		<div className={`flex items-center gap-3 max-sm:w-full ${grow ? 'min-w-[200px] flex-[2_1_200px]' : 'min-w-[140px] flex-[1_1_140px]'}`}>
+		<div className={`flex items-center gap-3 max-sm:w-full ${grow ? 'min-w-[12.5rem] flex-[2_1_12.5rem]' : 'min-w-[8.75rem] flex-[1_1_8.75rem]'}`}>
 			<label htmlFor={id} className="lbl">{label}</label>
 			{children}
 		</div>

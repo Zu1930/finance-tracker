@@ -118,6 +118,8 @@ const mapMonths = <T extends { amount: number; currency: string; rate: number; b
 export function rebaseData(data: TrackerData, p: RebaseParams, at: string): TrackerData {
   if (!data.settings) throw new Error("Нет настроек для пересчёта");
   const div = (v: number) => round2(v / p.rate);
+  const byDay = (m: Record<string, Record<string, number>>) =>
+    Object.fromEntries(Object.entries(m ?? {}).map(([k, d]) => [k, Object.fromEntries(Object.entries(d).map(([x, v]) => [x, div(v)]))]));
   return {
     ...data,
     settings: rebaseSettings(data.settings, p, at),
@@ -126,8 +128,8 @@ export function rebaseData(data: TrackerData, p: RebaseParams, at: string): Trac
     myExpenses: mapMonths(data.myExpenses, p),
     incomes: mapMonths(data.incomes, p),
     partnerPersonalTotals: Object.fromEntries(Object.entries(data.partnerPersonalTotals).map(([k, v]) => [k, div(v)])),
-    partnerPersonalDaily: Object.fromEntries(
-      Object.entries(data.partnerPersonalDaily).map(([k, d]) => [k, Object.fromEntries(Object.entries(d).map(([day, v]) => [day, div(v)]))]),
-    ),
+    partnerPersonalDaily: byDay(data.partnerPersonalDaily),
+    incomeTotals: byDay(data.incomeTotals),
+    partnerIncomeDaily: byDay(data.partnerIncomeDaily),
   };
 }

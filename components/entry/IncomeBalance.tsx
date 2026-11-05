@@ -3,7 +3,7 @@
 import { useTracker } from '../TrackerProvider'
 import { AsciiBar } from '../AsciiBar'
 import { Comparison } from './Comparison'
-import { byAuthor } from '@/lib/metrics'
+import { incomeByMember } from '@/lib/metrics'
 import { curMonthKey, fmt, monthTitle } from '@/lib/utils'
 
 /** Доход месяца по людям и сравнительные показатели семьи */
@@ -11,7 +11,8 @@ export function IncomeBalance() {
 	const { data, isSolo } = useTracker()
 	const st = data.settings!
 	const month = curMonthKey()
-	const sums = byAuthor(data.incomes[month] ?? [])
+	// Доходы личные: свои — записями, остальных — суммами за месяц
+	const sums = incomeByMember(data, month)
 	// В solo разбивки по людям нет — только «Всего»
 	const people = (isSolo || !data.partner ? [] : [data.me, data.partner]).map((u) => ({ ...u, sum: sums[u.id] ?? 0 }))
 	const top = Math.max(0, ...people.map((p) => p.sum))

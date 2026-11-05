@@ -7,7 +7,7 @@ import { fmt, signed } from '@/lib/utils'
 
 /** Кнопки страницы: обычная в рамке и главная (инверсия, 52px) */
 export const BTN = 'tbox min-h-11 justify-center gap-2 px-3'
-export const PRIMARY = 'tbox h-[52px] w-full justify-center gap-2 border-ink bg-ink text-[15px] font-bold text-panel hover:bg-ink'
+export const PRIMARY = 'tbox h-[3.25rem] w-full justify-center gap-2 border-ink bg-ink text-[0.9375rem] font-bold text-panel hover:bg-ink'
 
 /**
  * Пример в столбик: знак | подпись | сумма. Последняя строка — «= Отложится» (с минусом — красным);
@@ -23,7 +23,7 @@ export function PlanEquation({ e }: { e: Equation }) {
 	const bad = e.rest !== null && e.rest < 0
 	const last = 'border-t border-ink pt-1'
 	return (
-		<div className="grid grid-cols-[20px_minmax(0,1fr)_auto] items-baseline gap-x-2.5 gap-y-1.5">
+		<div className="grid grid-cols-[1.25rem_minmax(0,1fr)_auto] items-baseline gap-x-2.5 gap-y-1.5">
 			{rows.map(([sign, label, value], i) => (
 				<div key={i} className="contents">
 					<span aria-hidden="true">{sign}</span>
@@ -43,7 +43,7 @@ export function PlanTotal({ e }: { e: Equation }) {
 	const bad = e.rest !== null && e.rest < 0
 	return (
 		<div className="flex items-baseline gap-2">
-			<span className={`text-[32px] leading-tight font-bold tracking-tight ${bad ? 'text-bad' : ''}`}>{e.rest === null ? fmt(equationTotal(e)) : signed(e.rest)}</span>
+			<span className={`text-[2rem] leading-tight font-bold tracking-tight ${bad ? 'text-bad' : ''}`}>{e.rest === null ? fmt(equationTotal(e)) : signed(e.rest)}</span>
 			<span className={`text-xs uppercase ${bad ? 'text-bad' : 'text-muted'}`}>{e.rest === null ? t('plan.total') : bad ? t('plan.short') : t('plan.rest')}</span>
 		</div>
 	)
@@ -69,7 +69,8 @@ export function Sheet({ label, onClose, full = false, children }: { label: strin
 				role="dialog"
 				aria-modal="true"
 				aria-label={label}
-				className={`fixed inset-x-0 bottom-0 z-40 flex flex-col border-t border-ink bg-panel px-4 pt-3.5 pb-[calc(18px+env(safe-area-inset-bottom,0px))] outline-none motion-safe:animate-[sheet-up_.32s_cubic-bezier(.2,.8,.2,1)] ${full ? 'top-10' : 'max-h-[80dvh]'}`}
+				// Телефон — шторка снизу; десктоп — панель справа поверх страницы, 480px (на 1920+ — 560px), страница под ней видна
+				className={`fixed inset-x-0 bottom-0 z-40 flex flex-col border-t border-ink bg-panel px-4 pt-3.5 pb-[calc(1.125rem+env(safe-area-inset-bottom,0rem))] outline-none motion-safe:animate-[sheet-up_.32s_cubic-bezier(.2,.8,.2,1)] ${full ? 'top-10' : 'max-h-[80dvh]'} sm:top-0 sm:left-auto sm:max-h-none sm:w-[480px] sm:max-w-full sm:border-t-0 sm:border-l sm:px-6 sm:pt-5 sm:pb-6 sm:motion-safe:animate-[side-in_.28s_cubic-bezier(.2,.8,.2,1)] huge:w-[560px]`}
 			>
 				{children}
 			</div>

@@ -63,7 +63,7 @@ function SettingsMenu() {
 			<h1 className="sec">Настройки</h1>
 			{visibleGroups(!!data.admin).map((g) => (
 				<div key={g.label} className="mt-5">
-					<p className="text-[13px] text-muted uppercase">{g.label}</p>
+					<p className="text-[0.8125rem] text-muted uppercase">{g.label}</p>
 					<ul className="mt-1">
 						{g.items.map((i) => {
 							const active = pathname === `/settings/${i.id}` || pathname.startsWith(`/settings/${i.id}/`)
@@ -101,14 +101,14 @@ export function SettingsIndex() {
 	return (
 		// На десктопе список не виден (там меню слева), пока идёт переход
 		<div className="sm:hidden">
-			<h1 className="text-[22px] font-bold uppercase">Настройки</h1>
+			<h1 className="text-[1.375rem] font-bold uppercase">Настройки</h1>
 			{visibleGroups(!!data.admin).map((g) => (
 				<div key={g.label} className="mt-6">
-					<p className="text-[13px] text-muted uppercase">{g.label}</p>
+					<p className="text-[0.8125rem] text-muted uppercase">{g.label}</p>
 					<ul className="mt-1">
 						{g.items.map((i) => (
 							<li key={i.id}>
-								<Link href={`/settings/${i.id}`} className="flex min-h-[52px] items-center gap-3 border-b border-dashed border-line2 uppercase">
+								<Link href={`/settings/${i.id}`} className="flex min-h-[3.25rem] items-center gap-3 border-b border-dashed border-line2 uppercase">
 									<IconText name={SECTION_ICON[i.id]} size={20} className="flex-1">{i.title}</IconText>
 									<span className="max-w-[50%] truncate text-xs text-muted">{meta[i.id]}</span>
 									<span aria-hidden="true" className="text-muted">›</span>
@@ -122,14 +122,14 @@ export function SettingsIndex() {
 	)
 }
 
-/** Каркас: меню слева на десктопе, справа контент до 720px */
+/** Каркас: меню слева на десктопе, справа контент до 72ch; на 1920+ раздел добавляет подсказку справа (.l-doc) */
 export function SettingsFrame({ children }: { children: ReactNode }) {
 	const meta = useMeta()
 	return (
 		<MetaContext.Provider value={meta}>
-			<div className="sm:grid sm:grid-cols-[260px_1fr] sm:gap-10">
+			<div className="sm:grid sm:grid-cols-[16.25rem_1fr] sm:gap-10">
 				<SettingsMenu />
-				<div className="min-w-0 max-w-[720px]">{children}</div>
+				<div className="min-w-0 max-w-[72ch] huge:max-w-none">{children}</div>
 			</div>
 		</MetaContext.Provider>
 	)
@@ -145,7 +145,7 @@ export function SectionPage({ section, children }: { section: Section; children:
 	return (
 		<>
 			<Link href="/settings" className="mb-4 inline-flex min-h-11 items-center gap-2 text-muted uppercase hover:text-ink sm:hidden"><Icon name="back" size={20} />{t('nav.settings')}</Link>
-			<h1 className="text-[22px] font-bold uppercase">{TITLES[section]}</h1>
+			<h1 className="text-[1.375rem] font-bold uppercase">{TITLES[section]}</h1>
 			{children}
 		</>
 	)
@@ -155,7 +155,7 @@ export function SectionPage({ section, children }: { section: Section; children:
 export function Block({ title, note, children }: { title: string; note?: ReactNode; children: ReactNode }) {
 	return (
 		<section className="mt-7">
-			<h2 className="sec mb-3 text-[13px]">
+			<h2 className="sec mb-3 text-[0.8125rem]">
 				{title}
 				{note && <span className="font-normal normal-case"> // {note}</span>}
 			</h2>

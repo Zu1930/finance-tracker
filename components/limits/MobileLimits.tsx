@@ -66,7 +66,7 @@ export function CanSpend({ month }: { month: string }) {
 		<section aria-label={t('budget.canSpend')} className="flex flex-col gap-1 pb-2.5">
 			<span className="text-xs text-muted uppercase">{t('budget.canSpend')}</span>
 			<div className="flex items-baseline gap-2">
-				<span className={`text-[32px] leading-tight font-bold tracking-tight ${left < 0 ? 'text-bad' : ''}`}>{left < 0 ? minus(-left) : fmt(left)}</span>
+				<span className={`text-[2rem] leading-tight font-bold tracking-tight ${left < 0 ? 'text-bad' : ''}`}>{left < 0 ? minus(-left) : fmt(left)}</span>
 				<span className="text-xs text-muted uppercase">{t('limits.of', { x: fmt(limit) })}</span>
 			</div>
 			{/* 30 равных ячеек на всю ширину: █ — заливка без щелей, ░ — символ; ширина не зависит от шрифта */}
@@ -108,7 +108,7 @@ function CurrentMonth({ month }: { month: string }) {
 	)
 }
 
-const ROW = 'flex min-h-[52px] w-full items-center justify-between gap-2.5 border-b border-dashed border-line2 py-3 text-left'
+const ROW = 'flex min-h-[3.25rem] w-full items-center justify-between gap-2.5 border-b border-dashed border-line2 py-3 text-left'
 
 /** Обязательные: строка «оплачено K из N» и шторка со списком месяца */
 function RequiredRow({ month }: { month: string }) {
@@ -149,7 +149,7 @@ function RequiredRow({ month }: { month: string }) {
 							const done = r.status === 'paid'
 							const overdue = r.status === 'overdue'
 							return (
-								<li key={r.paymentId} className="flex min-h-[52px] flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-dashed border-line2 py-2">
+								<li key={r.paymentId} className="flex min-h-[3.25rem] flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-dashed border-line2 py-2">
 									<span className={`flex min-w-0 flex-1 items-center gap-2 ${done ? 'text-muted' : overdue ? 'text-warn' : ''}`}>
 										<Icon name={done ? 'check' : overdue ? 'warning' : 'recurring'} size={16} label={done ? t('recurring.paid') : overdue ? t('recurring.overdue') : undefined} />
 										<span className="truncate">{r.dueDate.slice(8, 10)} {termName(r.name)}</span>
@@ -163,7 +163,7 @@ function RequiredRow({ month }: { month: string }) {
 						})}
 					</ul>
 					{!readOnly && !data.readonly && (
-						<button className="mt-3 text-left text-[13px] text-muted2 underline" onClick={toSettings}>{t('limits.requiredEdit')}</button>
+						<button className="mt-3 text-left text-[0.8125rem] text-muted2 underline" onClick={toSettings}>{t('limits.requiredEdit')}</button>
 					)}
 				</Sheet>
 			)}
@@ -194,7 +194,7 @@ export function PlanRow({ month }: { month: string }) {
 			{open && (
 				<div className="border-b border-dashed border-line2 pt-2.5 pb-3.5">
 					<PlanEquation e={e} />
-					{items.length > 0 && <p className="mt-2 text-[13px] text-muted2">{t(items.length > 1 ? 'limits.purchasesNow' : 'limits.purchaseNow', { x: buys })}</p>}
+					{items.length > 0 && <p className="mt-2 text-[0.8125rem] text-muted2">{t(items.length > 1 ? 'limits.purchasesNow' : 'limits.purchaseNow', { x: buys })}</p>}
 				</div>
 			)}
 		</>
@@ -261,7 +261,7 @@ function CategoryRow({ c, scope, month, spent, open, onToggle }: { c: Category; 
 
 	return (
 		<div className="border-b border-dashed border-line2">
-			<button className="flex min-h-[52px] w-full flex-col gap-1.5 py-3 text-left" onClick={onToggle} aria-expanded={open}>
+			<button className="flex min-h-[3.25rem] w-full flex-col gap-1.5 py-3 text-left" onClick={onToggle} aria-expanded={open}>
 				<span className="flex w-full min-w-0 justify-between gap-2">
 					<span className="min-w-0 truncate">{c.name}</span>
 					<span className="shrink-0">
@@ -309,7 +309,7 @@ function FutureMonth({ month, canPlan, onPlan }: { month: string; canPlan: boole
 						<button className={PRIMARY} onClick={onPlan}><Icon name="plan" size={20} />{t('plan.start', { m: name })}</button>
 					</>
 				)}
-				<p className="text-[13px] text-muted2">{t('plan.withoutHint', { m: name.toLowerCase() })}</p>
+				<p className="text-[0.8125rem] text-muted2">{t('plan.withoutHint', { m: name.toLowerCase() })}</p>
 			</section>
 		)
 	return (

@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { useTracker } from '../TrackerProvider'
 import { useSpace } from '../SpaceProvider'
 import { dateLabel, type EntryMode } from './EntryForm'
+import type { ParsedEntry } from '@/lib/quick-entry/parse'
 import { useEntryDraft } from './useEntryDraft'
 import { PlanChips } from './EntryPage'
 import { scopeReasonText, useQuickEntry } from './QuickEntry'
@@ -14,7 +15,7 @@ import { Icon } from '../icons/Icon'
 import { IconText, Problem, spaceIcon } from '../icons/IconText'
 import { t } from '@/lib/i18n'
 import { SHEET_PARAM, closeSheet, openSheet } from '@/lib/sheet'
-import { SPACE, type FeedRow } from '@/lib/space'
+import { SPACE, incomeAllowed, incomeSwitch, type FeedRow } from '@/lib/space'
 import type { Expense, Income, Scope } from '@/lib/types'
 import { amountChars, fmt, numIn, termName } from '@/lib/utils'
 
@@ -104,7 +105,7 @@ export function EntrySheetHost() {
 		<>
 			<span className="flex justify-center">
 				<button
-					className="-mt-[26px] flex h-16 w-16 items-center justify-center border border-ink bg-ink text-panel select-none [-webkit-touch-callout:none]"
+					className="-mt-[1.625rem] flex h-16 w-16 items-center justify-center border border-ink bg-ink text-panel select-none [-webkit-touch-callout:none]"
 					style={{ opacity: readOnly ? 0.45 : 1 }}
 					onPointerDown={down}
 					onPointerUp={up}
@@ -130,7 +131,8 @@ const chip = 'tbox min-h-11 shrink-0 justify-center px-3'
 function MobileEntry({ req, scope0, onClose }: { req: Request; scope0: Scope; onClose: () => void }) {
 	const { isSolo } = useTracker()
 	const copy = req.copy
-	const [scope, setScope] = useState<Scope>(copy?.kind === 'expense' ? copy.e.scope : scope0)
+	// Доход всегда личный
+	const [scope, setScope] = useState<Scope>(copy?.kind === 'expense' ? copy.e.scope : copy?.kind === 'income' && !isSolo ? 'personal' : scope0)
 	const [kind, setKind] = useState<EntryMode>(copy?.kind === 'income' ? 'income' : 'expense')
 	const [method, setMethodState] = useState<EntryMethod>(() => (req.voice ? 'voice' : copy ? 'keys' : startMethod()))
 	const setMethod = (m: EntryMethod) => {
@@ -144,7 +146,18 @@ function MobileEntry({ req, scope0, onClose }: { req: Request; scope0: Scope; on
 		setExprState(e)
 		form.setAmount(toAmount(e))
 	}
-	const incomeOk = isSolo || scope === 'family'
+	const incomeOk = incomeAllowed(scope, isSolo)
+	// Доход начат в «Семье» («+» на пустой сумме или голосом) — бюджет переключён на личный, под чипами — почему
+	const [incomeNote, setIncomeNote] = useState(false)
+	const toIncome = () => {
+		const sw = incomeSwitch(scope, isSolo)
+		if (sw.note) {
+			setScope(sw.scope)
+			setIncomeNote(true)
+		}
+		setKind('income')
+		form.setError('')
+	}
 	const boxRef = useRef<HTMLDivElement>(null)
 
 	// «В форму» из ленты: те же сумма, валюта, заметка, дата и категория
@@ -225,7 +238,7 @@ function MobileEntry({ req, scope0, onClose }: { req: Request; scope0: Scope; on
 				role="dialog"
 				aria-modal="true"
 				aria-label={t('entry.new')}
-				className="fixed inset-x-0 top-12 bottom-0 z-40 flex flex-col gap-2.5 border-t border-ink bg-panel px-4 pb-[calc(16px+env(safe-area-inset-bottom,0px))] text-sm motion-safe:animate-[sheet-up_.32s_cubic-bezier(.2,.8,.2,1)]"
+				className="fixed inset-x-0 top-12 bottom-0 z-40 flex flex-col gap-2.5 border-t border-ink bg-panel px-4 pb-[calc(1rem+env(safe-area-inset-bottom,0rem))] text-sm motion-safe:animate-[sheet-up_.32s_cubic-bezier(.2,.8,.2,1)]"
 				style={{ transform: leaving ? 'translateY(100%)' : dy ? `translateY(${dy}px)` : undefined, transition: dragging ? 'none' : 'transform .22s cubic-bezier(.4,0,1,1)' }}
 			>
 				{/* Ручка и строка с кнопками — за них шторку можно смахнуть вниз */}
@@ -233,7 +246,7 @@ function MobileEntry({ req, scope0, onClose }: { req: Request; scope0: Scope; on
 				<span aria-hidden="true" className="mx-auto block h-1 w-10 bg-line" />
 				<div className="flex items-center justify-between gap-2">
 					<div role="group" aria-label="Тип записи" className="flex">
-						<button className={`${chip} px-2`} aria-pressed={kind === 'expense'} onClick={() => setKind('expense')}><IconText name="expense">{t('entry.expense')}</IconText></button>
+						<button className={`${chip} px-2`} aria-pressed={kind === 'expense'} onClick={() => { setKind('expense'); setIncomeNote(false) }}><IconText name="expense">{t('entry.expense')}</IconText></button>
 						{incomeOk && <button className={`${chip} -ml-px px-2`} aria-pressed={kind === 'income'} onClick={() => setKind('income')}><IconText name="income">{t('entry.income')}</IconText></button>}
 					</div>
 					<span className="flex items-center gap-1">
@@ -246,11 +259,16 @@ function MobileEntry({ req, scope0, onClose }: { req: Request; scope0: Scope; on
 				</div>
 				</div>
 				{method === 'keys' || kind === 'income' ? (
-					<Keys d={d} kind={kind} scope={scope} expr={expr} setExpr={setExpr} onSave={save}
+					<Keys d={d} kind={kind} scope={scope} expr={expr} setExpr={setExpr} onSave={save} onPlus={toIncome} incomeNote={incomeNote}
 						toggleScope={isSolo || kind === 'income' ? null : () => setScope(scope === 'family' ? 'personal' : 'family')} />
 				) : (
 					<Voice d={d} scope={scope} listen={!!req.listen} onClose={close}
-						onEdit={(sc, amount) => { setScope(sc); setExprState(amount); setMethod('keys') }} />
+						onEdit={(p, amount) => {
+							if (p.kind === 'income') toIncome()
+							else setScope(p.scope)
+							setExprState(amount)
+							setMethod('keys')
+						}} />
 				)}
 			</div>
 		</>
@@ -258,11 +276,14 @@ function MobileEntry({ req, scope0, onClose }: { req: Request; scope0: Scope; on
 }
 
 // ---------- Клавиши ----------
-function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave }: {
+function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave, onPlus, incomeNote }: {
 	d: ReturnType<typeof useEntryDraft>; kind: EntryMode; scope: Scope; expr: string; setExpr: (e: string) => void
-	/** null — бюджет не переключается (solo, доход) */
+	/** null — бюджет не переключается (solo, доход — всегда личный) */
 	toggleScope: (() => void) | null
 	onSave: () => void
+	/** «+» на пустой сумме траты — это доход */
+	onPlus: () => void
+	incomeNote: boolean
 }) {
 	const { isSolo } = useTracker()
 	const { form } = d
@@ -275,6 +296,7 @@ function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave }: {
 
 	const tap = (k: Key) => {
 		if (k === BACKSPACE && cleared.current) return void (cleared.current = false)
+		if (k === '+' && !expr && kind === 'expense') return onPlus()
 		setExpr(press(expr, k))
 		form.setError('')
 	}
@@ -288,18 +310,20 @@ function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave }: {
 					readOnly
 					inputMode="none"
 					data-autofocus
-					className={`w-full min-w-0 bg-transparent text-center leading-tight font-bold outline-none ${expr.length > 14 ? 'text-[26px]' : expr.length > 9 ? 'text-[34px]' : 'text-[44px]'}`}
+					className={`w-full min-w-0 bg-transparent text-center leading-tight font-bold outline-none ${expr.length > 14 ? 'text-[1.625rem]' : expr.length > 9 ? 'text-[2.125rem]' : 'text-[2.75rem]'}`}
 					value={`${kind === 'income' ? '+' : '−'}${expr || '0'}`}
 					aria-describedby="m-cur"
 				/>
 				<span id="m-cur" className="text-base text-muted">{form.currency}</span>
 			</label>
-			<p className="min-h-[18px] text-center text-xs text-muted" aria-live="polite">{hasOp(expr) && value !== null ? `= ${fmt(value)}` : ''}</p>
+			<p className="min-h-[1.125rem] text-center text-xs text-muted" aria-live="polite">{hasOp(expr) && value !== null ? `= ${fmt(value)}` : ''}</p>
 			<div className="grid grid-cols-[1.4fr_1fr_0.8fr] gap-1.5">
 				{toggleScope ? (
 					<button className={`${chip} border-ink font-bold`} title={t('entry.switchSpace')} onClick={() => { toggleScope(); form.setError('') }}>
 						<IconText name={spaceIcon(scope)} className="truncate">{SPACE[scope].name}</IconText>
 					</button>
+				) : !isSolo ? (
+					<span className={`${chip} border-ink font-bold`}><IconText name={spaceIcon(scope)} className="truncate">{SPACE[scope].name}</IconText></span>
 				) : <span />}
 				{/* Прозрачное поле даты поверх кнопки (как у валюты): на iOS showPicker у скрытого поля молча не срабатывает */}
 				<label className={`${chip} relative`}>
@@ -328,13 +352,14 @@ function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave }: {
 					<output className="text-ink">{form.conv}</output>
 				</div>
 			)}
-			{!isSolo && kind === 'expense' && scope === 'personal' && <p className="text-center text-[13px] text-muted2"><IconText name="lock">{t('space.onlyYouEntry')}</IconText></p>}
+			{!isSolo && kind === 'expense' && scope === 'personal' && <p className="text-center text-[0.8125rem] text-muted2"><IconText name="lock">{t('space.onlyYouEntry')}</IconText></p>}
+			{!isSolo && kind === 'income' && incomeNote && <p className="text-[0.8125rem] text-muted"><IconText name="info">{t('income.personalNote')}</IconText></p>}
 			<div className="flex gap-1.5 overflow-x-auto pb-0.5" role="group" aria-label={kind === 'expense' ? 'Категория' : 'Источник'}>
 				{options.length === 0 && <span className="py-2 text-muted uppercase">Нет категорий — добавьте в лимитах</span>}
 				{options.map((o) => (
 					<button key={o.id} className={chip} aria-pressed={o.id === selected}
 						onClick={() => { (kind === 'expense' ? d.setCatId(o.id === selected ? null : o.id) : d.setSrcId(o.id)); form.setError('') }}>
-						{termName(o.name)}
+						{o.name.trim()}
 					</button>
 				))}
 			</div>
@@ -344,7 +369,7 @@ function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave }: {
 				{KEYS.map((k) => (
 					<button
 						key={k}
-						className="tbox h-[52px] justify-center text-xl select-none [@media(max-height:700px)]:h-11"
+						className="tbox h-[3.25rem] justify-center text-xl select-none [@media(max-height:700px)]:h-11"
 						aria-label={k === BACKSPACE ? undefined : k === '=' ? 'Посчитать' : k === '−' ? 'Минус' : k === '+' ? 'Плюс' : k === ',' ? 'Запятая' : k}
 						onPointerDown={k === BACKSPACE ? () => { cleared.current = false; holdTimer.current = setTimeout(() => { cleared.current = true; setExpr(press(expr, 'clear')) }, 500) } : undefined}
 						onPointerUp={k === BACKSPACE ? () => clearTimeout(holdTimer.current) : undefined}
@@ -357,7 +382,7 @@ function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave }: {
 				))}
 			</div>
 			<p className="min-h-5 uppercase" role="alert"><Problem>{form.error.replace(/\.$/, '')}</Problem></p>
-			<button className="tbox h-[52px] shrink-0 justify-center border-ink bg-ink text-[15px] font-bold text-panel hover:bg-ink" onClick={onSave}>[ Записать ]</button>
+			<button className="tbox h-[3.25rem] shrink-0 justify-center border-ink bg-ink text-[0.9375rem] font-bold text-panel hover:bg-ink" onClick={onSave}>[ Записать ]</button>
 		</div>
 	)
 }
@@ -366,7 +391,7 @@ function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave }: {
 function Voice({ d, scope, listen, onClose, onEdit }: {
 	d: ReturnType<typeof useEntryDraft>; scope: Scope; listen: boolean; onClose: () => void
 	/** Строку разбора — в клавиши для ручной правки */
-	onEdit: (scope: Scope, amount: string) => void
+	onEdit: (p: ParsedEntry, amount: string) => void
 }) {
 	const { isSolo } = useTracker()
 	const q = useQuickEntry(isSolo ? [] : d.familyCats, d.personalCats, scope)
@@ -402,7 +427,7 @@ function Voice({ d, scope, listen, onClose, onEdit }: {
 			{hint === 'keyboard' && <p className="text-muted uppercase">Микрофон клавиатуры: нажмите 🎤 на клавиатуре</p>}
 			{hint === 'denied' && <p className="uppercase" role="alert"><Problem>Нет доступа к микрофону — разрешите в настройках браузера</Problem></p>}
 			{rows.length === 0 && !listening && (
-				<p className="text-[13px] text-muted2">Например: «кофе триста пятьдесят и такси восемьсот», «вчера продукты две тысячи», «себе кино 900».</p>
+				<p className="text-[0.8125rem] text-muted2">Например: «кофе триста пятьдесят и такси восемьсот», «вчера продукты две тысячи», «себе кино 900».</p>
 			)}
 			{rows.length > 0 && (
 				<ul aria-live="polite">
@@ -415,14 +440,14 @@ function Voice({ d, scope, listen, onClose, onEdit }: {
 						const cats = p.scope === 'personal' ? d.personalCats : d.familyCats
 						return (
 							<li key={i} className="border-b border-dashed border-line2">
-								<div className="grid min-h-12 grid-cols-[18px_minmax(0,1fr)_auto_44px] items-center gap-x-2.5 uppercase">
+								<div className="grid min-h-12 grid-cols-[1.125rem_minmax(0,1fr)_auto_2.75rem] items-center gap-x-2.5 uppercase">
 									<span className={p.scope === 'personal' ? 'text-muted' : ''}>{!isSolo && <Icon name={spaceIcon(p.scope)} size={16} />}</span>
 									<button className="flex min-w-0 flex-col py-1 text-left" aria-label={`Править: ${p.raw}`}
-										onClick={() => { q.hide(i); d.fillParsed(p); onEdit(p.scope, p.amount === null ? '' : numIn(p.amount)) }}>
+										onClick={() => { q.hide(i); d.fillParsed(p); onEdit(p, p.amount === null ? '' : numIn(p.amount)) }}>
 										<span className={`truncate ${unsure ? 'text-warn' : ''}`}>{unsure && '? '}{q.catName(p.categoryId)}</span>
 										<span className="truncate text-xs text-muted normal-case">{meta || '—'}</span>
 									</button>
-									<b>{problem === 'Нет суммы' ? '—' : `−${fmt(p.amount ?? 0)}${p.currency === st.base ? '' : ` ${p.currency}`}`}</b>
+									<b>{problem === 'Нет суммы' ? '—' : `${p.kind === 'income' ? '+' : '−'}${fmt(p.amount ?? 0)}${p.currency === st.base ? '' : ` ${p.currency}`}`}</b>
 									<button className="ib" onClick={() => q.hide(i)}><Icon name="close" size={20} label={t('voice.removeRow')} /></button>
 								</div>
 								{err && <p className="pb-1 uppercase" role="alert"><Problem>{err}</Problem></p>}
@@ -451,7 +476,7 @@ function Voice({ d, scope, listen, onClose, onEdit }: {
 				<span className="text-xs text-muted uppercase">{micHint}</span>
 			</div>
 			{rows.length > 0 && (
-				<button className="tbox h-[52px] shrink-0 justify-center border-ink bg-ink text-[15px] font-bold text-panel hover:bg-ink disabled:opacity-50" disabled={!q.canWrite} onClick={() => void write()}>
+				<button className="tbox h-[3.25rem] shrink-0 justify-center border-ink bg-ink text-[0.9375rem] font-bold text-panel hover:bg-ink disabled:opacity-50" disabled={!q.canWrite} onClick={() => void write()}>
 					[ Записать {rows.length} ]
 				</button>
 			)}
@@ -464,7 +489,7 @@ function MicButton({ on, onClick }: { on: boolean; onClick: () => void }) {
 	return (
 		<button
 			data-autofocus
-			className={`flex h-[120px] w-[120px] flex-col items-center justify-center gap-2 border-2 text-[15px] font-bold uppercase ${on ? 'border-ink bg-ink text-panel' : 'border-line2 text-ink'}`}
+			className={`flex h-[7.5rem] w-[7.5rem] flex-col items-center justify-center gap-2 border-2 text-[0.9375rem] font-bold uppercase ${on ? 'border-ink bg-ink text-panel' : 'border-line2 text-ink'}`}
 			aria-pressed={on}
 			onClick={onClick}
 		>

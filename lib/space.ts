@@ -37,6 +37,12 @@ export function writeSpace(userId: string, s: Space, store?: Store): void {
   } catch {}
 }
 
+/** Доход всегда личный: переключатель «Доход» — только в личном бюджете (и у solo) */
+export const incomeAllowed = (scope: Scope, solo: boolean) => solo || scope === "personal";
+/** Доход начат не в личном бюджете («+», голос, командная строка): куда переключить форму и нужна ли подсказка */
+export const incomeSwitch = (scope: Scope, solo: boolean): { scope: Scope; note: boolean } =>
+  incomeAllowed(scope, solo) ? { scope, note: false } : { scope: "personal", note: true };
+
 /** Попадает ли семейная/личная вещь в бюджет экрана */
 export const inSpace = (scope: Scope, space: Space) => space === "all" || scope === space;
 
@@ -47,7 +53,7 @@ const ZERO_PARTNER = {
 
 /**
  * Данные одного бюджета: метрики (lib/metrics.ts) и график считают по ним как раньше по всей семье.
- * family — семейные траты обоих и доходы; personal — только мои личные; all — всё, как было (с суммами партнёра)
+ * family — семейные траты обоих и доходы всех; personal — мои личные траты и мои доходы; all — всё, как было (с суммами партнёра)
  */
 export function spaceData(d: TrackerData, space: Space): TrackerData {
   if (space === "all") return d;
@@ -64,7 +70,9 @@ export function spaceData(d: TrackerData, space: Space): TrackerData {
     ...ZERO_PARTNER,
     familyExpenses: fam ? d.familyExpenses : {},
     myExpenses: fam ? {} : d.myExpenses,
-    incomes: fam ? d.incomes : {},
+    // Доходы личные: в семье — сумма всех участников, в личном — только мои
+    incomes: d.incomes,
+    ...(!fam && { incomeTotals: {}, partnerIncomeDaily: {} }),
     recurring: fam ? { family: d.recurring.family, mine: [] } : { family: [], mine: d.recurring.mine },
     plans,
   };
@@ -73,35 +81,40 @@ export function spaceData(d: TrackerData, space: Space): TrackerData {
 // ---------- Остаток в лимитах ----------
 export type Left = { limit: number; left: number };
 
-/** Лимиты месяца с поправками плана; траты по плану не входят, кроме превышения пункта */
-function leftOf(all: Category[], list: Expense[], items: PlanItem[], key: string, ov?: Record<string, number>): Left {
-  const spent = planSpentByCat(list, items);
-  const cats = catsIn(all, key, spent, ov).filter((c) => !c.archived);
-  const limit = cats.reduce((a, c) => a + c.limit, 0);
-  return { limit, left: cats.reduce((a, c) => a + c.limit - (spent[c.id] ?? 0), 0) };
+export type CatSpent = { cat: Category; spent: number };
+
+/** Действующие категории бюджета в месяце (лимиты с поправками плана) и траты по ним; по плану — только превышение пункта */
+export function spaceCats(d: TrackerData, scope: Scope, key: string): CatSpent[] {
+  const plan = d.plans[key];
+  const fam = scope === "family";
+  const spent = planSpentByCat((fam ? d.familyExpenses : d.myExpenses)[key] ?? [], (fam ? plan?.items.family : plan?.items.mine) ?? []);
+  const all = fam ? (d.settings?.familyCategories ?? []) : d.mySettings.personalCategories;
+  return catsIn(all, key, spent, fam ? plan?.familyOverrides : plan?.myOverrides).filter((c) => !c.archived).map((cat) => ({ cat, spent: spent[cat.id] ?? 0 }));
 }
 
 /** «Можно потратить» бюджета в месяце; all — сумма семьи и моего */
 export function spaceLeft(d: TrackerData, space: Space, key: string): Left {
-  const plan = d.plans[key];
-  if (space === "family")
-    return leftOf(d.settings?.familyCategories ?? [], d.familyExpenses[key] ?? [], plan?.items.family ?? [], key, plan?.familyOverrides);
-  if (space === "personal")
-    return leftOf(d.mySettings.personalCategories, d.myExpenses[key] ?? [], plan?.items.mine ?? [], key, plan?.myOverrides);
-  const f = spaceLeft(d, "family", key), p = spaceLeft(d, "personal", key);
-  return { limit: f.limit + p.limit, left: f.left + p.left };
+  if (space === "all") {
+    const f = spaceLeft(d, "family", key), p = spaceLeft(d, "personal", key);
+    return { limit: f.limit + p.limit, left: f.left + p.left };
+  }
+  const rows = spaceCats(d, space, key);
+  return { limit: rows.reduce((a, r) => a + r.cat.limit, 0), left: rows.reduce((a, r) => a + r.cat.limit - r.spent, 0) };
 }
 
 // ---------- Лента ----------
 export type FeedRow = { kind: "expense"; e: Expense } | { kind: "income"; e: Income };
 
-/** Записи бюджета, новые сверху: family — семейные обоих и доходы; personal — мои личные; all — всё */
-export function feedRows(d: Pick<TrackerData, "familyExpenses" | "myExpenses" | "incomes">, space: Space): FeedRow[] {
+/**
+ * Записи бюджета, новые сверху: family — семейные траты обоих; personal — мои личные и мои доходы; all — все траты.
+ * Доходы в ◆ и ∑ — только суммой по людям (строка над лентой); у solo (бюджет — «всё») доходы — записями
+ */
+export function feedRows(d: Pick<TrackerData, "familyExpenses" | "myExpenses" | "incomes" | "solo">, space: Space): FeedRow[] {
   const exp = (m: Record<string, Expense[]>) => Object.values(m).flat().map((e) => ({ kind: "expense" as const, e }));
   return [
     ...(space !== "personal" ? exp(d.familyExpenses) : []),
     ...(space !== "family" ? exp(d.myExpenses) : []),
-    ...(space !== "personal" ? Object.values(d.incomes).flat().map((e) => ({ kind: "income" as const, e })) : []),
+    ...(space === "personal" || d.solo ? Object.values(d.incomes).flat().map((e) => ({ kind: "income" as const, e })) : []),
   ].sort((a, b) => b.e.date.localeCompare(a.e.date) || b.e.ts - a.e.ts);
 }
 

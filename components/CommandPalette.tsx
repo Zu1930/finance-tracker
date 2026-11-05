@@ -27,7 +27,7 @@ function Modal({ label, onClose, children }: { label: string; onClose: () => voi
 		<>
 			<div aria-hidden="true" className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,.35)' }} onClick={onClose} />
 			<div role="dialog" aria-modal="true" aria-label={label} onKeyDown={(e) => e.key === 'Escape' && (e.stopPropagation(), onClose())}
-				className="fixed top-[90px] left-1/2 z-50 flex max-h-[70dvh] w-[600px] max-w-[calc(100%-32px)] -translate-x-1/2 flex-col border border-ink bg-panel">
+				className="fixed top-[5.625rem] left-1/2 z-50 flex max-h-[70dvh] w-[600px] max-w-[calc(100%-2rem)] huge:w-[720px] -translate-x-1/2 flex-col border border-ink bg-panel">
 				{children}
 			</div>
 		</>
@@ -95,7 +95,7 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
 				{list.length === 0 && <li className="px-3.5 py-3 text-muted">{t('palette.none')}</li>}
 				{list.map((c, k) => (
 					<li key={c.id} id={`cmd-${c.id}`} role="option" aria-selected={k === i}
-						className={`grid min-h-11 cursor-pointer grid-cols-[110px_minmax(0,1fr)_auto] items-center gap-2.5 border-b border-dashed border-line2 px-3.5 ${k === i ? 'bg-ink text-panel' : 'hover:bg-hover'}`}
+						className={`grid min-h-11 cursor-pointer grid-cols-[6.875rem_minmax(0,1fr)_auto] items-center gap-2.5 border-b border-dashed border-line2 px-3.5 ${k === i ? 'bg-ink text-panel' : 'hover:bg-hover'}`}
 						onMouseEnter={() => setI(k)} onClick={() => run(c)}>
 						<span className={`text-xs uppercase ${k === i ? '' : 'text-muted'}`}>{c.group}</span>
 						<span className="truncate">{c.label}</span>

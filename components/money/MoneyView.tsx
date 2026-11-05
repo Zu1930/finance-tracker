@@ -18,9 +18,9 @@ import { plural } from '@/lib/settings-meta'
 import type { Account, Goal, Scope } from '@/lib/types'
 import { amountChars, curMonthKey, ddmm, fmt, localDay, parseAmount, shiftMonth, signed, todayStr } from '@/lib/utils'
 
-const ROW = 'flex min-h-[52px] w-full items-center justify-between gap-2.5 border-b border-dashed border-line2 py-3 text-left'
+const ROW = 'flex min-h-[3.25rem] w-full items-center justify-between gap-2.5 border-b border-dashed border-line2 py-3 text-left'
 const META = 'text-xs text-muted uppercase'
-const HINT = 'text-[13px] text-muted2'
+const HINT = 'text-[0.8125rem] text-muted2'
 const MONTHS = 6
 
 /**
@@ -51,7 +51,7 @@ export function MoneyView() {
 		<section aria-label={label} className="flex flex-col gap-1.5 pb-1.5">
 			<span className={META}>{label}</span>
 			<p className="flex items-baseline gap-2">
-				<b className="text-[32px] leading-tight tracking-tight">{fmt(Math.round(total))}</b>
+				<b className="text-[2rem] leading-tight tracking-tight">{fmt(Math.round(total))}</b>
 				<span className={META}>{st.base}</span>
 			</p>
 			<span aria-hidden="true" className="flex h-1.5 bg-line2">
@@ -71,9 +71,7 @@ export function MoneyView() {
 	const update = updatable(data).length > 0 && (
 		!canWrite ? (
 			!data.readonly && <p className={HINT}><IconText name="view">{t('money.viewOnly')}</IconText></p>
-		) : updating && !narrow ? (
-			<UpdateTable onClose={() => setUpdating(false)} />
-		) : (
+		) : updating && !narrow ? null : (
 			<UpdateCard onStart={() => setUpdating(true)} />
 		)
 	)
@@ -90,19 +88,27 @@ export function MoneyView() {
 				{updating && <UpdateSheet onClose={() => setUpdating(false)} />}
 			</div>
 		)
+	// Десктоп: колонки — .l-money в app/globals.css (две; на 1920+ — три). Таблица обновления остатков — на всю ширину, до 1200px
 	return (
-		<div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-12">
-			<div className="flex flex-col gap-3">
-				{head}
-				{update}
-				<Hint id="savings" />
-				<GoalsBlock />
+		<>
+			{updating && canWrite && (
+				<div className="mx-auto mb-6 w-full max-w-[1200px]"><UpdateTable onClose={() => setUpdating(false)} /></div>
+			)}
+			<div className="l-money">
+				<div className="flex flex-col gap-3 [grid-area:main]">
+					{head}
+					{update}
+					<Hint id="savings" />
+					<GoalsBlock />
+				</div>
+				<div className="flex flex-col gap-3 [grid-area:side]">
+					<AccountsBlock />
+				</div>
+				<div className="flex flex-col gap-3 [grid-area:hist]">
+					<History total={total} open />
+				</div>
 			</div>
-			<div className="flex flex-col gap-3">
-				<AccountsBlock />
-				<History total={total} open />
-			</div>
-		</div>
+		</>
 	)
 }
 
@@ -323,7 +329,7 @@ function GoalCard({ g, canWrite, onClose }: { g: Goal; canWrite: boolean; onClos
 			<span className={HINT}>{t('money.goalHint')}</span>
 			{canWrite && (
 				<>
-					<input className="tfield text-[22px]" inputMode="decimal" autoFocus placeholder={t('money.amount')} aria-label={t('money.amount')} value={val}
+					<input className="tfield text-[1.375rem]" inputMode="decimal" autoFocus placeholder={t('money.amount')} aria-label={t('money.amount')} value={val}
 						onChange={(e) => setVal(amountChars(e.target.value))} onKeyDown={(e) => e.key === 'Enter' && void move(1)} />
 					<div className="grid grid-cols-2 gap-1.5">
 						<button className={`${PRIMARY} h-12 uppercase`} onClick={() => void move(1)}>{t('money.put')}</button>
@@ -382,7 +388,7 @@ function History({ total, open: always = false }: { total: number; open?: boolea
 				const prev = series[i - 1]?.value
 				const d = p.value !== null && prev != null ? p.value - prev : null
 				return (
-					<li key={p.key} className={`grid min-h-8 grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-2.5 ${p.carried ? 'text-muted' : ''}`}>
+					<li key={p.key} className={`grid min-h-8 grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-2.5 ${p.carried ? 'text-muted' : ''}`}>
 						<span className={META}>{abbr(p.key)}</span>
 						<span aria-hidden="true" className="flex h-2 bg-line2"><span className={p.carried ? 'bg-muted' : 'bg-ink'} style={{ width: `${Math.max(0, ((p.value ?? 0) / max) * 100)}%` }} /></span>
 						<span className="text-right">
@@ -396,7 +402,7 @@ function History({ total, open: always = false }: { total: number; open?: boolea
 	)
 	if (always)
 		return (
-			<section aria-label={t('money.historyTitle')} className="mt-3.5">
+			<section aria-label={t('money.historyTitle')} className="mt-3.5 huge:mt-0">
 				<h2 className="sec">{t('money.historyTitle')}</h2>
 				<div className="mt-3">{list}</div>
 			</section>

@@ -6,6 +6,7 @@ import { BTN, PRIMARY, PlanEquation, PlanTotal, Sheet } from './parts'
 import { Icon } from '../icons/Icon'
 import { Problem } from '../icons/IconText'
 import { t } from '@/lib/i18n'
+import { familyMembers } from '@/lib/metrics'
 import { closeSheet, isSheetOpen, openSheet } from '@/lib/sheet'
 import { buildDictionary, visibleExpenses } from '@/lib/quick-entry/dictionary'
 import {
@@ -16,8 +17,8 @@ import { MONTHS_GEN, MONTHS_IN, amountChars, fmt, minus, monthName, numIn, parse
 
 const PARAM = 'plan'
 type Step = 'income' | 'required' | 'buys' | 'living' | 'result'
-const H2 = 'text-[22px] leading-tight font-bold outline-none'
-const HINT = 'text-[13px] text-muted2'
+const H2 = 'text-[1.375rem] leading-tight font-bold outline-none'
+const HINT = 'text-[0.8125rem] text-muted2'
 
 /**
  * План месяца по шагам: доход, обязательные, покупки, на жизнь, итог. Черновик живёт здесь до «Готово» и уходит
@@ -125,16 +126,19 @@ type StepProps = { head: React.RefObject<HTMLHeadingElement | null>; w: ReturnTy
 
 function IncomeStep({ head, w, d, setD, inMonth }: StepProps & { inMonth: string }) {
 	const { data, isSolo } = useTracker()
-	const names = !isSolo && data.partner ? `${data.me.name} и ${data.partner.name}` : null
+	// Доходы личные: подставлена сумма средних по участникам, в подсказке — среднее каждого
+	const by = !isSolo && data.partner && w.averageBy
+		? familyMembers(data).map((u) => `${u.name} ${fmt(Math.round(w.averageBy![u.id] ?? 0))}`).join(', ')
+		: null
 	const hint = w.incomeOverride !== null ? t('wizard.incomeSaved')
 		: w.average === null ? t('wizard.incomeNone')
-		: names ? t('wizard.incomeAvgOf', { names }) : t('wizard.incomeAvg')
+		: by ? t('wizard.incomeAvgOf', { x: by }) : t('wizard.incomeAvg')
 	return (
 		<>
 			<h2 ref={head} tabIndex={-1} className={H2}>{t('wizard.incomeQ', { m: inMonth })}</h2>
 			<label className="flex items-baseline gap-2 border-b-2 border-ink pb-1">
-				<span className="text-[32px] font-bold" aria-hidden="true">+</span>
-				<input className="min-w-0 flex-1 bg-transparent text-[32px] font-bold outline-none" inputMode="decimal" aria-label={t('wizard.incomeLabel')}
+				<span className="text-[2rem] font-bold" aria-hidden="true">+</span>
+				<input className="min-w-0 flex-1 bg-transparent text-[2rem] font-bold outline-none" inputMode="decimal" aria-label={t('wizard.incomeLabel')}
 					value={d.income} onChange={(ev) => { const v = amountChars(ev.target.value); setD((x) => ({ ...x, income: v })) }} />
 				<span className="text-xs text-muted">{data.settings!.base}</span>
 			</label>
@@ -156,7 +160,7 @@ function RequiredStep({ head, w, d, setD, inMonth }: StepProps & { inMonth: stri
 							const on = d.on[p.id]
 							return (
 								<button key={p.id} aria-pressed={on} onClick={() => setD((x) => ({ ...x, on: { ...x.on, [p.id]: !on } }))}
-									className={`flex min-h-[52px] w-full items-center justify-between gap-2.5 border-b border-dashed border-line2 py-3 text-left uppercase ${on ? '' : 'text-muted'}`}>
+									className={`flex min-h-[3.25rem] w-full items-center justify-between gap-2.5 border-b border-dashed border-line2 py-3 text-left uppercase ${on ? '' : 'text-muted'}`}>
 									<span className="flex min-w-0 items-center gap-2.5">
 										<span aria-hidden="true" className="inline-flex size-5 shrink-0 items-center justify-center border border-current">{on && <Icon name="check" size={16} />}</span>
 										<span className="truncate">{termName(p.name)}</span>
@@ -198,7 +202,7 @@ function BuysStep({ head, w, d, setD, month }: StepProps & { month: string }) {
 			{d.buys.length > 0 && (
 				<ul>
 					{d.buys.map((b) => (
-						<li key={b.key} className="flex min-h-[52px] items-center justify-between gap-2 border-b border-dashed border-line2 py-1.5">
+						<li key={b.key} className="flex min-h-[3.25rem] items-center justify-between gap-2 border-b border-dashed border-line2 py-1.5">
 							<span className="flex min-w-0 flex-col">
 								<span className="truncate uppercase">{b.name}</span>
 								{/* Новая покупка — категорию можно сменить; у сохранённой она уже связана с тратами */}
@@ -261,7 +265,7 @@ function LivingStep({ head, w, d, setD, month }: StepProps & { month: string }) 
 					const v = livingOf(w, d, c)
 					const changed = v !== livingOf(w, init, c)
 					return (
-						<div key={c.id} className="flex min-h-[52px] items-center justify-between gap-2 border-b border-dashed border-line2 py-1.5">
+						<div key={c.id} className="flex min-h-[3.25rem] items-center justify-between gap-2 border-b border-dashed border-line2 py-1.5">
 							<span className="flex min-w-0 flex-col">
 								<span className="truncate">{c.name}</span>
 								<span className="text-xs text-muted uppercase">{t('wizard.prevSpent', { m: prev, x: fmt(w.prevSpent[c.id] ?? 0) })}</span>

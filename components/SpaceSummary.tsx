@@ -71,7 +71,7 @@ export function SpaceSummary() {
 		<section aria-label="Итог" className="flex flex-col gap-1.5 border-b border-dashed border-line pb-3.5 uppercase">
 			<p className="text-xs text-muted">{label}</p>
 			<p className="flex items-baseline gap-2">
-				<b className={`text-[34px] leading-tight tracking-tight ${left < 0 ? 'text-bad' : ''}`}>{fmt(Math.round(left))}</b>
+				<b className={`text-[2.125rem] leading-tight tracking-tight ${left < 0 ? 'text-bad' : ''}`}>{fmt(Math.round(left))}</b>
 				<span className="text-xs text-muted">из {fmt(Math.round(limit))} {st.base}</span>
 			</p>
 			<AsciiBar value={limit - left} max={limit} bare={false} narrowWidth={24} label={label} />
@@ -79,7 +79,7 @@ export function SpaceSummary() {
 				{sub} · {abbr(key)} {day}/{days}
 				{overdueLink && <> · {overdueLink}</>}
 			</p>
-			{note && <p className="text-[13px] text-muted2 normal-case">{note}</p>}
+			{note && <p className="text-[0.8125rem] text-muted2 normal-case">{note}</p>}
 		</section>
 	)
 }
