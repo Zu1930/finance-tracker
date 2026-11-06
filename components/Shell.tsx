@@ -203,7 +203,7 @@ function ShellBody({ children }: { children: ReactNode }) {
 				<main className={`pt-6 ${status !== 'ready' || welcome ? 'max-sm:flex max-sm:flex-1 max-sm:flex-col' : ''}`}><HintsProvider>{body}</HintsProvider></main>
 			</div>
 			<nav
-				className={`grid flex-none items-end border-t border-line bg-panel pb-[env(safe-area-inset-bottom,0rem)] sm:hidden ${ro ? 'grid-cols-4' : 'grid-cols-[1fr_1fr_5.25rem_1fr_1fr]'}`}
+				className={`grid flex-none items-end border-t border-line bg-panel pb-[var(--nav-pb,env(safe-area-inset-bottom,0rem))] sm:hidden ${ro ? 'grid-cols-4' : 'grid-cols-[1fr_1fr_5.25rem_1fr_1fr]'}`}
 				aria-label="Разделы"
 			>
 				{ro ? tabs(true) : (

@@ -72,8 +72,8 @@
   /* Документ не прокручивается никогда (страховка — components/Viewport.tsx). Прокрутка — в #app-scroll (мобильный) или #page (десктоп, страницы без Shell) */
   html, body { height: 100%; margin: 0; overflow: hidden; background: var(--panel); }
   /* Корень — по краям экрана, высота не вычисляется (100dvh в standalone + black-translucent была выше экрана на статус-бар).
-     --app-h — только запасной вариант standalone при измеренном расхождении (Viewport.tsx). Safe-area: сверху — шапка, снизу — нижняя панель */
-  #page { position: fixed; inset: 0; height: var(--app-h, auto); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+     Safe-area: сверху — шапка, снизу — нижняя панель (--nav-pb: запасной вариант standalone, Viewport.tsx) */
+  #page { position: fixed; inset: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
   /* Страницы без шапки приложения (вход, приглашение…) — safe-area сверху здесь */
   #page:not(:has(#app-root)) { padding-top: env(safe-area-inset-top, 0px); }
   #app-scroll { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
@@ -161,6 +161,8 @@
 
 /* Тост, пока открыта шторка ввода: сверху под её шапкой (--entry-top ставит useSheetLayout), не поверх клавиатуры */
 html:has([data-entry-sheet]) [data-toast] { top: calc(var(--entry-top, 3rem) + 0.5rem); bottom: auto; }
+/* Нижняя безопасная зона — для запасного варианта standalone (читает Viewport.tsx) */
+:root { --sab: env(safe-area-inset-bottom, 0px); }
 /* Верхняя безопасная зона для раскладки шторки (читает useSheetLayout) */
 :root { --sat: env(safe-area-inset-top, 0px); }
 

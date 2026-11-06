@@ -5,8 +5,9 @@ import { useEffect, useState } from 'react'
 /**
  * Страховки каркаса (корень — #page, position: fixed; inset: 0):
  * 1. Документ не прокручивается никогда: window scroll → scrollTo(0, 0).
- * 2. Только установленное PWA (standalone), портрет: если измерено innerHeight < screen.height —
- *    корню задаётся высота по экрану (--app-h). В браузере и без расхождения ничего не меняется.
+ * 2. Только установленное PWA (standalone), портрет: если измерено innerHeight < screen.height, низ видимой
+ *    области уже выше зоны полоски «домой» — нижний отступ панели (--nav-pb) уменьшается на это расхождение,
+ *    иначе подписи вкладок уходят под край. В браузере и без расхождения ничего не меняется.
  * 3. ?debug=layout — размеры видимой области и корня в углу экрана (временная отладка).
  */
 export function Viewport() {
@@ -18,8 +19,11 @@ export function Viewport() {
 		const fit = () => {
 			const standalone = matchMedia('(display-mode: standalone)').matches
 			const portrait = window.innerHeight > window.innerWidth
-			if (standalone && portrait && window.innerHeight < screen.height) root.style.setProperty('--app-h', `${screen.height}px`)
-			else root.style.removeProperty('--app-h')
+			const gap = screen.height - window.innerHeight
+			if (standalone && portrait && gap > 0) {
+				const sab = parseFloat(getComputedStyle(root).getPropertyValue('--sab')) || 0
+				root.style.setProperty('--nav-pb', `${Math.max(0, sab - gap)}px`)
+			} else root.style.removeProperty('--nav-pb')
 		}
 		fit()
 		window.addEventListener('scroll', onScroll, { passive: true })
@@ -54,7 +58,7 @@ function LayoutDebug() {
 					`innerHeight ${window.innerHeight} · screen.height ${screen.height}`,
 					`vv.height ${vv ? Math.round(vv.height) : '—'} · vv.offsetTop ${vv ? Math.round(vv.offsetTop) : '—'}`,
 					`scrollY ${window.scrollY} · clientHeight ${document.documentElement.clientHeight}`,
-					`--app-h ${document.documentElement.style.getPropertyValue('--app-h') || 'нет'}`,
+					`--nav-pb ${document.documentElement.style.getPropertyValue('--nav-pb') || 'нет'}`,
 					`#page ${r('page')}`,
 					`#app-scroll ${r('app-scroll')}`,
 				].join('\n'),
