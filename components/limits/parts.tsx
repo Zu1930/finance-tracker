@@ -4,6 +4,7 @@ import { useEffect, useRef, type ReactNode } from 'react'
 import { equationTotal, type Equation } from '@/lib/plan-view'
 import { t } from '@/lib/i18n'
 import { fmt, signed } from '@/lib/utils'
+import { Portal, useInertApp, useScrollLock } from '../useSheet'
 
 /** Кнопки страницы: обычная в рамке и главная (инверсия, 52px) */
 export const BTN = 'tbox min-h-11 justify-center gap-2 px-3'
@@ -67,6 +68,8 @@ export function Sheet({ label, onClose, full = false, children }: { label: strin
 	const ref = useRef<HTMLDivElement>(null)
 	const close = useRef(onClose)
 	close.current = onClose
+	useScrollLock(true)
+	useInertApp(true)
 	useEffect(() => {
 		ref.current?.focus()
 		const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close.current()
@@ -74,8 +77,8 @@ export function Sheet({ label, onClose, full = false, children }: { label: strin
 		return () => window.removeEventListener('keydown', onKey)
 	}, [])
 	return (
-		<>
-			<div aria-hidden="true" className="fixed inset-0 z-40 motion-safe:animate-[fade-in_.25s_ease-out]" style={{ background: 'rgba(0,0,0,.35)' }} onClick={onClose} />
+		<Portal>
+			<div aria-hidden="true" className="fixed inset-0 z-40 [touch-action:none] motion-safe:animate-[fade-in_.25s_ease-out]" style={{ background: 'rgba(0,0,0,.35)' }} onClick={onClose} />
 			<div
 				ref={ref}
 				tabIndex={-1}
@@ -83,10 +86,10 @@ export function Sheet({ label, onClose, full = false, children }: { label: strin
 				aria-modal="true"
 				aria-label={label}
 				// Телефон — шторка снизу; десктоп — панель справа поверх страницы, 480px (на 1920+ — 560px), страница под ней видна
-				className={`fixed inset-x-0 bottom-0 z-40 flex flex-col border-t border-ink bg-panel px-4 pt-3.5 pb-[calc(1.125rem+env(safe-area-inset-bottom,0rem))] outline-none motion-safe:animate-[sheet-up_.32s_cubic-bezier(.2,.8,.2,1)] ${full ? 'top-10' : 'max-h-[80dvh]'} sm:top-0 sm:left-auto sm:max-h-none sm:w-[480px] sm:max-w-full sm:border-t-0 sm:border-l sm:px-6 sm:pt-5 sm:pb-6 sm:motion-safe:animate-[side-in_.28s_cubic-bezier(.2,.8,.2,1)] huge:w-[560px]`}
+				className={`fixed inset-x-0 bottom-0 z-40 flex flex-col border-t border-ink bg-panel px-4 pt-3.5 pb-[calc(1.125rem+env(safe-area-inset-bottom,0rem))] overscroll-contain outline-none motion-safe:animate-[sheet-up_.32s_cubic-bezier(.2,.8,.2,1)] ${full ? 'top-10' : 'max-h-[80dvh]'} sm:top-0 sm:left-auto sm:max-h-none sm:w-[480px] sm:max-w-full sm:border-t-0 sm:border-l sm:px-6 sm:pt-5 sm:pb-6 sm:motion-safe:animate-[side-in_.28s_cubic-bezier(.2,.8,.2,1)] huge:w-[560px]`}
 			>
 				{children}
 			</div>
-		</>
+		</Portal>
 	)
 }

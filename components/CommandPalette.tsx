@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { useTracker } from './TrackerProvider'
+import { Portal } from './useSheet'
 import { useSpace } from './SpaceProvider'
 import { dueRows } from './recurring/DueBlock'
 import { useRecurring } from './recurring/useRecurring'
@@ -24,13 +25,13 @@ function Modal({ label, onClose, children }: { label: string; onClose: () => voi
 		return () => (el.current as HTMLElement | null)?.focus?.()
 	}, [])
 	return (
-		<>
-			<div aria-hidden="true" className="fixed inset-0 z-40" style={{ background: 'rgba(0,0,0,.35)' }} onClick={onClose} />
+		<Portal>
+			<div aria-hidden="true" className="fixed inset-0 z-40 [touch-action:none]" style={{ background: 'rgba(0,0,0,.35)' }} onClick={onClose} />
 			<div role="dialog" aria-modal="true" aria-label={label} onKeyDown={(e) => e.key === 'Escape' && (e.stopPropagation(), onClose())}
 				className="fixed top-[5.625rem] left-1/2 z-50 flex max-h-[70dvh] w-[600px] max-w-[calc(100%-2rem)] huge:w-[720px] -translate-x-1/2 flex-col border border-ink bg-panel">
 				{children}
 			</div>
-		</>
+		</Portal>
 	)
 }
 

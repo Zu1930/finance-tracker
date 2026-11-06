@@ -153,8 +153,10 @@
   @media (width >= 120rem) { .l-doc:has(> [data-area="help"]) { grid-template-columns: minmax(0, 72ch) 320px; grid-template-areas: "main help"; } }
 }
 
-/* Тост, пока открыта шторка ввода: сверху под её шапкой (--entry-top ставит шторка), не поверх клавиатуры */
-html:has([data-entry-sheet]) [data-toast] { top: calc(var(--entry-top, 3rem) + 4.25rem); bottom: auto; }
+/* Тост, пока открыта шторка ввода: сверху под её шапкой (--entry-top ставит useSheetLayout), не поверх клавиатуры */
+html:has([data-entry-sheet]) [data-toast] { top: calc(var(--entry-top, 3rem) + 0.5rem); bottom: auto; }
+/* Верхняя безопасная зона для раскладки шторки (читает useSheetLayout) */
+:root { --sat: env(safe-area-inset-top, 0px); }
 
 /* Клавиши шторки ввода: мгновенная инверсия на нажатие, плавный возврат; только transform и цвета.
    Вне @layer — иначе утилиты tbox (transition, text-ink) перебивают */

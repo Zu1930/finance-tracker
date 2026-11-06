@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState, type RefObject } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useTracker } from '../TrackerProvider'
 import { useSpace } from '../SpaceProvider'
@@ -15,6 +15,7 @@ import { Icon } from '../icons/Icon'
 import { IconText, Problem, spaceIcon } from '../icons/IconText'
 import { t } from '@/lib/i18n'
 import { SHEET_PARAM, closeSheet, openSheet } from '@/lib/sheet'
+import { Portal, useInertApp, useScrollLock, useSheetLayout } from '../useSheet'
 import { SPACE, incomeAllowed, incomeSwitch, type FeedRow } from '@/lib/space'
 import type { Expense, Income, Scope } from '@/lib/types'
 import { amountChars, fmt, numIn, termName } from '@/lib/utils'
@@ -128,27 +129,6 @@ export function EntrySheetHost() {
 // ---------- Форма ----------
 const chip = 'tbox min-h-11 shrink-0 justify-center px-3'
 
-/**
- * Видимая область: visualViewport (без панелей Safari и открытой системной клавиатуры), иначе null — тогда 100dvh.
- * top — сдвиг видимой области (iOS прокручивает страницу под клавиатуру)
- */
-function useVisible() {
-	const [v, setV] = useState<{ h: number; top: number } | null>(null)
-	useEffect(() => {
-		const vv = window.visualViewport
-		if (!vv) return
-		const upd = () => setV({ h: vv.height, top: vv.offsetTop })
-		upd()
-		vv.addEventListener('resize', upd)
-		vv.addEventListener('scroll', upd)
-		return () => {
-			vv.removeEventListener('resize', upd)
-			vv.removeEventListener('scroll', upd)
-		}
-	}, [])
-	return v
-}
-
 function MobileEntry({ req, scope0, onClose }: { req: Request; scope0: Scope; onClose: () => void }) {
 	const { isSolo } = useTracker()
 	const copy = req.copy
@@ -220,12 +200,10 @@ function MobileEntry({ req, scope0, onClose }: { req: Request; scope0: Scope; on
 		else setDy(0)
 	}
 
-	// Фокус внутри формы, Tab не уходит наружу, Esc закрывает; страница под формой не прокручивается
+	// Фокус внутри формы, Tab не уходит наружу, Esc закрывает
 	useEffect(() => {
 		const box = boxRef.current!
 		box.querySelector<HTMLElement>('[data-autofocus]')?.focus()
-		const prev = document.body.style.overflow
-		document.body.style.overflow = 'hidden'
 		const onKey = (e: KeyboardEvent) => {
 			if (e.key === 'Escape') return closeRef.current()
 			if (e.key !== 'Tab') return
@@ -236,7 +214,6 @@ function MobileEntry({ req, scope0, onClose }: { req: Request; scope0: Scope; on
 		}
 		document.addEventListener('keydown', onKey)
 		return () => {
-			document.body.style.overflow = prev
 			document.removeEventListener('keydown', onKey)
 		}
 	}, [])
@@ -246,23 +223,17 @@ function MobileEntry({ req, scope0, onClose }: { req: Request; scope0: Scope; on
 	}
 	const dragging = drag.current !== null
 
-	// Высота — от видимой области; на низком экране (<700px) отступ сверху и клавиши меньше
-	const vis = useVisible()
-	const low = (vis?.h ?? 800) < 700
-	const gap = low ? 16 : 48
-	const top = (vis?.top ?? 0) + gap
-	// Тост, пока шторка открыта, — под её шапкой (правило в globals.css)
-	useEffect(() => {
-		const root = document.documentElement
-		root.style.setProperty('--entry-top', `${top}px`)
-		return () => void root.style.removeProperty('--entry-top')
-	}, [top])
+	// Страница под шторкой не прокручивается и не получает касаний; раскладка — из измерений (useSheetLayout)
+	useScrollLock(true)
+	useInertApp(true)
+	const midRef = useRef<HTMLDivElement>(null)
+	useSheetLayout(boxRef, midRef)
 
 	return (
-		<>
+		<Portal>
 			<div
 				aria-hidden="true"
-				className="fixed inset-0 z-40 motion-safe:animate-[fade-in_.25s_ease-out]"
+				className="fixed inset-0 z-40 [touch-action:none] motion-safe:animate-[fade-in_.25s_ease-out]"
 				style={{ background: 'rgba(0,0,0,.35)', opacity: leaving ? 0 : Math.max(0.2, 1 - dy / 400), transition: dragging ? 'none' : 'opacity .22s ease' }}
 				onClick={close}
 			/>
@@ -272,10 +243,9 @@ function MobileEntry({ req, scope0, onClose }: { req: Request; scope0: Scope; on
 				aria-modal="true"
 				aria-label={t('entry.new')}
 				data-entry-sheet
-				data-low={low || undefined}
-				className="group fixed inset-x-0 top-12 z-40 flex h-[calc(100dvh-3rem)] flex-col border-t border-ink bg-panel px-4 text-sm motion-safe:animate-[sheet-up_.32s_cubic-bezier(.2,.8,.2,1)]"
+				// Высота по содержимому, не выше --avail; прижата к низу видимой области (переменные ставит useSheetLayout)
+				className="fixed inset-x-0 bottom-[var(--sheet-bottom,0px)] z-40 flex h-auto max-h-[var(--avail,calc(100dvh-1rem))] flex-col border-t border-ink bg-panel px-4 text-sm motion-safe:animate-[sheet-up_.32s_cubic-bezier(.2,.8,.2,1)]"
 				style={{
-					...(vis && { top, height: vis.h - gap }),
 					transform: leaving ? 'translateY(100%)' : dy ? `translateY(${dy}px)` : undefined,
 					transition: dragging ? 'none' : 'transform .22s cubic-bezier(.4,0,1,1)',
 				}}
@@ -298,10 +268,10 @@ function MobileEntry({ req, scope0, onClose }: { req: Request; scope0: Scope; on
 				</div>
 				</div>
 				{method === 'keys' || kind === 'income' ? (
-					<Keys d={d} kind={kind} scope={scope} expr={expr} setExpr={setExpr} onSave={save} onPlus={toIncome} incomeNote={incomeNote}
+					<Keys midRef={midRef} d={d} kind={kind} scope={scope} expr={expr} setExpr={setExpr} onSave={save} onPlus={toIncome} incomeNote={incomeNote}
 						toggleScope={isSolo || kind === 'income' ? null : () => setScope(scope === 'family' ? 'personal' : 'family')} />
 				) : (
-					<Voice d={d} scope={scope} listen={!!req.listen} onClose={close}
+					<Voice midRef={midRef} d={d} scope={scope} listen={!!req.listen} onClose={close}
 						onEdit={(p, amount) => {
 							if (p.kind === 'income') toIncome()
 							else setScope(p.scope)
@@ -310,12 +280,13 @@ function MobileEntry({ req, scope0, onClose }: { req: Request; scope0: Scope; on
 						}} />
 				)}
 			</div>
-		</>
+		</Portal>
 	)
 }
 
 // ---------- Клавиши ----------
-function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave, onPlus, incomeNote }: {
+function Keys({ midRef, d, kind, scope, expr, setExpr, toggleScope, onSave, onPlus, incomeNote }: {
+	midRef: RefObject<HTMLDivElement | null>
 	d: ReturnType<typeof useEntryDraft>; kind: EntryMode; scope: Scope; expr: string; setExpr: (e: string) => void
 	/** null — бюджет не переключается (solo, доход — всегда личный) */
 	toggleScope: (() => void) | null
@@ -365,7 +336,7 @@ function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave, onPlus, inco
 			{onlyYou && <span className="shrink-0 text-muted2"><Icon name="lock" size={16} label={t('space.onlyYouEntry')} /></span>}
 		</span>
 	)
-	const key = 'key tbox h-[3.25rem] justify-center text-xl select-none group-data-low:h-11'
+	const key = 'key tbox h-[var(--key-h,52px)] justify-center text-xl select-none'
 	// Отклик: is-pressed на нажатие (мгновенно), снимается на отпускание/отмену/уход пальца; вибро на Android
 	const press_ = (on: boolean) => (e: React.PointerEvent<HTMLElement>) => {
 		e.currentTarget.classList.toggle('is-pressed', on)
@@ -376,9 +347,10 @@ function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave, onPlus, inco
 	return (
 		<>
 			{/* Середина: прокручивается, только если не помещается; сумма приклеена сверху */}
-			<div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain pb-2 [&>*]:shrink-0"
+			<div ref={midRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain [overscroll-behavior:contain]"
 				onFocus={(e) => isText(e.target) && setTyping(true)}
 				onBlur={() => setTimeout(() => setTyping(isText(document.activeElement)), 250)}>
+				<div data-sheet-inner className="flex flex-col gap-2.5 pb-2 [&>*]:shrink-0">
 				<div className="sticky top-0 z-[1] bg-panel">
 					<label className="flex items-baseline justify-center gap-2">
 						<span className="sr-only">Сумма</span>
@@ -448,6 +420,7 @@ function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave, onPlus, inco
 				</div>
 				<PlanChips d={d} className="flex gap-1.5 overflow-x-auto" />
 				<input className="tfield shrink-0 border-line2 py-1" placeholder="Заметка" aria-label="Заметка" autoComplete="off" enterKeyHint="done" value={form.note} onChange={(e) => form.setNote(e.target.value)} />
+				</div>
 			</div>
 			{/* Низ закреплён: ошибка и клавиатура с записью — всегда видны и под большим пальцем */}
 			<div className="shrink-0 border-t border-line pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom,0rem))]">
@@ -455,7 +428,7 @@ function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave, onPlus, inco
 				{typing ? (
 					<button className={`${saveKey} h-11 w-full text-[0.9375rem]`} onClick={onSave}><Icon name="check" size={20} />Записать</button>
 				) : (
-				<div className="grid grid-cols-4 gap-1.5 group-data-low:gap-1" role="group" aria-label="Клавиатура суммы">
+				<div data-keys className="grid grid-cols-4 gap-1.5" role="group" aria-label="Клавиатура суммы">
 					{KEYS.map((k) => (
 						<Fragment key={k}>
 							<button
@@ -493,7 +466,8 @@ function Keys({ d, kind, scope, expr, setExpr, toggleScope, onSave, onPlus, inco
 }
 
 // ---------- Голос ----------
-function Voice({ d, scope, listen, onClose, onEdit }: {
+function Voice({ midRef, d, scope, listen, onClose, onEdit }: {
+	midRef: RefObject<HTMLDivElement | null>
 	d: ReturnType<typeof useEntryDraft>; scope: Scope; listen: boolean; onClose: () => void
 	/** Строку разбора — в клавиши для ручной правки */
 	onEdit: (p: ParsedEntry, amount: string) => void
@@ -514,7 +488,8 @@ function Voice({ d, scope, listen, onClose, onEdit }: {
 
 	return (
 		<>
-		<div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain pb-2 [&>*]:shrink-0">
+		<div ref={midRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain [overscroll-behavior:contain]">
+		<div data-sheet-inner className="flex flex-col gap-3 pb-2 [&>*]:shrink-0">
 			{!isSolo && (
 				<p className="flex flex-wrap items-center gap-x-2 text-xs text-muted uppercase">
 					По умолчанию — <IconText name={spaceIcon(scope)}>{SPACE[scope].name}</IconText> · «себе» → <IconText name="space-personal">{SPACE.personal.name}</IconText>
@@ -578,6 +553,7 @@ function Voice({ d, scope, listen, onClose, onEdit }: {
 				</ul>
 			)}
 		</div>
+		</div>
 		{/* Низ закреплён, как у клавиш: «Говорить» и «Записать N» */}
 		<div className="flex shrink-0 flex-col gap-2.5 border-t border-line pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0rem))]">
 			<div className="flex flex-col items-center gap-2">
@@ -585,7 +561,7 @@ function Voice({ d, scope, listen, onClose, onEdit }: {
 				<span className="text-xs text-muted uppercase">{micHint}</span>
 			</div>
 			{rows.length > 0 && (
-				<button className="tbox h-[3.25rem] justify-center gap-2 border-ink bg-ink text-[0.9375rem] font-bold text-panel uppercase hover:bg-ink disabled:opacity-50 group-data-low:h-11" disabled={!q.canWrite} onClick={() => void write()}>
+				<button className="tbox h-[var(--key-h,52px)] justify-center gap-2 border-ink bg-ink text-[0.9375rem] font-bold text-panel uppercase hover:bg-ink disabled:opacity-50" disabled={!q.canWrite} onClick={() => void write()}>
 					<Icon name="check" size={20} />Записать {rows.length}
 				</button>
 			)}
@@ -599,7 +575,7 @@ function MicButton({ on, onClick }: { on: boolean; onClick: () => void }) {
 	return (
 		<button
 			data-autofocus
-			className={`flex h-[7.5rem] w-[7.5rem] flex-col group-data-low:h-24 group-data-low:w-24 items-center justify-center gap-2 border-2 text-[0.9375rem] font-bold uppercase ${on ? 'border-ink bg-ink text-panel' : 'border-line2 text-ink'}`}
+			className={`flex h-[clamp(5rem,calc(var(--key-h,52px)*2),7.5rem)] w-[clamp(5rem,calc(var(--key-h,52px)*2),7.5rem)] flex-col items-center justify-center gap-2 border-2 text-[0.9375rem] font-bold uppercase ${on ? 'border-ink bg-ink text-panel' : 'border-line2 text-ink'}`}
 			aria-pressed={on}
 			onClick={onClick}
 		>

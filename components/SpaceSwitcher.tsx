@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { useTracker } from './TrackerProvider'
+import { useScrollLock } from './useSheet'
 import { useSpace } from './SpaceProvider'
 import { SPACE, SPACE_IDS, type Space } from '@/lib/space'
 import { living } from '@/lib/plan-view'
@@ -24,6 +25,8 @@ export function spaceDesc(s: Space, names: string[]) {
 export function SpaceSwitcher() {
 	const { data } = useTracker()
 	const { space, setSpace, switchable, chooserOpen: open, setChooserOpen: setOpen } = useSpace()
+	// Выбор бюджета — панель сверху на телефоне: страница под ней не прокручивается (inert нельзя: панель внутри корня приложения)
+	useScrollLock(open)
 	const boxRef = useRef<HTMLDivElement>(null)
 	const btnRef = useRef<HTMLButtonElement>(null)
 
@@ -72,7 +75,7 @@ export function SpaceSwitcher() {
 			{open && (
 				<>
 					{/* Мобильный: затемнение под панелью */}
-					<div aria-hidden="true" className="fixed inset-0 z-30 sm:hidden" style={{ background: 'rgba(0,0,0,.35)' }} />
+					<div aria-hidden="true" className="fixed inset-0 z-30 [touch-action:none] sm:hidden" style={{ background: 'rgba(0,0,0,.35)' }} />
 					<div
 						ref={boxRef}
 						role="dialog"
