@@ -130,11 +130,12 @@ function ShellBody({ children }: { children: ReactNode }) {
 
 	return (
 		// Мобильный: колонка на всю высоту экрана — шапка (flex-none), #app-scroll (единственная прокрутка), нижняя панель (flex-none).
-		// Экраны загрузки/ошибки/пустые — внутри #app-scroll, каркас один и тот же. Десктоп: высота по содержимому, прокручивается #page.
+		// Экраны загрузки/ошибки/пустые — внутри #app-scroll, каркас один и тот же. Высота — от #page (fixed, inset 0), не вычисляется.
+		// Safe-area: сверху — padding шапки, снизу — padding панели. Десктоп: высота по содержимому, прокручивается #page.
 		// Десктоп: панель 1120 → 1440 (wide) → 1840 (huge) → 2200 (giant), в px — не растёт с масштабом шрифта; поля страницы 24 / 32 / 40
 		<div id={APP_ROOT_ID} className="h-full sm:h-auto xl:px-6 wide:px-8 huge:px-10">
 		<div className="mx-auto flex h-full max-w-280 flex-col sm:block sm:h-auto wide:max-w-[1440px] huge:max-w-[1840px] giant:max-w-[2200px]">
-			<div className="flex-none px-4 pt-5 sm:px-12">
+			<div className="flex-none px-4 pt-[calc(env(safe-area-inset-top,0px)+0.75rem)] sm:px-12 sm:pt-5">
 				<header className="flex flex-nowrap items-center gap-x-6 gap-y-3 pb-4 sm:flex-wrap">
 					<div className="mr-auto min-w-0 sm:mr-0">
 						{/* Бюджет — слева; без выбора (solo, архив) — название приложения */}

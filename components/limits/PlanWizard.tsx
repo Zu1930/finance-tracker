@@ -38,7 +38,7 @@ export function PlanWizard({ month, scope, onClose }: { month: string; scope: Sc
 	const gen = MONTHS_GEN[Number(month.slice(5, 7)) - 1]
 	const inMonth = MONTHS_IN[Number(month.slice(5, 7)) - 1]
 	const head = useRef<HTMLHeadingElement>(null)
-	useEffect(() => head.current?.focus(), [i])
+	useEffect(() => head.current?.focus({ preventScroll: true }), [i])
 
 	// История: «назад» в браузере — как закрыть; с изменениями — спросить
 	const dirty = useRef(false)

@@ -12,6 +12,9 @@ export function Portal({ children }: { children: ReactNode }) {
 	return client ? createPortal(children, document.body) : null
 }
 
+/** Вместо autoFocus в шторках: фокус при монтировании без прокрутки страницы */
+export const focusNoScroll = (el: HTMLElement | null) => el?.focus({ preventScroll: true })
+
 // ---------- Блокировка страницы ----------
 // Только overflow:hidden на прокручиваемых контейнерах: позиция прокрутки сохраняется сама, body/html не трогаем (на iOS это сдвигало видимую область).
 // Шторки могут быть открыты одновременно (план поверх лимитов) — общий счётчик: снимается, когда закрыта последняя

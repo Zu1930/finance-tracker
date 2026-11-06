@@ -71,7 +71,7 @@ export function Sheet({ label, onClose, full = false, children }: { label: strin
 	useScrollLock(true)
 	useInertApp(true)
 	useEffect(() => {
-		ref.current?.focus()
+		ref.current?.focus({ preventScroll: true })
 		const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close.current()
 		window.addEventListener('keydown', onKey)
 		return () => window.removeEventListener('keydown', onKey)

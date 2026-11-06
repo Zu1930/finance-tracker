@@ -5,6 +5,7 @@ import { useTracker } from '../TrackerProvider'
 import { useSpace, useSpaceData } from '../SpaceProvider'
 import { useNarrow } from '../AsciiBar'
 import { BTN, PRIMARY, Sheet } from '../limits/parts'
+import { focusNoScroll } from '../useSheet'
 import { Icon } from '../icons/Icon'
 import { IconText, spaceIcon } from '../icons/IconText'
 import { Hint } from '../onboarding/Hint'
@@ -244,7 +245,7 @@ function NewAccount({ scope, onClose }: { scope: Scope; onClose: () => void }) {
 	}
 	return (
 		<div className="mt-3 flex flex-col gap-3">
-			<input autoFocus className="tfield" placeholder={t('money.accountName')} aria-label={t('money.accountName')} value={name} maxLength={40}
+			<input ref={focusNoScroll} className="tfield" placeholder={t('money.accountName')} aria-label={t('money.accountName')} value={name} maxLength={40}
 				onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void add()} />
 			<div className="flex flex-wrap items-center gap-3">
 				<input className="tfield min-w-0 flex-1 text-right" inputMode="decimal" placeholder="0" aria-label={t('money.balance')} value={bal}
@@ -329,7 +330,7 @@ function GoalCard({ g, canWrite, onClose }: { g: Goal; canWrite: boolean; onClos
 			<span className={HINT}>{t('money.goalHint')}</span>
 			{canWrite && (
 				<>
-					<input className="tfield text-[1.375rem]" inputMode="decimal" autoFocus placeholder={t('money.amount')} aria-label={t('money.amount')} value={val}
+					<input className="tfield text-[1.375rem]" inputMode="decimal" ref={focusNoScroll} placeholder={t('money.amount')} aria-label={t('money.amount')} value={val}
 						onChange={(e) => setVal(amountChars(e.target.value))} onKeyDown={(e) => e.key === 'Enter' && void move(1)} />
 					<div className="grid grid-cols-2 gap-1.5">
 						<button className={`${PRIMARY} h-12 uppercase`} onClick={() => void move(1)}>{t('money.put')}</button>
@@ -358,7 +359,7 @@ function NewGoal({ scope, onClose }: { scope: Scope; onClose: () => void }) {
 	}
 	return (
 		<div className="mt-3 flex flex-col gap-3">
-			<input autoFocus className="tfield" placeholder={t('money.goalName')} aria-label={t('money.goalName')} value={name} maxLength={40}
+			<input ref={focusNoScroll} className="tfield" placeholder={t('money.goalName')} aria-label={t('money.goalName')} value={name} maxLength={40}
 				onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void add()} />
 			<div className="flex flex-wrap items-center gap-3">
 				<input className="tfield min-w-0 flex-1 text-right" inputMode="decimal" placeholder={t('money.goalTarget')} aria-label={t('money.goalTarget')} value={target}

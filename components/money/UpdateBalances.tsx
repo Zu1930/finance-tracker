@@ -145,7 +145,7 @@ export function UpdateSheet({ onClose }: { onClose: () => void }) {
 	const prevDay = data.savings.recons.at(-1)?.day ?? null
 	const n = accounts.length
 	const a = accounts[i]
-	useEffect(() => head.current?.focus(), [i, c.result])
+	useEffect(() => head.current?.focus({ preventScroll: true }), [i, c.result])
 
 	const pushed = useRef(false)
 	const done = useRef(onClose)
@@ -232,7 +232,7 @@ export function UpdateTable({ onClose }: { onClose: () => void }) {
 	const c = useCheck(accounts, onClose)
 	const first = useRef<HTMLInputElement>(null)
 	const prevDay = data.savings.recons.at(-1)?.day ?? null
-	useEffect(() => first.current?.focus(), [])
+	useEffect(() => first.current?.focus({ preventScroll: true }), [])
 	// Пустое поле — «так же»; неверное число — null
 	const value = (a: Account) => (raw[a.id]?.trim() ? parseAmount(raw[a.id]) : a.balance)
 	const balances = () => Object.fromEntries(accounts.map((a) => [a.id, value(a) ?? a.balance]))

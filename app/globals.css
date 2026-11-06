@@ -69,10 +69,13 @@
 }
 
 @layer base {
-  /* Body не прокручивается никогда: на iOS блокировка через body{position:fixed} сдвигает видимую область. Прокрутка — в #app-scroll */
-  html, body { height: 100%; margin: 0; overflow: hidden; }
-  /* Весь экран одной колонкой. Safe-area сверху — единственный отступ здесь; снизу её добавляет только нижняя панель, ровно один раз */
-  #page { height: 100%; height: 100dvh; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding-top: env(safe-area-inset-top, 0px); }
+  /* Документ не прокручивается никогда (страховка — components/Viewport.tsx). Прокрутка — в #app-scroll (мобильный) или #page (десктоп, страницы без Shell) */
+  html, body { height: 100%; margin: 0; overflow: hidden; background: var(--panel); }
+  /* Корень — по краям экрана, высота не вычисляется (100dvh в standalone + black-translucent была выше экрана на статус-бар).
+     --app-h — только запасной вариант standalone при измеренном расхождении (Viewport.tsx). Safe-area: сверху — шапка, снизу — нижняя панель */
+  #page { position: fixed; inset: 0; height: var(--app-h, auto); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+  /* Страницы без шапки приложения (вход, приглашение…) — safe-area сверху здесь */
+  #page:not(:has(#app-root)) { padding-top: env(safe-area-inset-top, 0px); }
   #app-scroll { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
   /* Масштаб больших экранов: текст тела (text-sm = 0.875rem) 14 → 15 → 16 → 17px; отступы, иконки и размеры в rem растут с ним */
   @media (width >= 100rem) { html { font-size: 107.142857%; } }

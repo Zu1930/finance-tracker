@@ -204,14 +204,15 @@ function MobileEntry({ req, scope0, onClose }: { req: Request; scope0: Scope; on
 	// Фокус внутри формы, Tab не уходит наружу, Esc закрывает
 	useEffect(() => {
 		const box = boxRef.current!
-		box.querySelector<HTMLElement>('[data-autofocus]')?.focus()
+		// Без прокрутки страницы. Поле суммы не фокусируется (своя клавиатура) — фокус на шторку; в голосе — на микрофон
+		;(box.querySelector<HTMLElement>('[data-autofocus]') ?? box).focus({ preventScroll: true })
 		const onKey = (e: KeyboardEvent) => {
 			if (e.key === 'Escape') return closeRef.current()
 			if (e.key !== 'Tab') return
 			const list = [...box.querySelectorAll<HTMLElement>('button:not(:disabled), input, select')].filter((x) => x.offsetParent !== null)
 			const [first, last] = [list[0], list.at(-1)]
-			if (e.shiftKey && document.activeElement === first) (e.preventDefault(), last?.focus())
-			else if (!e.shiftKey && document.activeElement === last) (e.preventDefault(), first?.focus())
+			if (e.shiftKey && document.activeElement === first) (e.preventDefault(), last?.focus({ preventScroll: true }))
+			else if (!e.shiftKey && document.activeElement === last) (e.preventDefault(), first?.focus({ preventScroll: true }))
 		}
 		document.addEventListener('keydown', onKey)
 		return () => {
@@ -240,12 +241,13 @@ function MobileEntry({ req, scope0, onClose }: { req: Request; scope0: Scope; on
 			/>
 			<div
 				ref={boxRef}
+				tabIndex={-1}
 				role="dialog"
 				aria-modal="true"
 				aria-label={t('entry.new')}
 				data-entry-sheet
 				// Высота по содержимому, не выше --avail; прижата к низу видимой области (переменные ставит useSheetLayout)
-				className="fixed inset-x-0 bottom-[var(--sheet-bottom,0px)] z-40 flex h-auto max-h-[var(--avail,calc(100dvh-1rem))] flex-col border-t border-ink bg-panel px-4 text-sm motion-safe:animate-[sheet-up_.2s_cubic-bezier(.2,.8,.2,1)]"
+				className="fixed inset-x-0 bottom-[var(--sheet-bottom,0px)] z-40 flex h-auto max-h-[var(--avail,calc(100dvh-1rem))] flex-col border-t border-ink bg-panel px-4 outline-none text-sm motion-safe:animate-[sheet-up_.2s_cubic-bezier(.2,.8,.2,1)]"
 				style={{
 					transform: leaving ? 'translateY(100%)' : dy ? `translateY(${dy}px)` : undefined,
 					transition: dragging ? 'none' : 'transform .22s cubic-bezier(.4,0,1,1)',
@@ -358,7 +360,6 @@ function Keys({ midRef, d, kind, scope, expr, setExpr, toggleScope, onSave, onPl
 						<input
 							readOnly
 							inputMode="none"
-							data-autofocus
 							className={`w-full min-w-0 bg-transparent text-center leading-tight font-bold outline-none ${expr.length > 14 ? 'text-[1.625rem]' : expr.length > 9 ? 'text-[2.125rem]' : 'text-[2.75rem]'}`}
 							value={`${kind === 'income' ? '+' : '−'}${expr || '0'}`}
 							aria-describedby="m-cur"

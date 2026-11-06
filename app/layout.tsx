@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { ServiceWorker } from "@/components/ServiceWorker";
+import { Viewport as ViewportGuard } from "@/components/Viewport";
 
 const mono = JetBrains_Mono({ subsets: ["latin", "cyrillic"], weight: ["400", "500", "700"], variable: "--font-jetbrains" });
 
@@ -33,10 +34,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>
-        {/* Высота экрана; safe-area сверху — его padding. Страницы без Shell (вход и т.п.) прокручиваются в нём,
-            в приложении (Shell) прокручивается только #app-scroll. Шторки и тост — порталом в body */}
+        {/* Корень по краям экрана (position: fixed; inset: 0). Страницы без Shell (вход и т.п.) прокручиваются в нём,
+            в приложении на телефоне — только #app-scroll. Шторки и тост — порталом в body */}
         <div id="page">{children}</div>
         <ServiceWorker />
+        <ViewportGuard />
       </body>
     </html>
   );
