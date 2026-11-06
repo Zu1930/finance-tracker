@@ -87,10 +87,10 @@ function ShellBody({ children }: { children: ReactNode }) {
 
 	let body: ReactNode
 	if (status === 'loading')
-		body = <p className="py-16 text-center text-muted">&gt; ЗАГРУЗКА ДАННЫХ…</p>
+		body = <p className="m-auto py-16 text-center text-muted">&gt; ЗАГРУЗКА ДАННЫХ…</p>
 	else if (status === 'error')
 		body = (
-			<div className="py-8">
+			<div className="m-auto py-8 text-center sm:m-0 sm:text-left">
 				<p className="mb-4 text-bad">
 					!! НЕ УДАЛОСЬ ЗАГРУЗИТЬ ДАННЫЕ. ПРОВЕРЬТЕ СВЯЗЬ И ПОВТОРИТЕ
 				</p>
@@ -102,7 +102,7 @@ function ShellBody({ children }: { children: ReactNode }) {
 				</button>
 			</div>
 		)
-	else if (welcome) body = <p className="py-16 text-center text-muted">&gt; НАСТРОЙКА…</p>
+	else if (welcome) body = <p className="m-auto py-16 text-center text-muted">&gt; НАСТРОЙКА…</p>
 	else if (!data.settings && !pathname.startsWith('/help')) body = <Setup />
 	else body = children
 
@@ -129,11 +129,12 @@ function ShellBody({ children }: { children: ReactNode }) {
 	const ready = status === 'ready' && !!data.settings && !ro
 
 	return (
-		// Мобильный: колонка на всю высоту экрана, нижняя панель вкладок прилипает к низу.
+		// Мобильный: колонка на всю высоту экрана — шапка (flex-none), #app-scroll (единственная прокрутка), нижняя панель (flex-none).
+		// Экраны загрузки/ошибки/пустые — внутри #app-scroll, каркас один и тот же. Десктоп: высота по содержимому, прокручивается #page.
 		// Десктоп: панель 1120 → 1440 (wide) → 1840 (huge) → 2200 (giant), в px — не растёт с масштабом шрифта; поля страницы 24 / 32 / 40
-		<div id={APP_ROOT_ID} className="xl:px-6 wide:px-8 huge:px-10">
-		<div className="mx-auto flex min-h-full max-w-280 flex-col sm:block sm:min-h-0 wide:max-w-[1440px] huge:max-w-[1840px] giant:max-w-[2200px]">
-			<div className="flex-1 px-4 pt-5 pb-6 sm:px-12 sm:pb-10">
+		<div id={APP_ROOT_ID} className="h-full sm:h-auto xl:px-6 wide:px-8 huge:px-10">
+		<div className="mx-auto flex h-full max-w-280 flex-col sm:block sm:h-auto wide:max-w-[1440px] huge:max-w-[1840px] giant:max-w-[2200px]">
+			<div className="flex-none px-4 pt-5 sm:px-12">
 				<header className="flex flex-nowrap items-center gap-x-6 gap-y-3 pb-4 sm:flex-wrap">
 					<div className="mr-auto min-w-0 sm:mr-0">
 						{/* Бюджет — слева; без выбора (solo, архив) — название приложения */}
@@ -187,6 +188,9 @@ function ShellBody({ children }: { children: ReactNode }) {
 				</header>
 				{/* Итог бюджета: на десктопе — колонка рядом с лентой, на мобильном — верх ленты */}
 				<hr className={`dash ${ready ? 'max-sm:hidden' : ''}`} />
+			</div>
+			{/* Нижний отступ на мобильном — выступ кнопки «+» над панелью (26px), чтобы последняя запись не пряталась под ней */}
+			<div id="app-scroll" className="min-h-0 flex-1 overflow-y-auto px-4 pb-[1.625rem] max-sm:flex max-sm:flex-col sm:flex-none sm:overflow-visible sm:px-12 sm:pb-10">
 				{(offline || queued > 0) && (
 					<p className="mt-3 text-warn uppercase" role="status">
 						{offline ? <Icon name="warning" size={16} className="mr-2" /> : null}
@@ -195,17 +199,17 @@ function ShellBody({ children }: { children: ReactNode }) {
 						{queued > 0 && ` // в очереди: ${queued}`}
 					</p>
 				)}
-				<main className="pt-6"><HintsProvider>{body}</HintsProvider></main>
+				<main className={`pt-6 ${status !== 'ready' || welcome ? 'max-sm:flex max-sm:flex-1 max-sm:flex-col' : ''}`}><HintsProvider>{body}</HintsProvider></main>
 			</div>
 			<nav
-				className={`sticky bottom-0 z-10 grid items-end border-t border-line bg-panel pb-[env(safe-area-inset-bottom,0rem)] sm:hidden ${ro || !ready ? 'grid-cols-4' : 'grid-cols-[1fr_1fr_5.25rem_1fr_1fr]'}`}
+				className={`grid flex-none items-end border-t border-line bg-panel pb-[env(safe-area-inset-bottom,0rem)] sm:hidden ${ro ? 'grid-cols-4' : 'grid-cols-[1fr_1fr_5.25rem_1fr_1fr]'}`}
 				aria-label="Разделы"
 			>
-				{ro || !ready ? tabs(true) : (
+				{ro ? tabs(true) : (
 					<>
 						{tabs(true).slice(0, 2)}
 						{/* useSearchParams внутри — нужна граница Suspense */}
-						<Suspense fallback={<span />}><EntrySheetHost /></Suspense>
+						<Suspense fallback={<span />}><EntrySheetHost inactive={!ready} /></Suspense>
 						{tabs(true).slice(2)}
 					</>
 				)}

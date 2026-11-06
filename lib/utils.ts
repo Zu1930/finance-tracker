@@ -5,13 +5,18 @@ export const uid = () =>
     ? crypto.randomUUID()
     : Date.now().toString(36) + Math.random().toString(36).slice(2);
 
-const nf = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
+const nf0 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
+const nf2 = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 /** До копеек; всё, что округляется в ноль, — ровно 0, без «-0» */
 const cents = (n: number) => {
   const r = Math.round(n * 100) / 100;
   return r === 0 ? 0 : r;
 };
-export const fmt = (n: number) => nf.format(cents(n));
+/** Единый формат сумм: целое — без копеек (188 600), иначе ровно 2 знака (188 600,40), никогда «188 600,4» */
+export const fmt = (n: number) => {
+  const c = cents(n);
+  return (Number.isInteger(c) ? nf0 : nf2).format(c);
+};
 /** +1 250 / −300; ноль — «0» без знака */
 export const signed = (n: number) => {
   const r = cents(n);
@@ -97,8 +102,8 @@ export function parseAmount(raw: string): number | null {
   return Math.round(sum * 100) / 100;
 }
 
-/** «Кафе и рестораны» → «КАФЕ_И_РЕСТОРАНЫ». Только для отображения */
-export const termName = (name: string) => name.trim().toUpperCase().replace(/\s+/g, "_");
+/** «Кафе и рестораны» → «КАФЕ И РЕСТОРАНЫ». Только для отображения, подчёркиваний в интерфейсе нет */
+export const termName = (name: string) => name.trim().toUpperCase().replace(/\s+/g, " ");
 
 export const DEFAULT_INCOME_SOURCES: IncomeSource[] = [
   { id: "salary", name: "Зарплата" },

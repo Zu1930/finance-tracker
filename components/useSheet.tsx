@@ -13,24 +13,29 @@ export function Portal({ children }: { children: ReactNode }) {
 }
 
 // ---------- Блокировка страницы ----------
-// Только overflow:hidden на #app-scroll: позиция прокрутки сохраняется сама, body/html не трогаем (на iOS это сдвигало видимую область).
+// Только overflow:hidden на прокручиваемых контейнерах: позиция прокрутки сохраняется сама, body/html не трогаем (на iOS это сдвигало видимую область).
 // Шторки могут быть открыты одновременно (план поверх лимитов) — общий счётчик: снимается, когда закрыта последняя
 let locks = 0
 
+// На мобильном прокручивается #app-scroll, на десктопе — #page: блокируем оба
+const SCROLLERS = ['app-scroll', 'page']
+const scrollers = () => SCROLLERS.map((id) => document.getElementById(id)).filter((el): el is HTMLElement => !!el)
+
 function lock() {
 	if (locks++ > 0) return
-	const el = document.getElementById('app-scroll')
-	if (!el) return
-	// Полоса прокрутки на десктопе пропадёт — компенсируем отступом, чтобы страница не прыгала
-	const bar = el.offsetWidth - el.clientWidth
-	el.style.overflow = 'hidden'
-	if (bar > 0) el.style.paddingRight = `${bar}px`
+	for (const el of scrollers()) {
+		// Полоса прокрутки на десктопе пропадёт — компенсируем отступом, чтобы страница не прыгала
+		const bar = el.offsetWidth - el.clientWidth
+		el.style.overflow = 'hidden'
+		if (bar > 0) el.style.paddingRight = `${bar}px`
+	}
 }
 function unlock() {
 	if (--locks > 0) return
-	const el = document.getElementById('app-scroll')
-	el?.style.removeProperty('overflow')
-	el?.style.removeProperty('padding-right')
+	for (const el of scrollers()) {
+		el.style.removeProperty('overflow')
+		el.style.removeProperty('padding-right')
+	}
 }
 
 /** Пока шторка открыта, страница (#app-scroll) не прокручивается */

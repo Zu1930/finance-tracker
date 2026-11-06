@@ -74,7 +74,7 @@ export const fabAction = (readOnly: boolean, hold: boolean) => (readOnly ? 'choo
  * Кнопка «+» в нижней панели и форма поверх страницы. Нажатие — последний способ ввода, удержание 500 мс — голос
  * с начатой записью. Открыта форма или нет — по ?new=1 в адресе, поэтому «назад» её закрывает
  */
-export function EntrySheetHost() {
+export function EntrySheetHost({ inactive = false }: { inactive?: boolean }) {
 	const params = useSearchParams()
 	const { readOnly, entryScope, setChooserOpen } = useSpace()
 	const open = params.get(SHEET_PARAM) === '1'
@@ -107,7 +107,8 @@ export function EntrySheetHost() {
 			<span className="flex justify-center">
 				<button
 					className="-mt-[1.625rem] flex h-16 w-16 items-center justify-center border border-ink bg-ink text-panel select-none [-webkit-touch-callout:none]"
-					style={{ opacity: readOnly ? 0.45 : 1 }}
+					disabled={inactive}
+					style={{ opacity: readOnly || inactive ? 0.45 : 1 }}
 					onPointerDown={down}
 					onPointerUp={up}
 					onPointerLeave={up}
