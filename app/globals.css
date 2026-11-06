@@ -69,8 +69,9 @@
 }
 
 @layer base {
-  :root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-  html{scroll-padding-top:env(safe-area-inset-top,0px)}
+  /* Body не прокручивается никогда: на iOS блокировка через body{position:fixed} сдвигает видимую область. Прокрутка — в #app-scroll */
+  html, body { height: 100%; overflow: hidden; }
+  #app-scroll { height: 100%; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding-top: env(safe-area-inset-top, 0px); }
   /* Масштаб больших экранов: текст тела (text-sm = 0.875rem) 14 → 15 → 16 → 17px; отступы, иконки и размеры в rem растут с ним */
   @media (width >= 100rem) { html { font-size: 107.142857%; } }
   @media (width >= 120rem) { html { font-size: 114.285714%; } }

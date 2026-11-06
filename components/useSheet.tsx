@@ -13,37 +13,27 @@ export function Portal({ children }: { children: ReactNode }) {
 }
 
 // ---------- Блокировка страницы ----------
+// Только overflow:hidden на #app-scroll: позиция прокрутки сохраняется сама, body/html не трогаем (на iOS это сдвигало видимую область).
 // Шторки могут быть открыты одновременно (план поверх лимитов) — общий счётчик: снимается, когда закрыта последняя
 let locks = 0
-let saved: { y: number; body: string; bodyOv: string; htmlOv: string } | null = null
 
 function lock() {
 	if (locks++ > 0) return
-	const { body, documentElement: html } = document
-	const y = window.scrollY
-	saved = { y, body: body.getAttribute('style') ?? '', bodyOv: body.style.overflow, htmlOv: html.style.overflow }
+	const el = document.getElementById('app-scroll')
+	if (!el) return
 	// Полоса прокрутки на десктопе пропадёт — компенсируем отступом, чтобы страница не прыгала
-	const bar = window.innerWidth - html.clientWidth
-	html.style.overflow = 'hidden'
-	body.style.overflow = 'hidden'
-	body.style.position = 'fixed'
-	body.style.top = `-${y}px`
-	body.style.width = '100%'
-	if (bar > 0) body.style.paddingRight = `${bar}px`
+	const bar = el.offsetWidth - el.clientWidth
+	el.style.overflow = 'hidden'
+	if (bar > 0) el.style.paddingRight = `${bar}px`
 }
 function unlock() {
-	if (--locks > 0 || !saved) return
-	const { body, documentElement: html } = document
-	const s = saved
-	saved = null
-	html.style.overflow = s.htmlOv
-	if (s.body) body.setAttribute('style', s.body)
-	else body.removeAttribute('style')
-	body.style.overflow = s.bodyOv
-	window.scrollTo(0, s.y)
+	if (--locks > 0) return
+	const el = document.getElementById('app-scroll')
+	el?.style.removeProperty('overflow')
+	el?.style.removeProperty('padding-right')
 }
 
-/** Пока шторка открыта, страница под ней не прокручивается: scrollY запоминается, body фиксируется и сдвигается на -scrollY */
+/** Пока шторка открыта, страница (#app-scroll) не прокручивается */
 export function useScrollLock(open: boolean) {
 	useEffect(() => {
 		if (!open) return
@@ -96,7 +86,9 @@ export function useSheetLayout(sheetRef: RefObject<HTMLElement | null>, middleRe
 			const vh = vv?.height ?? window.innerHeight
 			const offTop = vv?.offsetTop ?? 0
 			// Низ видимой области в координатах fixed: при открытой системной клавиатуре шторка стоит над ней
-			const bottom = Math.max(0, Math.round(window.innerHeight - vh - offTop))
+			// Сдвиг вверх — только если открыта системная клавиатура; иначе шторка у нижнего края (bottom: 0)
+			const kb = window.innerHeight - vh > 100
+			const bottom = kb ? Math.max(0, Math.round(window.innerHeight - vh - offTop)) : 0
 			const sat = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sat')) || 0
 			const avail = Math.max(0, Math.floor(vh - TOP - sat))
 			sheet.style.setProperty('--avail', `${avail}px`)
@@ -146,12 +138,17 @@ export function useSheetLayout(sheetRef: RefObject<HTMLElement | null>, middleRe
 		mo.observe(sheet, { childList: true })
 		attach()
 		measure()
+		// После применения блокировки и отрисовки шторки — ещё раз, и по окончании анимации открытия
+		let r1 = requestAnimationFrame(() => (r1 = requestAnimationFrame(measure)))
+		sheet.addEventListener('animationend', schedule)
 
 		vv?.addEventListener('resize', schedule)
 		vv?.addEventListener('scroll', schedule)
 		window.addEventListener('resize', schedule)
 		return () => {
 			cancelAnimationFrame(frame)
+			cancelAnimationFrame(r1)
+			sheet.removeEventListener('animationend', schedule)
 			ro.disconnect()
 			mo.disconnect()
 			vv?.removeEventListener('resize', schedule)

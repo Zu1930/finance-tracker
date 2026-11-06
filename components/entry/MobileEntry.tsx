@@ -244,7 +244,7 @@ function MobileEntry({ req, scope0, onClose }: { req: Request; scope0: Scope; on
 				aria-label={t('entry.new')}
 				data-entry-sheet
 				// Высота по содержимому, не выше --avail; прижата к низу видимой области (переменные ставит useSheetLayout)
-				className="fixed inset-x-0 bottom-[var(--sheet-bottom,0px)] z-40 flex h-auto max-h-[var(--avail,calc(100dvh-1rem))] flex-col border-t border-ink bg-panel px-4 text-sm motion-safe:animate-[sheet-up_.32s_cubic-bezier(.2,.8,.2,1)]"
+				className="fixed inset-x-0 bottom-[var(--sheet-bottom,0px)] z-40 flex h-auto max-h-[var(--avail,calc(100dvh-1rem))] flex-col border-t border-ink bg-panel px-4 text-sm motion-safe:animate-[sheet-up_.2s_cubic-bezier(.2,.8,.2,1)]"
 				style={{
 					transform: leaving ? 'translateY(100%)' : dy ? `translateY(${dy}px)` : undefined,
 					transition: dragging ? 'none' : 'transform .22s cubic-bezier(.4,0,1,1)',

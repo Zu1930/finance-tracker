@@ -132,7 +132,7 @@ function ShellBody({ children }: { children: ReactNode }) {
 		// Мобильный: колонка на всю высоту экрана, нижняя панель вкладок прилипает к низу.
 		// Десктоп: панель 1120 → 1440 (wide) → 1840 (huge) → 2200 (giant), в px — не растёт с масштабом шрифта; поля страницы 24 / 32 / 40
 		<div id={APP_ROOT_ID} className="xl:px-6 wide:px-8 huge:px-10">
-		<div className="mx-auto flex min-h-dvh max-w-280 flex-col sm:block sm:min-h-0 wide:max-w-[1440px] huge:max-w-[1840px] giant:max-w-[2200px]">
+		<div className="mx-auto flex min-h-full max-w-280 flex-col sm:block sm:min-h-0 wide:max-w-[1440px] huge:max-w-[1840px] giant:max-w-[2200px]">
 			<div className="flex-1 px-4 pt-5 pb-6 sm:px-12 sm:pb-10">
 				<header className="flex flex-nowrap items-center gap-x-6 gap-y-3 pb-4 sm:flex-wrap">
 					<div className="mr-auto min-w-0 sm:mr-0">

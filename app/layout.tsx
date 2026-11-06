@@ -33,7 +33,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body>
-        {children}
+        {/* Единственный прокручиваемый элемент; шторки и тост — порталом в body, вне него. Safe-area сверху — его padding */}
+        <div id="app-scroll">{children}</div>
         <ServiceWorker />
       </body>
     </html>
