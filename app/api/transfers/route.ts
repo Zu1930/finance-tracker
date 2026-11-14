@@ -8,7 +8,7 @@ import type { LedgerMove } from "@/lib/types";
 
 /**
  * Перевод: { id?, accountId, toAccountId, amount, toAmount?, day?, note? }. Со своего счёта на любой счёт семьи,
- * в том числе партнёра (ему видна только сумма). amount — в валюте отправителя, toAmount — получателя
+ * в том числе партнёра (ему видна только сумма): toAccountId = "user:<id>" — на его основной счёт. amount — в валюте отправителя, toAmount — получателя
  * (нет — та же сумма или по текущему курсу). Не доход и не трата: в статистику и лимиты не входит
  */
 export async function POST(req: Request) {
@@ -20,7 +20,15 @@ export async function POST(req: Request) {
   if (b.toAmount !== undefined && typeof b.toAmount !== "number") return fail(400, "Неверная сумма зачисления.");
   try {
     const { accounts, settings } = await ledgerCtx(ctx);
-    const t = { accountId: b.accountId, toAccountId: b.toAccountId, amount: b.amount, toAmount: b.toAmount as number | undefined };
+    // «user:<id>» — партнёру: его счета мне не видны, перевод идёт на его основной счёт (или первый действующий)
+    const toUser = /^user:(.+)$/.exec(b.toAccountId)?.[1];
+    if (toUser) {
+      const theirs = accounts.filter((a) => a.ownerId === toUser && a.ownerId !== ctx.userId && !a.archived);
+      const to = theirs.find((a) => a.primary) ?? theirs[0];
+      if (!to) return fail(400, "У получателя нет счёта.");
+      b.toAccountId = to.id;
+    }
+    const t = { accountId: b.accountId, toAccountId: b.toAccountId as string, amount: b.amount, toAmount: b.toAmount as number | undefined };
     const ok = checkTransfer(t, { userId: ctx.userId, accounts, base: settings?.base ?? "", rates: settings?.rates ?? {} });
     if (!ok.ok) return fail(ok.status, ok.error);
     const m: LedgerMove = {
@@ -28,7 +36,7 @@ export async function POST(req: Request) {
       amount: Math.round(t.amount * 100) / 100, toAmount: ok.toAmount, date: dayOf(b.day), note: typeof b.note === "string" ? b.note.slice(0, 140) : "", ts: Date.now(),
     };
     if (!(await getRepos().moves.add(ctx, m))) return fail(409, "Перевод с таким id уже есть.");
-    return NextResponse.json({ move: m });
+    return NextResponse.json({ move: toUser ? { ...m, toAccountId: `user:${toUser}` } : m });
   } catch (e) {
     console.error(e);
     return fail(500, "Не удалось сохранить перевод.");

@@ -5,6 +5,7 @@ import type { Expense, Settings, TrackerData, UserSettings } from "@/lib/types";
 import { applyQueue, readQueue, withEntry, writeQueue, type Entry, type Kind, type Queued } from "@/lib/offline";
 import { curMonthKey } from "@/lib/utils";
 import { applyPatch, type OnboardingPatch } from "@/lib/onboarding";
+import { withDefaultAccount } from "@/lib/ledger-ui";
 
 export type { Kind } from "@/lib/offline";
 
@@ -291,7 +292,8 @@ export function TrackerProvider({ children, source = "/api/data" }: { children: 
     toastState,
     dismissToast,
     addEntry: (kind, e) => {
-      const local = { ...e, authorId: ref.current.me.id };
+      // Без выбранного счёта (оплата регулярного, голосовой ввод) — на последний использованный
+      const local = { ...withDefaultAccount(ref.current, e), authorId: ref.current.me.id };
       commit(withEntry(ref.current, kind, local, true));
       if (offlineRef.current) {
         enqueue(kind, local);
@@ -300,7 +302,11 @@ export function TrackerProvider({ children, source = "/api/data" }: { children: 
       pending.current++;
       return send("/api/entries", "POST", { kind, entry: local })
         .then(async (res) => {
-          if (res.ok) return null;
+          // Трата из цели уменьшила часть на сервере — перечитать резервы
+          if (res.ok) {
+            if ("goalId" in local && local.goalId) void reload();
+            return null;
+          }
           commit(withEntry(ref.current, kind, local, false));
           toast(SAVE_FAILED);
           return ((await res.json().catch(() => ({}))) as { error?: string }).error ?? SAVE_FAILED;

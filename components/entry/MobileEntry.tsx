@@ -7,7 +7,7 @@ import { useSpace } from '../SpaceProvider'
 import { dateLabel, type EntryMode } from './EntryForm'
 import type { ParsedEntry } from '@/lib/quick-entry/parse'
 import { useEntryDraft } from './useEntryDraft'
-import { PlanChips } from './EntryPage'
+import { AccountChips, PlanChips } from './EntryPage'
 import { scopeReasonText, useQuickEntry } from './QuickEntry'
 import { entryProblem } from '@/lib/quick-entry/entry'
 import { BACKSPACE, KEYS, evalExpr, hasOp, press, toAmount, type Key } from '@/lib/keypad'
@@ -420,6 +420,7 @@ function Keys({ midRef, d, kind, scope, expr, setExpr, toggleScope, onSave, onPl
 						</button>
 					))}
 				</div>
+				<AccountChips d={d} className="flex gap-1.5 overflow-x-auto" />
 				<PlanChips d={d} className="flex gap-1.5 overflow-x-auto" />
 				<input className="tfield shrink-0 border-line2 py-1" placeholder="Заметка" aria-label="Заметка" autoComplete="off" enterKeyHint="done" value={form.note} onChange={(e) => form.setNote(e.target.value)} />
 				</div>

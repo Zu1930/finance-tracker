@@ -2,7 +2,7 @@
  * Сбережения: итоги по счетам, сверка, динамика, распределение по копилкам. Чистые функции без Redis —
  * их вызывают route handlers, клиент и тесты (lib/savings.test.mjs). Только type-импорты и относительные .ts.
  */
-import { accountBalance, convert, goalProgress, ledgerAccount, reserved, type GoalAlloc, type LedgerEntry } from "./ledger.ts";
+import { accountBalance, convert, goalProgress, ledgerAccount, monthEnd, reserved, type GoalAlloc, type LedgerEntry } from "./ledger.ts";
 import type { Account, Expense, Goal, Income, LedgerMove, Recon, ReconView, SavingsView, Totals, User } from "./types.ts";
 
 export type Rates = Record<string, number | null | undefined>;
@@ -235,11 +235,14 @@ export function buildSavings(raw0: RawSavings, me: User, partner: User, base: st
       lastUpdatedAt: last,
     },
     recons: [...raw.recons].sort((a, b) => a.at.localeCompare(b.at)).map((r) => reconView(r, me.id, partner.id)),
-    ledger: ledgerView(raw, allocs, me.id, base, rates),
+    ledger: ledgerView(raw, allocs, me.id, base, rates, entries, today),
   };
 }
 
-function ledgerView(raw: RawSavings, allocs: GoalAlloc[], me: string, base: string, rates: Rates): NonNullable<SavingsView["ledger"]> {
+/** Месяцы истории: 6 последних, включая текущий */
+const HISTORY_MONTHS = 6;
+
+function ledgerView(raw: RawSavings, allocs: GoalAlloc[], me: string, base: string, rates: Rates, entries: LedgerEntry[], today: string): NonNullable<SavingsView["ledger"]> {
   const every = allAccounts(raw);
   const mine = [...Object.values(raw.accounts), ...Object.values(raw.userAccounts[me] ?? {})];
   const mineIds = new Set(mine.map((a) => a.id));
@@ -265,11 +268,26 @@ function ledgerView(raw: RawSavings, allocs: GoalAlloc[], me: string, base: stri
   const moves = (raw.moves ?? [])
     .filter((m) => m.userId === me || (m.toAccountId && mineIds.has(m.toAccountId)))
     // Входящий перевод от партнёра: видна сумма, его счёт — нет
-    .map((m) => (m.userId === me ? m : { ...m, accountId: "" }))
+    // Мой перевод партнёру: вместо его счёта — «user:<id>»
+    .map((m) => (m.userId === me ? (m.toAccountId && !mineIds.has(m.toAccountId) ? { ...m, toAccountId: `user:${every.find((a) => a.id === m.toAccountId)?.ownerId ?? ""}` } : m) : { ...m, accountId: "" }))
     .sort((a, b) => a.date.localeCompare(b.date) || a.ts - b.ts);
+  // Конец завершённых месяцев после перехода — из журнала, по текущему курсу
+  const monthEnds: Record<string, { family: number; mine: number }> = {};
+  const since = raw.ledgerSince ?? null;
+  if (since) {
+    const [y, m] = today.slice(0, 7).split("-").map(Number);
+    for (let i = HISTORY_MONTHS - 1; i >= 1; i--) {
+      const d = new Date(Date.UTC(y, m - 1 - i, 1));
+      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+      const end = monthEnd(key);
+      if (end < since) continue;
+      const sum = (list: Account[]) => list.reduce((t, a) => t + (a.archived ? 0 : convert(accountBalance(a, entries, end), a.currency, base, base, rates) ?? 0), 0);
+      monthEnds[key] = { family: Math.round(sum(every) * 100) / 100, mine: Math.round(sum(mine) * 100) / 100 };
+    }
+  }
   return {
-    since: raw.ledgerSince ?? null, accounts, allocs: allocs.filter((x) => mineIds.has(x.accountId)), goals,
-    familyTotal: Math.round(familyTotal * 100) / 100, missing: [...missing], moves,
+    since, accounts, allocs: allocs.filter((x) => mineIds.has(x.accountId)), goals,
+    familyTotal: Math.round(familyTotal * 100) / 100, missing: [...missing], moves, monthEnds,
   };
 }
 

@@ -146,11 +146,13 @@ export async function completeOnboarding(db: Db, ctx: Ctx, draft: WelcomeDraft, 
       for (const a of draft.accounts ?? []) {
         const preset = accountPresets(base).find((x) => x.key === a.key);
         if (!preset) throw new Abort(400, "Неверный счёт.");
-        const acc = prepareAccount({ name: preset.name, currency: preset.currency ?? base, scope: "personal", balance: a.balance }, ctx.userId, settings.currencies, uid(), now);
+        // Бюджет на журнале: остаток — точка отсчёта на сегодня
+        const acc = prepareAccount({ name: preset.name, currency: preset.currency ?? base, balance: a.balance, primary: created.length === 0 }, ctx.userId, settings.currencies, uid(), now,
+          settings.ledgerSince ? today : undefined);
         if (!acc || !(await r.accounts.create(ctx, acc))) throw new Abort(400, `Не удалось создать счёт «${preset.name}».`);
         created.push(acc);
       }
-      if (created.length) {
+      if (created.length && !settings.ledgerSince) {
         const raw = await r.store.snapshot(ctx);
         if (raw.savings && raw.savings.recons.length === 0) {
           const seen = [...Object.values(raw.savings.accounts), ...Object.values(raw.savings.userAccounts).flatMap((h) => Object.values(h))];

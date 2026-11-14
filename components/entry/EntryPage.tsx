@@ -136,7 +136,7 @@ function DesktopEntry() {
 					onPick={(id) => (mode === 'expense' ? d.setCatId(d.catId === id ? null : id) : d.setSrcId(id))}
 					onPlus={() => toIncome(false)}
 					onSubmit={d.submit}
-					extra={<PlanChips d={d} />}
+					extra={<><AccountChips d={d} /><PlanChips d={d} /></>}
 					empty={
 						scope === 'personal' && (
 							<p className="text-muted uppercase">
@@ -205,5 +205,32 @@ export function PlanChips({ d, className = 'mt-3 flex flex-wrap gap-2' }: { d: R
 				</button>
 			)}
 		</div>
+	)
+}
+
+/** Счёт записи и «из цели»: доход приходит на счёт, трата — в том числе семейная — списывается с него */
+export function AccountChips({ d, className = 'mt-3 flex flex-wrap gap-2' }: { d: ReturnType<typeof useEntryDraft>; className?: string }) {
+	if (d.accounts.length === 0) return <p className="mt-3 text-muted uppercase"><IconText name="warning">Нет счёта — добавьте на экране «Деньги»</IconText></p>
+	return (
+		<>
+			{d.accounts.length > 1 && (
+				<div className={className} role="group" aria-label="Счёт">
+					{d.accounts.map((a) => (
+						<button key={a.account.id} className="tb shrink-0" aria-pressed={d.accountId === a.account.id} onClick={() => d.setAccountId(a.account.id)}>
+							{termName(a.account.name)} <span className="text-muted">{fmt(a.free)} {a.account.currency}</span>
+						</button>
+					))}
+				</div>
+			)}
+			{d.goalChips.length > 0 && (
+				<div className={className} role="group" aria-label="Из цели">
+					{d.goalChips.map((g) => (
+						<button key={g.id} className="tb shrink-0" aria-pressed={d.goalId === g.id} onClick={() => d.setGoalId(d.goalId === g.id ? null : g.id)}>
+							<IconText name="plan">Из цели: {termName(g.name)}</IconText>
+						</button>
+					))}
+				</div>
+			)}
+		</>
 	)
 }

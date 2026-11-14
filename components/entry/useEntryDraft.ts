@@ -4,12 +4,13 @@ import { useEffect, useState } from 'react'
 import { useTracker } from '../TrackerProvider'
 import type { Expense, Income, Scope } from '@/lib/types'
 import { useEntryForm, type EntryMode } from './EntryForm'
-import { activeCats, byRecentUse, fmt, incomeSources, liveCats, numIn, parseAmount, termName, uid } from '@/lib/utils'
+import { activeCats, byRecentUse, fmt, incomeSources, liveCats, numIn, parseAmount, termName, todayStr, uid } from '@/lib/utils'
 import { itemLeft, itemStatus, linkedByItem } from '@/lib/plan'
 import { monthOccurrences } from '@/lib/metrics'
 import { matchPayment } from '@/lib/recurring'
 import { glyph } from '@/lib/space'
 import type { ParsedEntry } from '@/lib/quick-entry/parse'
+import { lastAccountId, myLedger, myPart } from '@/lib/ledger-ui'
 
 /**
  * Черновик записи — общий для формы на десктопе и формы поверх ленты на телефоне:
@@ -37,6 +38,18 @@ export function useEntryDraft(scope: Scope, mode: EntryMode) {
 	// Поступления почти всегда из одного источника, поэтому выбор не сбрасывается после записи
 	const [srcId, setSrcId] = useState(sources[0].id)
 	const src = sources.find((s) => s.id === srcId) ?? sources[0]
+
+	// Счёт: доход пополняет, трата (и семейная) списывает. По умолчанию — последний использованный; выбор не сбрасывается
+	const accounts = myLedger(data, todayStr())
+	const [pickedAccount, setAccountId] = useState<string | null>(null)
+	const accountId = accounts.some((a) => a.account.id === pickedAccount) ? pickedAccount : lastAccountId(data) ?? accounts[0]?.account.id ?? null
+	const account = accounts.find((a) => a.account.id === accountId)
+	// «Из цели»: цели, под которые на этом счёте что-то отложено
+	const goalChips = mode === 'expense' && accountId
+		? [...data.savings.goals.family, ...data.savings.goals.mine].filter((g) => myPart(data, g.id, accountId).amount > 0)
+		: []
+	const [goalPick, setGoalId] = useState<string | null>(null)
+	const goalId = goalChips.some((g) => g.id === goalPick) ? goalPick : null
 
 	// Пункты плана выбранной категории в месяце даты траты, ещё не купленные полностью
 	const planMonth = form.date.slice(0, 7)
@@ -93,15 +106,18 @@ export function useEntryDraft(scope: Scope, mode: EntryMode) {
 
 	const mark = (sc: Scope) => (isSolo ? '' : `${glyph(sc)} `)
 	/** Записать. true — записано (форма очищена, тост с отменой) */
+	const noAccount = () => (accountId ? null : 'Сначала добавьте счёт на экране «Деньги».')
 	const submit = (): boolean => {
 		if (mode === 'expense') {
 			const cat = cats.find((c) => c.id === catId)
-			const entry = form.collect(() => (cat ? null : 'Выберите категорию.'))
+			const entry = form.collect(() => noAccount() ?? (cat ? null : 'Выберите категорию.'))
 			if (!entry || !cat) return false
-			const e: Expense = { id: uid(), ...entry, catId: cat.id, scope, authorId: data.me.id, ...(planItem && entry.date.slice(0, 7) === planMonth && { planItemId: planItem.id }),
+			const e: Expense = { id: uid(), ...entry, catId: cat.id, scope, authorId: data.me.id, accountId: accountId!, ...(goalId && { goalId }),
+				...(planItem && entry.date.slice(0, 7) === planMonth && { planItemId: planItem.id }),
 				...(!planItem && recurring && { recurringId: recurring.paymentId, recurringMonth: recurring.month }) }
 			addEntry('expense', e)
 			setCatId(null)
+			setGoalId(null)
 			const tag = e.planItemId && planItem
 				? ` // План ${(linked[planItem.id] ?? 0) + e.base >= planItem.amount ? '✓' : '~'}`
 				: e.recurringId && recurring ? ` // ↻ ${termName(recurring.name)}` : ''
@@ -109,9 +125,9 @@ export function useEntryDraft(scope: Scope, mode: EntryMode) {
 			toast(`Записано: −${fmt(e.amount)} ${e.currency} → ${mark(scope)}${termName(cat.name)}${tag}`, 'Отменить', () => removeEntry('expense', e))
 			return true
 		}
-		const entry = form.collect()
+		const entry = form.collect(noAccount)
 		if (!entry) return false
-		const i: Income = { id: uid(), ...entry, sourceId: src.id, authorId: data.me.id }
+		const i: Income = { id: uid(), ...entry, sourceId: src.id, authorId: data.me.id, accountId: accountId! }
 		addEntry('income', i)
 		form.reset()
 		toast(`Записано: +${fmt(i.amount)} ${i.currency} → ${termName(src.name)}`, 'Отменить', () => removeEntry('income', i))
@@ -122,6 +138,7 @@ export function useEntryDraft(scope: Scope, mode: EntryMode) {
 		form, cats, familyCats, personalCats, sources,
 		catId, setCatId, src, setSrcId,
 		planChips, planId, pickPlan, linked, match, recId, pickRecurring,
+		accounts, accountId, account, setAccountId, goalChips, goalId, setGoalId,
 		fillParsed, submit,
 	}
 }
