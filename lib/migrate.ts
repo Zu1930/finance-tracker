@@ -4,7 +4,7 @@
  * Личные категории у обоих пустые. Старые документы не трогаются: они остаются резервной копией
  */
 import { K, type RawStore } from "./store.ts";
-import type { Expense, GoalsDoc, Income, LegacyExpense, LegacyIncome, LegacySettings, Settings } from "./types.ts";
+import type { Expense, Income, LegacyExpense, LegacyIncome, LegacySettings, Settings } from "./types.ts";
 
 /** Нужна ли миграция: есть старые настройки, а новые ещё не в семейном формате */
 export const needsMigration = (current: Settings | null, legacy: Record<string, unknown>) =>
@@ -38,7 +38,3 @@ export function migrateLegacy(legacy: Record<string, unknown>, ownerId: string, 
     hashes,
   };
 }
-
-/** Перенос старых копилок в «Сбережения» нужен: есть старые копилки, а флага schemaVersion 3 ещё нет */
-export const needsGoalsMigration = (current: Settings | null, goals: GoalsDoc | null) =>
-  !!current && (current.schemaVersion ?? 0) < 3 && (goals?.items.length ?? 0) > 0;

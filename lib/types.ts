@@ -145,46 +145,27 @@ export type Goal = {
 /** Суммы в базовой валюте; счета без курса не входят */
 export type Totals = { family: number; byUser: Record<string, number>; all: number };
 
-/** Снимок сверки: ft:recons (ZSET, score = время). Полностью — только на сервере */
+/**
+ * Снимок сверки (до перехода на журнал): только история для графика за 6 месяцев, новые не создаются.
+ * В базе в snapshot лежат и старые поля сверки (остатки по счетам, разница) — их больше никто не читает
+ */
 export type Recon = {
   id: string;
   at: string; // ISO
-  /** День сверки у пользователя, YYYY-MM-DD: граница периода для трат и доходов */
   day: string;
   by: string;
-  /** accountId → остаток в валюте счёта, все счета семьи */
-  balances: Record<string, number>;
   /** Курсы к базе на момент сверки */
   rates: Record<string, number>;
   totals: Totals;
-  /** Доходы и расходы всей семьи с прошлой сверки; null — первая сверка */
-  income: number | null;
-  expense: number | null;
-  expected: number | null;
-  fact: number | null;
-  gap: number | null;
 };
 
-/** Снимок в ответе клиенту: без поштучных остатков */
-export type ReconView = {
-  at: string;
-  day: string;
-  all: number;
-  family: number;
-  mine: number;
-  partner: number;
-  income: number | null;
-  expense: number | null;
-  expected: number | null;
-  fact: number | null;
-  gap: number | null;
-};
+/** Снимок в ответе клиенту: итоги без поштучных остатков */
+export type ReconView = { at: string; day: string; all: number; family: number; mine: number; partner: number };
 
 export type SavingsView = {
   accounts: { family: Account[]; mine: Account[] };
   goals: { family: Goal[]; mine: Goal[] };
-  /** Личное партнёра — только суммы в базовой валюте */
-  partner: { total: number; goalsAllocated: number; lastUpdatedAt: string | null };
+  /** Снимки сверки до перехода на журнал — история */
   recons: ReconView[];
   /** Балансы из журнала (lib/ledger.ts); нет — сервер старый */
   ledger?: LedgerView;

@@ -9,7 +9,7 @@ import type { Ctx } from "./data/types.ts";
 import type { Category, OnboardingState, Scope } from "./types.ts";
 import { createInvite } from "./family.ts";
 import { prepareRecurring } from "./recurring.ts";
-import { applyReconcile, flowsOf, prepareAccount } from "./savings.ts";
+import { prepareAccount } from "./savings.ts";
 import { curMonthKey, defaultSettings, shiftMonth, todayStr, uid } from "./utils.ts";
 import {
   CAT_PRESETS, PAY_PRESETS, accountPresets, defaultCats, isHintId, payCategory, presetIn, ratesFor,
@@ -67,7 +67,7 @@ async function lockPending(tx: Db, userId: string) {
 }
 
 /**
- * Опрос целиком: категории, обязательные платежи, счета и первая сверка, для пары — семья и приглашение.
+ * Опрос целиком: категории, обязательные платежи, счета (точка отсчёта журнала), для пары — семья и приглашение.
  * rsdPer — сколько RSD стоит 1 единица валюты (текущие курсы, иначе запасные): пресеты в RSD пересчитываются
  * в валюту бюджета. Ошибка на любом шаге откатывает всё
  */
@@ -140,7 +140,7 @@ export async function completeOnboarding(db: Db, ctx: Ctx, draft: WelcomeDraft, 
         if (!rec || !(await r.recurring.create(ctx, rec))) throw new Abort(400, `Не удалось добавить платёж «${preset.name}».`);
       }
 
-      // Счета — личные; пустые строки не приходят. Первая сверка — точка отсчёта, если сверок в бюджете ещё нет
+      // Счета — личные; пустые строки не приходят. Остаток — точка отсчёта журнала
       const now = new Date().toISOString();
       const created = [];
       for (const a of draft.accounts ?? []) {
@@ -152,17 +152,6 @@ export async function completeOnboarding(db: Db, ctx: Ctx, draft: WelcomeDraft, 
         if (!acc || !(await r.accounts.create(ctx, acc))) throw new Abort(400, `Не удалось создать счёт «${preset.name}».`);
         created.push(acc);
       }
-      if (created.length && !settings.ledgerSince) {
-        const raw = await r.store.snapshot(ctx);
-        if (raw.savings && raw.savings.recons.length === 0) {
-          const seen = [...Object.values(raw.savings.accounts), ...Object.values(raw.savings.userAccounts).flatMap((h) => Object.values(h))];
-          const res = applyReconcile(raw.savings, ctx.userId, { balances: Object.fromEntries(created.map((a) => [a.id, a.balance])), versions: Object.fromEntries(seen.map((a) => [a.id, a.version])), day: today },
-            raw.settings!.base, raw.settings!.rates, flowsOf(raw.hashes), { id: uid(), at: now });
-          if ("error" in res) throw new Abort(res.status, res.error);
-          if (!(await r.recons.add(ctx, res.recon, seen, res.changed, 0))) throw new Abort(409, "Не удалось сохранить остатки, повторите.");
-        }
-      }
-
       const invite = pair ? await createInvite(t, ctx) : null;
       if (invite && !invite.ok) throw new Abort(invite.status, invite.error);
       await t.update(s.userOnboarding).set({ status: "done", completedAt: new Date(), version: sql`${s.userOnboarding.version} + 1` }).where(eq(s.userOnboarding.userId, ctx.userId));

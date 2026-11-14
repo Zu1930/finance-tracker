@@ -1,7 +1,7 @@
 import { neonConfig, Pool } from "@neondatabase/serverless";
 
 /**
- * WebSocket Pool Neon: транзакции (оплата регулярных, сверки, CAS) не работают в http-режиме.
+ * WebSocket Pool Neon: транзакции (оплата регулярных, резервы целей, CAS) не работают в http-режиме.
  * NEON_WSPROXY=host:port — локальный Postgres за WebSocket-прокси (разработка и проверки), без TLS
  */
 export function neonPool(connectionString: string): Pool {

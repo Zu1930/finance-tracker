@@ -702,34 +702,6 @@ export function postgresRepos(db: Db): Repos {
         }),
     },
 
-    recons: {
-      add: (ctx, recon, seen, changed, count) =>
-        db.transaction(async (tx) => {
-          // Блокировка бюджета упорядочивает сверки: снимок добавляется, только если их всё ещё count
-          await tx.select({ id: s.households.id }).from(s.households).where(eq(s.households.id, ctx.householdId)).for("update");
-          const [{ n }] = await tx.select({ n: sql<number>`count(*)::int` }).from(s.recons).where(eq(s.recons.householdId, ctx.householdId));
-          if (n !== count) return false;
-          const ids = seen.map((a) => a.id);
-          const cur = ids.length
-            ? await tx.select({ id: s.accounts.id, version: s.accounts.version }).from(s.accounts)
-              .where(and(eq(s.accounts.householdId, ctx.householdId), inArray(s.accounts.id, ids))).for("update")
-            : [];
-          const versions = new Map(cur.map((a) => [a.id, a.version]));
-          if (seen.some((a) => versions.get(a.id) !== a.version)) return false;
-          for (const a of changed) {
-            // Сверка меняет только семейные и свои личные счета
-            const done = await tx.update(s.accounts).set(accountRow(ctx, a))
-              .where(and(own(s.accounts, ctx, a.scope), eq(s.accounts.id, a.id), eq(s.accounts.version, a.version - 1))).returning({ id: s.accounts.id });
-            if (!done.length) throw new Error(`Счёт ${a.id} нельзя изменить сверкой`);
-          }
-          await tx.insert(s.recons).values({
-            householdId: ctx.householdId, id: recon.id, at: new Date(recon.at), day: recon.day, by: recon.by, snapshot: recon,
-            totalAll: r2(recon.totals.all), totalFamily: r2(recon.totals.family),
-          });
-          return true;
-        }),
-    },
-
     plans: {
       putFamily: (ctx, month, expected, data) =>
         db.transaction(async (tx) => {
@@ -898,13 +870,6 @@ export function postgresRepos(db: Db): Repos {
       // Старые форматы остались в Redis и переносятся до переезда; в Postgres их нет
       docs: async () => ({}),
       hasDocs: async () => false,
-      importGoals: (ctx, goals) =>
-        db.transaction(async (tx) => {
-          for (const g of goals) {
-            const row = { householdId: ctx.householdId, id: g.id, name: g.name, target: r2(g.target), currency: g.currency, allocated: r2(g.allocated), scope: g.scope, ownerId: ownerOf(ctx, g.scope), version: g.version };
-            if ((await tx.insert(s.goals).values(row).onConflictDoNothing().returning({ id: s.goals.id })).length) await writeGoal(tx, ctx, g);
-          }
-        }),
     },
 
     system: {

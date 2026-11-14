@@ -9,7 +9,7 @@ import type { TokenRecord } from "../quick-entry/api.ts";
 import type { PlanBulk } from "../plan.ts";
 import type { Bound, GoalAlloc } from "../ledger.ts";
 import type {
-  Account, Category, Expense, Goal, Income, LedgerMove, MonthPlan, MyMonthPlan, PlanItem, Recon, RecurringPayment, Scope, Settings, UserSettings,
+  Account, Category, Expense, Goal, Income, LedgerMove, MonthPlan, MyMonthPlan, PlanItem, RecurringPayment, Scope, Settings, UserSettings,
 } from "../types.ts";
 
 export type Ctx = { userId: string; householdId: string };
@@ -117,14 +117,6 @@ export interface GoalsRepo {
   update(ctx: Ctx, scope: Scope, id: string, version: number | undefined, change: Change<Goal>): Promise<Updated<Goal>>;
 }
 
-export interface ReconsRepo {
-  /**
-   * Снимок сверки: версии всех seen-счетов проверяются, changed записываются, снимок добавляется, если снимков
-   * всё ещё count. Атомарно; false — кто-то изменил счета или сверился раньше
-   */
-  add(ctx: Ctx, recon: Recon, seen: Account[], changed: Account[], count: number): Promise<boolean>;
-}
-
 export interface PlansRepo {
   putFamily(ctx: Ctx, month: string, expected: number, data: Omit<MonthPlan, "version">): Promise<CasResult>;
   putMine(ctx: Ctx, month: string, expected: number, data: Omit<MyMonthPlan, "version">): Promise<CasResult>;
@@ -174,12 +166,10 @@ export interface StoreRepo {
   replace(ctx: Ctx, raw: RawStore): Promise<void>;
 }
 
-/** Данные до семейного формата и до «Сбережений»: читают только миграции v2 и v3 */
+/** Данные до семейного формата: читает только миграция v2 */
 export interface LegacyRepo {
   docs(ctx: Ctx): Promise<Record<string, unknown>>;
   hasDocs(ctx: Ctx): Promise<boolean>;
-  /** Старые копилки переносятся с теми же id; уже перенесённые не перезаписываются */
-  importGoals(ctx: Ctx, goals: Goal[]): Promise<void>;
 }
 
 /** Служебное: до того, как известен пользователь, или для всех сразу */
@@ -216,7 +206,6 @@ export type Repos = {
   goals: GoalsRepo;
   moves: MovesRepo;
   allocs: AllocsRepo;
-  recons: ReconsRepo;
   plans: PlansRepo;
   planItems: PlanItemsRepo;
   recurring: RecurringRepo;

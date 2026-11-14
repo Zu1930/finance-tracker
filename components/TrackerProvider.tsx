@@ -80,7 +80,7 @@ const EMPTY: TrackerData = {
   partner: NOBODY,
   settings: null,
   mySettings: { personalCategories: [], version: 0 },
-  savings: { accounts: { family: [], mine: [] }, goals: { family: [], mine: [] }, partner: { total: 0, goalsAllocated: 0, lastUpdatedAt: null }, recons: [] },
+  savings: { accounts: { family: [], mine: [] }, goals: { family: [], mine: [] }, recons: [] },
   familyExpenses: {},
   myExpenses: {},
   incomes: {},
