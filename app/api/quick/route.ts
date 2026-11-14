@@ -5,6 +5,16 @@ import { people } from "@/lib/auth";
 import { localDate } from "@/lib/push";
 import { handleQuick, type QuickStore } from "@/lib/quick-entry/api";
 import { visibleExpenses } from "@/lib/quick-entry/dictionary";
+import { defaultAccount, ledgerCtx } from "@/lib/ledger-server";
+import type { Expense, Income } from "@/lib/types";
+
+/** Siri: запись на счёт по умолчанию — последний использованный владельцем токена */
+async function onDefaultAccount<T extends Expense | Income>(ctx: Ctx, e: T): Promise<T> {
+  const id = await defaultAccount(ctx);
+  const b = (await ledgerCtx(ctx)).bind(e, id ?? "", ctx.userId, undefined);
+  if (!b.ok) throw new Error(b.error);
+  return { ...e, accountId: b.accountId, accountAmount: b.accountAmount };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -23,11 +33,18 @@ const store: QuickStore = {
     const ctx = await ctxOfToken(userId);
     const { me, partner } = await people(ctx);
     const view = buildView(await getRepos().store.snapshot(ctx), me, partner);
-    return { settings: view.settings, personalCategories: view.mySettings.personalCategories, expenses: visibleExpenses(view) };
+    return {
+      settings: view.settings, personalCategories: view.mySettings.personalCategories, expenses: visibleExpenses(view),
+      noAccount: !(await defaultAccount(ctx)),
+    };
   },
-  write: async (userId, e) => getRepos().expenses.add(await ctxOfToken(userId), e),
+  write: async (userId, e) => {
+    const ctx = await ctxOfToken(userId);
+    await getRepos().expenses.add(ctx, await onDefaultAccount(ctx, e));
+  },
   writeIncome: async (userId, i) => {
-    if (!(await getRepos().incomes.add(await ctxOfToken(userId), i))) throw new Error(`Доход ${i.id} уже записан другим участником`);
+    const ctx = await ctxOfToken(userId);
+    if (!(await getRepos().incomes.add(ctx, await onDefaultAccount(ctx, i)))) throw new Error(`Доход ${i.id} уже записан другим участником`);
   },
 };
 

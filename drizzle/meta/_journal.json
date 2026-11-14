@@ -43,6 +43,13 @@
       "when": 1792900000000,
       "tag": "0005_personal_incomes",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794660770616,
+      "tag": "0006_ledger",
+      "breakpoints": true
     }
   ]
 }

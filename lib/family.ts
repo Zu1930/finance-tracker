@@ -5,7 +5,7 @@
  */
 import { and, asc, count, eq, gt, isNull } from "drizzle-orm";
 import * as s from "./data/postgres/schema.ts";
-import { postgresRepos, type Db } from "./data/postgres/repos.ts";
+import { balancesBefore, postgresRepos, reanchor, type Db } from "./data/postgres/repos.ts";
 import type { Ctx } from "./data/types.ts";
 import { hashCode, newInviteCode } from "./codes.ts";
 import { rebaseStore } from "./rebase.ts";
@@ -127,6 +127,9 @@ export async function acceptInvite(db: Db, code: string, userId: string, rate?: 
 
     // В solo всё личное; если где-то осталась запись без владельца — она станет его личной, а не семейной
     for (const t of OWNED) await tx.update(t).set({ scope: "personal", ownerId: userId }).where(and(eq(t.householdId, S), isNull(t.ownerId)));
+    // Балансы счетов на день переезда: доходы solo удаляются ниже, но баланс от этого не меняется
+    const today = todayStr();
+    const before = await balancesBefore(tx as unknown as Db, S, userId, today);
     // Общее solo-бюджета, которому нет места в семье: план дохода, доходы, сверки, корзина, источники
     for (const t of [s.monthPlans] as const) await tx.delete(t).where(and(eq(t.householdId, S), isNull(t.ownerId)));
     for (const t of [s.incomes, s.recons, s.deletedEntries, s.incomeSources] as const) await tx.delete(t).where(eq(t.householdId, S));
@@ -139,6 +142,8 @@ export async function acceptInvite(db: Db, code: string, userId: string, rate?: 
     // Переезд: платежи тянут за собой суммы и свои оплаты (ON UPDATE CASCADE), копилки — операции
     await tx.update(s.userSettings).set({ householdId: T }).where(and(eq(s.userSettings.householdId, S), eq(s.userSettings.userId, userId)));
     for (const t of [...OWNED, s.monthPlans] as const) await tx.update(t).set({ householdId: T }).where(eq(t.householdId, S));
+    await tx.update(s.ledgerMoves).set({ householdId: T }).where(eq(s.ledgerMoves.householdId, S));
+    await reanchor(tx as unknown as Db, T, before, today);
 
     // Валюты приглашённого — в список семьи (курс известен после пересчёта), настроек семьи нет — берутся его
     if (mine) {

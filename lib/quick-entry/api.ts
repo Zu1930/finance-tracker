@@ -28,7 +28,8 @@ export type QuickStore = {
   /** Запрос токеном id в текущую минуту → сколько их уже было, включая этот */
   hit: (id: string) => Promise<number>;
   /** Видимое пользователю: настройки, его личные категории, семейные траты обоих и его личные */
-  context: (userId: string) => Promise<{ settings: Settings | null; personalCategories: Category[]; expenses: Expense[] }>;
+  context: (userId: string) => Promise<{ settings: Settings | null; personalCategories: Category[]; expenses: Expense[]; noAccount?: boolean }>;
+  /** Запись на счёт по умолчанию (последний использованный) */
   write: (userId: string, e: Expense) => Promise<void>;
   /** Доход — всегда личный владельца токена */
   writeIncome: (userId: string, i: Income) => Promise<void>;
@@ -58,8 +59,10 @@ export async function handleQuick(auth: string | null, body: unknown, store: Qui
 
   const b = body as { text?: unknown; commit?: unknown } | null;
   if (typeof b?.text !== "string" || typeof b.commit !== "boolean") return deny(400, "Нужно { text: string, commit: boolean }.");
-  const { settings: st, personalCategories, expenses } = await store.context(userId);
+  const { settings: st, personalCategories, expenses, noAccount } = await store.context(userId);
   if (!st) return { status: 200, body: { ok: false, summary: "Трекер ещё не настроен." } };
+  // Запись списывает со счёта: без счетов записать некуда
+  if (noAccount) return { status: 200, body: { ok: false, summary: "Сначала добавьте счёт в приложении." } };
 
   const family = activeCats(st);
   const personal = liveCats(personalCategories);

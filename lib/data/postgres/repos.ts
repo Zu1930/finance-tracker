@@ -8,15 +8,16 @@ import { EDIT_CONFLICT, editExpense, editIncome, sameEntry, type EditResult } fr
 import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, sql, type SQL } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import * as s from "./schema.ts";
-import { type Change, type Ctx, type Done, type Repos, type StoredSubscription, type Updated } from "../types.ts";
+import { type Bind, type Change, type Ctx, type Done, type Repos, type StoredSubscription, type Updated } from "../types.ts";
 import { planLinkError, planMoveError } from "../../plan.ts";
 import { payLinkError, shiftMonth } from "../../recurring.ts";
 import { K, parseMonthKey, type RawStore } from "../../store.ts";
 import type { TokenRecord } from "../../quick-entry/api.ts";
 import type { RawPlans } from "../../plan.ts";
 import type { RawSavings } from "../../savings.ts";
+import { accountState, adjustmentAmount, delta, allocAfterSpend, checkAlloc, entriesOf, ledgerAccount, type GoalAlloc } from "../../ledger.ts";
 import type {
-  Account, Category, Expense, Goal, Income, IncomeSource, MonthPlan, MyMonthPlan, PlanItem, Recon, RecurringPayment, Scope, Settings, UserSettings,
+  Account, Category, Expense, Goal, Income, IncomeSource, LedgerMove, MonthPlan, MyMonthPlan, PlanItem, Recon, RecurringPayment, Scope, Settings, UserSettings,
 } from "../../types.ts";
 
 export type Db = PgDatabase<PgQueryResultHKT, typeof s>;
@@ -56,29 +57,41 @@ const toExpense = (r: typeof s.expenses.$inferSelect): Expense => ({
   id: r.id, amount: r.amount, currency: r.currency, rate: r.rate, base: r.base, catId: r.categoryId, note: r.note, date: r.date,
   ts: r.ts.getTime(), scope: r.scope, authorId: r.authorId,
   ...(r.planItemId && { planItemId: r.planItemId }), ...(r.recurringId && { recurringId: r.recurringId, recurringMonth: r.recurringMonth! }),
+  ...(r.accountId && { accountId: r.accountId, accountAmount: r.accountAmount! }), ...(r.goalId && { goalId: r.goalId }), ...(r.legacy && { legacy: true }),
 });
 export const expenseRow = (householdId: string, e: Expense) => ({
   householdId, id: e.id, authorId: e.authorId, scope: e.scope, ownerId: e.scope === "personal" ? e.authorId : null, categoryId: e.catId,
   amount: r2(e.amount), currency: e.currency, rate: e.rate, base: r2(e.base), date: e.date, note: e.note, ts: new Date(e.ts),
   planItemId: e.planItemId ?? null, recurringId: e.recurringId ?? null, recurringMonth: e.recurringId ? e.recurringMonth ?? null : null,
+  accountId: e.accountId ?? null, accountAmount: e.accountId ? r2(e.accountAmount ?? e.amount) : null, goalId: e.goalId ?? null, legacy: !!e.legacy,
 });
 const INCOME_NOT_YOURS = "Доход может менять только тот, кто его записал.";
 const toIncome = (r: typeof s.incomes.$inferSelect): Income => ({
   id: r.id, amount: r.amount, currency: r.currency, rate: r.rate, base: r.base, sourceId: r.sourceId, note: r.note, date: r.date, ts: r.ts.getTime(), authorId: r.authorId,
+  ...(r.accountId && { accountId: r.accountId, accountAmount: r.accountAmount! }), ...(r.legacy && { legacy: true }),
 });
 export const incomeRow = (householdId: string, i: Income) => ({
   householdId, id: i.id, authorId: i.authorId, sourceId: i.sourceId, amount: r2(i.amount), currency: i.currency, rate: i.rate, base: r2(i.base),
   date: i.date, note: i.note, ts: new Date(i.ts),
+  accountId: i.accountId ?? null, accountAmount: i.accountId ? r2(i.accountAmount ?? i.amount) : null, legacy: !!i.legacy,
 });
 
 const toAccount = (r: typeof s.accounts.$inferSelect): Account => ({
   id: r.id, name: r.name, currency: r.currency, scope: r.scope, ...(r.ownerId && { ownerId: r.ownerId }), balance: r.balance, initial: r.initial,
-  updatedAt: r.updatedAt.toISOString(), updatedBy: r.updatedBy, ...(r.archived && { archived: true }), version: r.version,
+  updatedAt: r.updatedAt.toISOString(), updatedBy: r.updatedBy, ...(r.archived && { archived: true }),
+  ...(r.initialAt && { initialAt: r.initialAt }), ...(r.primary && { primary: true }), version: r.version,
 });
 export const accountRow = (ctx: Ctx, a: Account) => ({
   householdId: ctx.householdId, id: a.id, name: a.name, currency: a.currency, scope: a.scope, ownerId: ownerOf(ctx, a.scope),
-  balance: r2(a.balance), initial: r2(a.initial), updatedAt: new Date(a.updatedAt), updatedBy: a.updatedBy, archived: !!a.archived, version: a.version,
+  balance: r2(a.balance), initial: r2(a.initial), updatedAt: new Date(a.updatedAt), updatedBy: a.updatedBy, archived: !!a.archived,
+  initialAt: a.initialAt ?? null, primary: !!a.primary, version: a.version,
 });
+
+const toMove = (r: typeof s.ledgerMoves.$inferSelect): LedgerMove => ({
+  id: r.id, userId: r.userId, type: r.type, accountId: r.accountId, ...(r.toAccountId && { toAccountId: r.toAccountId, toAmount: r.toAmount! }),
+  amount: r.amount, date: r.date, note: r.note, ts: r.ts.getTime(),
+});
+const toAlloc = (r: typeof s.goalAllocs.$inferSelect): GoalAlloc => ({ goalId: r.goalId, accountId: r.accountId, amount: r.amount, version: r.version });
 
 const toGoal = (r: typeof s.goals.$inferSelect, ops: (typeof s.goalOps.$inferSelect)[]): Goal => ({
   id: r.id, name: r.name, target: r.target, currency: r.currency, allocated: r.allocated, scope: r.scope, ...(r.ownerId && { ownerId: r.ownerId }),
@@ -109,6 +122,67 @@ const toToken = (r: typeof s.apiTokens.$inferSelect): TokenRecord => ({
   name: r.name, hash: r.hash, createdAt: r.createdAt.toISOString(), lastUsedAt: r.lastUsedAt?.toISOString() ?? null,
 });
 const tokensById = (rows: (typeof s.apiTokens.$inferSelect)[]) => Object.fromEntries(rows.map((r) => [r.id, toToken(r)]));
+
+const moveRow = (householdId: string, m: LedgerMove) => ({
+  householdId, id: m.id, userId: m.userId, type: m.type, accountId: m.accountId, toAccountId: m.toAccountId ?? null,
+  amount: r2(m.amount), toAmount: m.type === "transfer" ? r2(m.toAmount ?? m.amount) : null, date: m.date, note: m.note, ts: new Date(m.ts),
+});
+
+/**
+ * Счёт правленой записи. Счёт меняет только автор (его счёт), остальные — правят сумму, и она пересчитывается на
+ * прежнем счёте. Записи до журнала без счёта так и остаются без счёта. Цель и legacy — прежние
+ */
+function rebound<T extends Expense | Income>(next: T, cur: T, userId: string, bind?: Bind): EditResult<T> {
+  const own = cur.authorId === userId;
+  const accountId = own ? next.accountId ?? cur.accountId : cur.accountId;
+  const { accountId: _a, accountAmount: _m, legacy: _l, ...rest } = next as Expense;
+  delete rest.goalId;
+  const curGoal = (cur as Expense).goalId;
+  const kept = { ...rest, ...(curGoal && { goalId: curGoal }), ...(cur.legacy && { legacy: true }) } as unknown as T;
+  if (!accountId) return { ok: true, entry: kept };
+  if (!bind) return { ok: true, entry: { ...kept, accountId, accountAmount: cur.accountAmount ?? next.accountAmount } };
+  const b = bind(next, accountId, cur.authorId, own ? next.accountAmount : undefined);
+  return b.ok ? { ok: true, entry: { ...kept, accountId: b.accountId, accountAmount: b.accountAmount } } : b;
+}
+
+/** Записи журнала по счёту: траты, доходы, переводы и корректировки, где он участвует */
+export async function accountEntries(tx: Db, householdId: string, accountId: string) {
+  const [ex, inc, mv] = await Promise.all([
+    tx.select().from(s.expenses).where(and(eq(s.expenses.householdId, householdId), eq(s.expenses.accountId, accountId))),
+    tx.select().from(s.incomes).where(and(eq(s.incomes.householdId, householdId), eq(s.incomes.accountId, accountId))),
+    tx.select().from(s.ledgerMoves).where(and(eq(s.ledgerMoves.householdId, householdId), sql`(${s.ledgerMoves.accountId} = ${accountId} OR ${s.ledgerMoves.toAccountId} = ${accountId})`)),
+  ]);
+  return entriesOf(ex.map(toExpense), inc.map(toIncome), mv.map(toMove));
+}
+
+/**
+ * Перед переездом счетов пользователя в другой бюджет (вход в семью, выход, восстановление): балансы его счетов
+ * на журнале на день today по записям бюджета, откуда он уезжает
+ */
+export async function balancesBefore(tx: Db, householdId: string, userId: string, today: string): Promise<Map<string, number>> {
+  const rows = await tx.select().from(s.accounts).where(and(eq(s.accounts.householdId, householdId), eq(s.accounts.ownerId, userId)));
+  const out = new Map<string, number>();
+  for (const r of rows) {
+    const a = toAccount(r);
+    if (!a.initialAt) continue;
+    out.set(a.id, accountState(ledgerAccount(a), await accountEntries(tx, householdId, a.id), [], today).balance);
+  }
+  return out;
+}
+
+/**
+ * После переезда: новая точка отсчёта — баланс до переезда. Траты и доходы, оставшиеся в прежнем бюджете (семейные
+ * траты, переводы партнёра, доходы solo), баланс больше не двигают. initial_at = today, а записи этого дня,
+ * переехавшие вместе со счётом, вычитаются из initial — иначе они вошли бы дважды
+ */
+export async function reanchor(tx: Db, householdId: string, before: Map<string, number>, today: string) {
+  for (const [id, bal] of before) {
+    const todays = (await accountEntries(tx, householdId, id)).filter((e) => !e.legacy && e.day === today);
+    const d = todays.reduce((x, e) => x + delta(e, id), 0);
+    await tx.update(s.accounts).set({ initial: r2(bal - d), initialAt: today, version: sql`${s.accounts.version} + 1` })
+      .where(and(eq(s.accounts.householdId, householdId), eq(s.accounts.id, id)));
+  }
+}
 
 /** Изменение записи в транзакции: load читает строку с блокировкой, save и del пишут */
 async function update<T extends { version: number }>(
@@ -150,7 +224,7 @@ export function postgresRepos(db: Db): Repos {
       base: h.baseCurrency, currencies: h.currencies, rates: h.rates, familyCategories: cats.map(toCategory),
       ...(h.incomeSourcesSet && { incomeSources: sources.map((x): IncomeSource => ({ id: x.id, name: x.name })) }),
       ...(h.ratesUpdatedAt && { ratesUpdatedAt: h.ratesUpdatedAt }), ...(h.baseHistory && { baseHistory: h.baseHistory }),
-      ...(h.schemaVersion !== null && { schemaVersion: h.schemaVersion }), version: h.version,
+      ...(h.schemaVersion !== null && { schemaVersion: h.schemaVersion }), ...(h.ledgerSince && { ledgerSince: h.ledgerSince }), version: h.version,
     };
     return { settings, version: h.version };
   }
@@ -227,6 +301,7 @@ export function postgresRepos(db: Db): Repos {
    */
   async function putExpense(tx: Db, ctx: Ctx, e: Expense) {
     if (e.scope === "personal" && e.authorId !== ctx.userId) throw new Error("Личная трата пишется только от имени автора");
+    await ownAccount(tx, ctx.householdId, e.authorId, e.accountId);
     const row = expenseRow(ctx.householdId, e);
     const done = await tx.insert(s.expenses).values(row)
       .onConflictDoUpdate({
@@ -238,6 +313,7 @@ export function postgresRepos(db: Db): Repos {
     if (!done.length) throw new Error(`Трата ${e.id} уже есть в другом разделе`);
   }
   async function putIncome(tx: Db, ctx: Ctx, i: Income) {
+    await ownAccount(tx, ctx.householdId, i.authorId, i.accountId);
     const row = incomeRow(ctx.householdId, i);
     await tx.insert(s.incomes).values(row).onConflictDoUpdate({ target: [s.incomes.householdId, s.incomes.id], set: { ...row } });
   }
@@ -258,6 +334,28 @@ export function postgresRepos(db: Db): Repos {
     await tx.delete(s.deletedEntries).where(lt(s.deletedEntries.expiresAt, new Date()));
     const row = { householdId: ctx.householdId, id: entry.id, kind, ownerId, entry, expiresAt: new Date(Date.now() + TRASH_MS) };
     await tx.insert(s.deletedEntries).values(row).onConflictDoUpdate({ target: [s.deletedEntries.householdId, s.deletedEntries.id], set: row });
+  }
+
+  /** Счёт записи — счёт её автора в этом бюджете; иначе исключение (роуты проверяют раньше и отвечают 400) */
+  async function ownAccount(tx: Db, householdId: string, userId: string, accountId: string | undefined) {
+    if (!accountId) return;
+    const [a] = await tx.select({ id: s.accounts.id }).from(s.accounts)
+      .where(and(eq(s.accounts.householdId, householdId), eq(s.accounts.id, accountId), eq(s.accounts.ownerId, userId)));
+    if (!a) throw new Error(`Счёт ${accountId} не принадлежит ${userId}`);
+  }
+
+  /** Счёт под блокировкой строки: резервы и корректировки одного счёта идут по очереди */
+  async function lockAccount(tx: Db, householdId: string, id: string): Promise<Account | null> {
+    const [r] = await tx.select().from(s.accounts).where(and(eq(s.accounts.householdId, householdId), eq(s.accounts.id, id))).for("update");
+    return r ? toAccount(r) : null;
+  }
+  /** Трата из цели: часть цели на счёте траты уменьшается на сумму в валюте счёта, но не ниже 0 */
+  async function spendFromGoal(tx: Db, householdId: string, e: Expense) {
+    if (!e.goalId || !e.accountId) return;
+    const where = and(eq(s.goalAllocs.householdId, householdId), eq(s.goalAllocs.goalId, e.goalId), eq(s.goalAllocs.accountId, e.accountId));
+    const [cur] = await tx.select().from(s.goalAllocs).where(where).for("update");
+    if (!cur) return;
+    await tx.update(s.goalAllocs).set({ amount: allocAfterSpend(cur.amount, e.accountAmount ?? e.amount), version: cur.version + 1 }).where(where);
   }
 
   /** Документ версии expected: настройки бюджета */
@@ -295,7 +393,7 @@ export function postgresRepos(db: Db): Repos {
   /** Хранилище бюджета в форме RawStore (ключи Redis — так его понимает buildView) */
   async function readRaw(tx: Db, ctx: Ctx, userIds: string[]): Promise<RawStore> {
     const h = ctx.householdId;
-    const [settings, userSettings, expenses, incomes, accounts, goals, recons, plans, items, payments] = await Promise.all([
+    const [settings, userSettings, expenses, incomes, accounts, goals, recons, plans, items, payments, moves, allocs, [hh]] = await Promise.all([
       readSettings(tx, ctx),
       Promise.all(userIds.map((u) => readUserSettings(tx, h, u))),
       tx.select().from(s.expenses).where(eq(s.expenses.householdId, h)),
@@ -306,6 +404,9 @@ export function postgresRepos(db: Db): Repos {
       tx.select().from(s.monthPlans).where(eq(s.monthPlans.householdId, h)),
       tx.select().from(s.planItems).where(eq(s.planItems.householdId, h)),
       tx.select().from(s.recurringPayments).where(eq(s.recurringPayments.householdId, h)).then((rows) => paymentsWithAmounts(tx, rows, h)),
+      tx.select().from(s.ledgerMoves).where(eq(s.ledgerMoves.householdId, h)),
+      tx.select().from(s.goalAllocs).where(eq(s.goalAllocs.householdId, h)),
+      tx.select({ since: s.households.ledgerSince }).from(s.households).where(eq(s.households.id, h)),
     ]);
     // Хеши месяцев под ключами Redis: так их понимает buildView
     const hashes: RawStore["hashes"] = {};
@@ -314,7 +415,9 @@ export function postgresRepos(db: Db): Repos {
     for (const r of incomes) put(K.incomes(r.date.slice(0, 7)), toIncome(r));
 
     const byUser = <T>(f: () => T) => Object.fromEntries(userIds.map((u) => [u, f()])) as Record<string, T>;
-    const savings: RawSavings = { accounts: {}, goals: {}, userAccounts: byUser(() => ({})), userGoals: byUser(() => ({})), recons: recons.map((r) => r.snapshot as Recon) };
+    const savings: RawSavings = { accounts: {}, goals: {}, userAccounts: byUser(() => ({})), userGoals: byUser(() => ({})), recons: recons.map((r) => r.snapshot as Recon),
+      moves: moves.map(toMove), allocs: allocs.map(toAlloc), ledgerSince: hh?.since ?? null,
+    };
     for (const r of accounts) (r.ownerId ? (savings.userAccounts[r.ownerId] ??= {}) : savings.accounts)[r.id] = toAccount(r);
     for (const g of goals) (g.ownerId ? (savings.userGoals[g.ownerId] ??= {}) : savings.goals)[g.id] = g;
 
@@ -387,7 +490,13 @@ export function postgresRepos(db: Db): Repos {
     },
 
     expenses: {
-      add: (ctx, e) => db.transaction((tx) => putExpense(tx, ctx, e)),
+      add: (ctx, e) =>
+        db.transaction(async (tx) => {
+          // Повтор из офлайн-очереди перезаписывает трату, но часть цели второй раз не уменьшает
+          const fresh = !(await existing(tx, ctx, e));
+          await putExpense(tx, ctx, e);
+          if (fresh) await spendFromGoal(tx, ctx.householdId, e);
+        }),
 
       addForPlan: (ctx, e) =>
         db.transaction(async (tx): Promise<Done> => {
@@ -401,6 +510,7 @@ export function postgresRepos(db: Db): Repos {
           const err = planLinkError(item, e);
           if (err) return { ok: false, status: 400, error: err };
           await putExpense(tx, ctx, e);
+          await spendFromGoal(tx, ctx.householdId, e);
           await setPlanLink(tx, ctx.householdId, e, true);
           return { ok: true };
         }),
@@ -419,6 +529,7 @@ export function postgresRepos(db: Db): Repos {
           const err = payLinkError(p, e, !!paid);
           if (err) return { ok: false, ...err };
           await putExpense(tx, ctx, e);
+          await spendFromGoal(tx, ctx.householdId, e);
           await tx.update(s.recurringPayments).set({ version: p!.version + 1 })
             .where(and(own(s.recurringPayments, ctx, e.scope), eq(s.recurringPayments.id, p!.id)));
           return { ok: true };
@@ -439,14 +550,16 @@ export function postgresRepos(db: Db): Repos {
       inMonth: async (ctx, scope, month) =>
         (await db.select().from(s.expenses).where(and(own(s.expenses, ctx, scope), monthRange(s.expenses.date, month)))).map(toExpense),
 
-      update: (ctx, scope, month, seen, next) =>
+      update: (ctx, scope, month, seen, next, bind) =>
         db.transaction(async (tx): Promise<EditResult<Expense>> => {
           const [row] = await tx.select().from(s.expenses)
             .where(and(own(s.expenses, ctx, scope), eq(s.expenses.id, seen.id), monthRange(s.expenses.date, month))).for("update");
           if (!row) return { ok: false, status: 404, error: "Запись не найдена." };
           const cur = toExpense(row);
           if (!sameEntry(cur, seen)) return { ok: false, status: 409, error: EDIT_CONFLICT };
-          const r = editExpense(cur, next, ctx.userId);
+          const r0 = editExpense(cur, next, ctx.userId);
+          if (!r0.ok) return r0;
+          const r = rebound(r0.entry, cur, ctx.userId, bind);
           if (!r.ok) return r;
           if (cur.planItemId && !r.entry.planItemId) await setPlanLink(tx, ctx.householdId, cur, false);
           const { householdId: _h, id: _i, ...set } = expenseRow(ctx.householdId, r.entry);
@@ -457,6 +570,7 @@ export function postgresRepos(db: Db): Repos {
 
     incomes: {
       add: async (ctx, i) => {
+        await ownAccount(db, ctx.householdId, ctx.userId, i.accountId);
         const row = incomeRow(ctx.householdId, { ...i, authorId: ctx.userId });
         // Повтор своей записи (офлайн-очередь) обновляет её; чужой доход с тем же id не трогается
         const done = await db.insert(s.incomes).values(row)
@@ -475,7 +589,7 @@ export function postgresRepos(db: Db): Repos {
           await trash(tx, ctx, "income", i, i.authorId);
           return { ok: true as const, entry: i };
         }),
-      update: (ctx, month, seen, next) =>
+      update: (ctx, month, seen, next, bind) =>
         db.transaction(async (tx): Promise<EditResult<Income>> => {
           const where = and(eq(s.incomes.householdId, ctx.householdId), eq(s.incomes.id, seen.id));
           const [row] = await tx.select().from(s.incomes).where(and(where, monthRange(s.incomes.date, month))).for("update");
@@ -483,7 +597,8 @@ export function postgresRepos(db: Db): Repos {
           if (row.authorId !== ctx.userId) return { ok: false, status: 403, error: INCOME_NOT_YOURS };
           const cur = toIncome(row);
           if (!sameEntry(cur, seen)) return { ok: false, status: 409, error: EDIT_CONFLICT };
-          const r = editIncome(cur, next);
+          const r = rebound(editIncome(cur, next).entry, cur, ctx.userId, bind);
+          if (!r.ok) return r;
           const { householdId: _h, id: _i, ...set } = incomeRow(ctx.householdId, r.entry);
           await tx.update(s.incomes).set(set).where(where);
           return r;
@@ -510,6 +625,20 @@ export function postgresRepos(db: Db): Repos {
     },
 
     accounts: {
+      list: async (ctx) => (await db.select().from(s.accounts).where(eq(s.accounts.householdId, ctx.householdId))).map(toAccount),
+      adjust: (ctx, id, actual, move) =>
+        db.transaction(async (tx) => {
+          const a = await lockAccount(tx, ctx.householdId, id);
+          if (!a || a.ownerId !== ctx.userId) return { ok: false as const, status: 404, error: "Счёт не найден." };
+          if (!a.initialAt) return { ok: false as const, status: 409, error: "Счёт ещё не переведён на журнал." };
+          if (a.archived) return { ok: false as const, status: 400, error: `Счёт ${a.name} в архиве.` };
+          const bal = accountState(ledgerAccount(a), await accountEntries(tx, ctx.householdId, id), [], move.date).balance;
+          const amount = adjustmentAmount(actual, bal);
+          if (amount === null) return { ok: true as const, move: null, balance: bal };
+          const m: LedgerMove = { ...move, userId: ctx.userId, type: "adjustment", accountId: id, amount };
+          await tx.insert(s.ledgerMoves).values(moveRow(ctx.householdId, m));
+          return { ok: true as const, move: m, balance: actual };
+        }),
       create: async (ctx, a) => (await db.insert(s.accounts).values(accountRow(ctx, a)).onConflictDoNothing().returning({ id: s.accounts.id })).length > 0,
       update: (ctx, scope, id, version, change) => {
         const where = and(own(s.accounts, ctx, scope), eq(s.accounts.id, id));
@@ -531,6 +660,46 @@ export function postgresRepos(db: Db): Repos {
       update: (ctx, scope, id, version, change) =>
         update<Goal>(db, version, change, (tx) => loadGoal(tx, ctx, scope, id), (tx, g) => writeGoal(tx, ctx, g),
           (tx) => tx.delete(s.goals).where(and(own(s.goals, ctx, scope), eq(s.goals.id, id)))),
+    },
+
+    moves: {
+      add: (ctx, m) =>
+        db.transaction(async (tx) => {
+          if (m.userId !== ctx.userId) throw new Error("Перевод пишется только от имени автора");
+          // Списать — только со своего счёта; получатель — любой счёт этого бюджета
+          await ownAccount(tx, ctx.householdId, ctx.userId, m.accountId);
+          if (m.toAccountId) {
+            const [to] = await tx.select({ id: s.accounts.id }).from(s.accounts).where(and(eq(s.accounts.householdId, ctx.householdId), eq(s.accounts.id, m.toAccountId)));
+            if (!to) throw new Error(`Счёт ${m.toAccountId} не в бюджете`);
+          }
+          return (await tx.insert(s.ledgerMoves).values(moveRow(ctx.householdId, m)).onConflictDoNothing().returning({ id: s.ledgerMoves.id })).length > 0;
+        }),
+      remove: async (ctx, id) => {
+        const [r] = await db.delete(s.ledgerMoves)
+          .where(and(eq(s.ledgerMoves.householdId, ctx.householdId), eq(s.ledgerMoves.id, id), eq(s.ledgerMoves.userId, ctx.userId))).returning();
+        return r ? toMove(r) : null;
+      },
+    },
+
+    allocs: {
+      set: (ctx, goalId, accountId, amount, version, today) =>
+        db.transaction(async (tx) => {
+          const a = await lockAccount(tx, ctx.householdId, accountId);
+          if (!a) return { ok: false as const, status: 404, error: "Счёт не найден." };
+          if (!a.initialAt) return { ok: false as const, status: 409, error: "Счёт ещё не переведён на журнал." };
+          const [g] = await tx.select().from(s.goals).where(and(eq(s.goals.householdId, ctx.householdId), eq(s.goals.id, goalId)));
+          // Личная цель партнёра для меня не существует
+          if (!g || (g.ownerId && g.ownerId !== ctx.userId)) return { ok: false as const, status: 404, error: "Цель не найдена." };
+          const rows = (await tx.select().from(s.goalAllocs).where(and(eq(s.goalAllocs.householdId, ctx.householdId), eq(s.goalAllocs.accountId, accountId)))).map(toAlloc);
+          const cur = rows.find((x) => x.goalId === goalId);
+          if (version !== undefined && (cur?.version ?? 0) !== version) return { ok: false as const, status: 409, error: "Часть цели изменилась, проверьте и повторите." };
+          const st = accountState(ledgerAccount(a), await accountEntries(tx, ctx.householdId, accountId), rows, today);
+          const err = checkAlloc({ next: amount, current: cur?.amount ?? 0, free: st.free, accountOwnerId: a.ownerId ?? "", userId: ctx.userId });
+          if (err) return { ok: false as const, status: a.ownerId === ctx.userId ? 409 : 403, error: err };
+          const row = { householdId: ctx.householdId, goalId, accountId, amount: r2(amount), version: (cur?.version ?? 0) + 1 };
+          await tx.insert(s.goalAllocs).values(row).onConflictDoUpdate({ target: [s.goalAllocs.householdId, s.goalAllocs.goalId, s.goalAllocs.accountId], set: row });
+          return { ok: true as const, alloc: toAlloc(row) };
+        }),
     },
 
     recons: {
@@ -760,7 +929,8 @@ export function postgresRepos(db: Db): Repos {
         const id = crypto.randomUUID();
         try {
           await db.transaction(async (tx) => {
-            await tx.insert(s.households).values({ id, name: "Личный бюджет", kind: "solo" });
+            // Новый бюджет сразу на журнале: остатки — из записей
+            await tx.insert(s.households).values({ id, name: "Личный бюджет", kind: "solo", ledgerSince: new Date().toISOString().slice(0, 10) });
             await tx.insert(s.memberships).values({ householdId: id, userId, role: "owner" });
           });
           return id;

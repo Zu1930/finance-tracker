@@ -6,6 +6,8 @@
  * приводятся к валюте цели по ТЕКУЩЕМУ курсу) и итоги видов в базовой валюте.
  */
 
+import type { Account, Expense, Income, LedgerMove } from "./types.ts";
+
 export type Rates = Record<string, number | null | undefined>;
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -288,4 +290,104 @@ export function historySeries(
     if (last) { carry = last.value; return { key, value: last.value, carried: false }; }
     return { key, value: carry, carried: carry !== null };
   });
+}
+
+// ---------- Записи хранилища → журнал ----------
+
+/** Траты, доходы и переводы/корректировки в общем виде. Записи без счёта (до журнала) — legacy */
+export function entriesOf(expenses: Expense[], incomes: Income[], moves: LedgerMove[]): LedgerEntry[] {
+  const out: LedgerEntry[] = [];
+  for (const e of expenses) {
+    if (!e.accountId) continue;
+    out.push({
+      id: e.id, userId: e.authorId, type: "expense", accountId: e.accountId, amount: e.accountAmount ?? e.amount,
+      origAmount: e.amount, origCurrency: e.currency, rate: e.rate, scope: e.scope, categoryId: e.catId,
+      ...(e.goalId && { goalId: e.goalId }), day: e.date, ts: e.ts, ...(e.legacy && { legacy: true }),
+    });
+  }
+  for (const i of incomes) {
+    if (!i.accountId) continue;
+    out.push({
+      id: i.id, userId: i.authorId, type: "income", accountId: i.accountId, amount: i.accountAmount ?? i.amount,
+      origAmount: i.amount, origCurrency: i.currency, rate: i.rate, scope: "personal", sourceId: i.sourceId, day: i.date, ts: i.ts,
+      ...(i.legacy && { legacy: true }),
+    });
+  }
+  for (const m of moves) {
+    out.push({
+      id: m.id, userId: m.userId, type: m.type, accountId: m.accountId, amount: m.amount, scope: "personal", day: m.date, ts: m.ts,
+      ...(m.toAccountId && { toAccountId: m.toAccountId, toAmount: m.toAmount ?? m.amount }),
+    });
+  }
+  return out;
+}
+
+/** Счёт хранилища для расчётов. Семейный счёт до миграции — без владельца ("") */
+export const ledgerAccount = (a: Account): LedgerAccount => ({
+  id: a.id, ownerId: a.ownerId ?? "", name: a.name, currency: a.currency, initial: a.initial, initialAt: a.initialAt ?? "",
+  ...(a.primary && { primary: true }), ...(a.archived && { archived: true }), version: a.version,
+});
+
+/** Остаток счёта: из журнала, а до перехода (нет initialAt) — ручной balance */
+export const accountBalance = (a: Account, entries: LedgerEntry[], today: string) =>
+  a.initialAt ? balance(ledgerAccount(a), entries, today) : a.balance;
+
+/**
+ * Счёт по умолчанию для записи без явного выбора (Siri): последний использованный автором, иначе основной,
+ * иначе первый по имени. Только свои действующие счета; null — счетов нет
+ */
+export function defaultAccountId(userId: string, accounts: Account[], entries: LedgerEntry[]): string | null {
+  const mine = accounts.filter((a) => a.ownerId === userId && !a.archived);
+  if (!mine.length) return null;
+  const ids = new Set(mine.map((a) => a.id));
+  const last = entries.filter((e) => e.userId === userId && ids.has(e.accountId)).sort((a, b) => b.ts - a.ts)[0];
+  if (last) return last.accountId;
+  return (mine.find((a) => a.primary) ?? [...mine].sort((a, b) => a.name.localeCompare(b.name, "ru"))[0]).id;
+}
+
+export type Bound = { ok: true; accountId: string; accountAmount: number } | { ok: false; status: number; error: string };
+
+/**
+ * Привязка дохода или траты к счёту: счёт обязателен, свой и действующий. Сумма в валюте счёта — от клиента
+ * (accountAmount) или по курсу записи и текущему курсу валюты счёта. Нет курса и суммы от клиента — 400
+ */
+export function bindAccount(
+  e: { amount: number; currency: string; base: number },
+  accountId: string | undefined,
+  accountAmount: number | undefined,
+  o: { userId: string; accounts: Account[]; base: string; rates: Rates },
+): Bound {
+  if (!accountId) return { ok: false, status: 400, error: "Выберите счёт." };
+  const a = o.accounts.find((x) => x.id === accountId);
+  if (!a || a.ownerId !== o.userId) return { ok: false, status: 400, error: "Записать можно только на свой счёт." };
+  if (a.archived) return { ok: false, status: 400, error: `Счёт ${a.name} в архиве.` };
+  if (a.currency === e.currency) return { ok: true, accountId, accountAmount: r2(e.amount) };
+  if (accountAmount !== undefined) {
+    if (!(Number.isFinite(accountAmount) && accountAmount > 0)) return { ok: false, status: 400, error: "Неверная сумма в валюте счёта." };
+    return { ok: true, accountId, accountAmount: r2(accountAmount) };
+  }
+  const v = convert(e.base, o.base, a.currency, o.base, o.rates);
+  if (v === null || !(v > 0)) return { ok: false, status: 400, error: `Нет курса ${a.currency}: укажите сумму в валюте счёта.` };
+  return { ok: true, accountId, accountAmount: r2(v) };
+}
+
+/** Перевод: со своего счёта на любой действующий счёт семьи; сумма получателя — от клиента или по текущему курсу */
+export function checkTransfer(
+  t: { accountId: string; toAccountId: string; amount: number; toAmount?: number },
+  o: { userId: string; accounts: Account[]; base: string; rates: Rates },
+): { ok: true; toAmount: number } | { ok: false; status: number; error: string } {
+  const from = o.accounts.find((a) => a.id === t.accountId);
+  const to = o.accounts.find((a) => a.id === t.toAccountId);
+  if (!from || !to) return { ok: false, status: 400, error: "Счёт не найден." };
+  if (from.ownerId !== o.userId) return { ok: false, status: 403, error: "Переводить можно только со своего счёта." };
+  if (!to.ownerId) return { ok: false, status: 400, error: "Счёт без владельца: сначала переведите семью на журнал." };
+  if (from.id === to.id) return { ok: false, status: 400, error: "Счета совпадают." };
+  if (from.archived || to.archived) return { ok: false, status: 400, error: "Счёт в архиве." };
+  if (!(Number.isFinite(t.amount) && t.amount > 0)) return { ok: false, status: 400, error: "Неверная сумма." };
+  if (from.currency === to.currency) return { ok: true, toAmount: r2(t.amount) };
+  if (t.toAmount !== undefined) {
+    return Number.isFinite(t.toAmount) && t.toAmount > 0 ? { ok: true, toAmount: r2(t.toAmount) } : { ok: false, status: 400, error: "Неверная сумма зачисления." };
+  }
+  const v = convert(t.amount, from.currency, to.currency, o.base, o.rates);
+  return v && v > 0 ? { ok: true, toAmount: r2(v) } : { ok: false, status: 400, error: `Нет курса: укажите, сколько придёт в ${to.currency}.` };
 }

@@ -28,6 +28,8 @@ export type Settings = {
   baseHistory?: { from: string; to: string; rate: number; at: string }[];
   /** 2 — данные в семейном формате (после /api/migrate-v2 или новой установки); 3 — копилки перенесены в «Сбережения» */
   schemaVersion?: number;
+  /** День перехода на балансы из журнала; нет — остатки ещё ручные. Только чтение: пишет миграция и создание бюджета */
+  ledgerSince?: string;
   /** Версия для записи с проверкой (CAS): растёт на 1 при каждом сохранении */
   version: number;
 };
@@ -67,6 +69,14 @@ export type Expense = {
   /** Оплата регулярного платежа за recurringMonth: в шкалу категории не входит совсем */
   recurringId?: string;
   recurringMonth?: string;
+  /** Счёт автора, с которого списано (lib/ledger.ts); нет — запись до журнала */
+  accountId?: string;
+  /** Сумма в валюте счёта: amount/currency — то, сколько платили */
+  accountAmount?: number;
+  /** Трата «из цели»: при записи часть цели на счёте уменьшилась */
+  goalId?: string;
+  /** До перехода на журнал: остаётся для истории и лимитов, баланс не двигает */
+  legacy?: boolean;
 };
 
 export type Income = {
@@ -81,6 +91,10 @@ export type Income = {
   ts: number;
   /** Выставляет сервер из сессии */
   authorId: string;
+  /** Свой счёт, на который пришёл доход */
+  accountId?: string;
+  accountAmount?: number;
+  legacy?: boolean;
 };
 export type IncomeSource = { id: string; name: string };
 
@@ -99,10 +113,14 @@ export type Account = {
   scope: Scope;
   /** Только у personal */
   ownerId?: string;
-  /** Остаток в валюте счёта */
+  /** Остаток в валюте счёта: после перехода на журнал сервер считает его из записей (lib/ledger.ts) */
   balance: number;
-  /** Остаток при создании — точка отсчёта для «факта», пока счёт не попал в сверку */
+  /** Остаток на initialAt — точка отсчёта журнала. До перехода — остаток при создании */
   initial: number;
+  /** С этого дня записи двигают баланс; нет — счёт ещё не переведён на журнал и balance ручной */
+  initialAt?: string;
+  /** Основной счёт владельца */
+  primary?: boolean;
   updatedAt: string; // ISO
   updatedBy: string;
   archived?: boolean;
@@ -168,6 +186,42 @@ export type SavingsView = {
   /** Личное партнёра — только суммы в базовой валюте */
   partner: { total: number; goalsAllocated: number; lastUpdatedAt: string | null };
   recons: ReconView[];
+  /** Балансы из журнала (lib/ledger.ts); нет — сервер старый */
+  ledger?: LedgerView;
+};
+
+/** Журнал в ответе клиенту: свои счета поштучно, у партнёра — только суммы */
+export type LedgerView = {
+  /** День перехода на журнал; null — ещё не переведён (остатки ручные) */
+  since: string | null;
+  /** Мои счета (и семейные до перехода): баланс, резерв под цели, свободно */
+  accounts: Record<string, { balance: number; reserved: number; free: number }>;
+  /** Мои части целей */
+  allocs: { goalId: string; accountId: string; amount: number; version: number }[];
+  /** Видимые цели (семейные и мои личные): собрано в валюте цели по текущему курсу и вклад каждого */
+  goals: Record<string, { total: number; byUser: Record<string, number>; missing: string[] }>;
+  /** Сумма балансов всех счетов семьи в базовой валюте — одним числом */
+  familyTotal: number;
+  missing: string[];
+  /** Мои переводы и корректировки; входящий перевод партнёра — без его счёта */
+  moves: LedgerMove[];
+};
+
+/** Перевод между счетами семьи или корректировка остатка (ledger_moves). Не доход и не трата */
+export type LedgerMove = {
+  id: string;
+  userId: string;
+  type: "transfer" | "adjustment";
+  accountId: string;
+  /** Только у transfer */
+  toAccountId?: string;
+  /** transfer: > 0 в валюте счёта-отправителя; adjustment: со знаком */
+  amount: number;
+  /** transfer: зачислено получателю в его валюте */
+  toAmount?: number;
+  date: string;
+  note: string;
+  ts: number;
 };
 
 // ---------- Регулярные платежи ----------

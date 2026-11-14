@@ -111,6 +111,8 @@ export const households = pgTable("households", {
   status: text("status", { enum: ["active", "archived"] }).notNull().default("active"),
   archivedAt: moment("archived_at"),
   purgeAt: moment("purge_at"),
+  /** День перехода на балансы из журнала (scripts/migrate-ledger.ts). NULL — ещё не переведён: остаток — ручной balance */
+  ledgerSince: day("ledger_since"),
 });
 
 export const memberships = pgTable(
@@ -300,10 +302,20 @@ export const expenses = pgTable(
     planItemId: text("plan_item_id"),
     recurringId: text("recurring_id"),
     recurringMonth: month("recurring_month"),
+    /** Счёт автора, с которого списано; NULL — запись до журнала */
+    accountId: text("account_id"),
+    /** Сумма в валюте счёта */
+    accountAmount: money("account_amount"),
+    /** Трата «из цели»: при записи часть цели на счёте уменьшилась */
+    goalId: text("goal_id"),
+    /** До перехода на журнал: в баланс не идёт */
+    legacy: boolean("legacy").notNull().default(false),
   },
   (t) => [
     primaryKey({ columns: [t.householdId, t.id] }),
     index("expenses_date").on(t.householdId, t.date),
+    index("expenses_account").on(t.householdId, t.accountId),
+    check("expenses_account_pair", sql`(${t.accountId} IS NULL) = (${t.accountAmount} IS NULL)`),
     index("expenses_owner").on(t.householdId, t.ownerId),
     // Защита от двойной оплаты регулярного платежа за месяц
     uniqueIndex("expenses_recurring_month").on(t.householdId, t.recurringId, t.recurringMonth).where(sql`${t.recurringId} IS NOT NULL`),
@@ -329,10 +341,15 @@ export const incomes = pgTable(
     date: day("date").notNull(),
     note: text("note").notNull().default(""),
     ts: moment("ts").notNull(),
+    accountId: text("account_id"),
+    accountAmount: money("account_amount"),
+    legacy: boolean("legacy").notNull().default(false),
   },
   (t) => [
     primaryKey({ columns: [t.householdId, t.id] }),
     index("incomes_date").on(t.householdId, t.date),
+    index("incomes_account").on(t.householdId, t.accountId),
+    check("incomes_account_pair", sql`(${t.accountId} IS NULL) = (${t.accountAmount} IS NULL)`),
     foreignKey({ name: "incomes_author", columns: [t.householdId, t.authorId], foreignColumns: [memberships.householdId, memberships.userId] }),
   ],
 );
@@ -346,8 +363,14 @@ export const accounts = pgTable(
     currency: text("currency").notNull(),
     scope: scope(),
     ownerId: text("owner_id"),
+    /** Ручной остаток до перехода на журнал; после — не читается (баланс считается из записей) */
     balance: money("balance").notNull(),
+    /** Остаток на initial_at: точка отсчёта журнала */
     initial: money("initial").notNull(),
+    /** С этого дня записи двигают баланс; NULL — счёт ещё не переведён на журнал */
+    initialAt: day("initial_at"),
+    /** Основной счёт владельца */
+    primary: boolean("primary").notNull().default(false),
     updatedAt: moment("updated_at").notNull(),
     updatedBy: text("updated_by").notNull(),
     archived: boolean("archived").notNull().default(false),
@@ -415,6 +438,58 @@ export const recons = pgTable(
     totalFamily: money("total_family").notNull(),
   },
   (t) => [primaryKey({ columns: [t.householdId, t.id] }), index("recons_at").on(t.householdId, t.at)],
+);
+
+/**
+ * Переводы между счетами семьи и корректировки остатка. Не доход и не трата: в статистику и лимиты не входят.
+ * Счета без внешних ключей, как у трат: счёт уезжает в другой бюджет при выходе из семьи, а записи остаются
+ */
+export const ledgerMoves = pgTable(
+  "ledger_moves",
+  {
+    householdId: text("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
+    id: text("id").notNull(),
+    userId: text("user_id").notNull(),
+    type: text("type", { enum: ["transfer", "adjustment"] }).notNull(),
+    accountId: text("account_id").notNull(),
+    toAccountId: text("to_account_id"),
+    /** transfer: > 0 в валюте account_id; adjustment: со знаком */
+    amount: money("amount").notNull(),
+    /** transfer: зачислено на to_account_id в его валюте */
+    toAmount: money("to_amount"),
+    date: day("date").notNull(),
+    note: text("note").notNull().default(""),
+    ts: moment("ts").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.householdId, t.id] }),
+    index("ledger_moves_account").on(t.householdId, t.accountId),
+    index("ledger_moves_to_account").on(t.householdId, t.toAccountId),
+    check("ledger_moves_transfer", sql`(${t.type} = 'transfer') = (${t.toAccountId} IS NOT NULL AND ${t.toAmount} IS NOT NULL)`),
+    check("ledger_moves_amount", sql`${t.type} = 'adjustment' OR (${t.amount} > 0 AND ${t.toAmount} > 0 AND ${t.toAccountId} <> ${t.accountId})`),
+    foreignKey({ name: "ledger_moves_user", columns: [t.householdId, t.userId], foreignColumns: [memberships.householdId, memberships.userId] }),
+  ],
+);
+
+/**
+ * Часть цели на счёте, в валюте счёта: своя строка на пару (цель, счёт) — двое не конфликтуют на одной цели.
+ * Едет вместе с целью (ON UPDATE CASCADE); счёт без внешнего ключа — см. ledger_moves
+ */
+export const goalAllocs = pgTable(
+  "goal_allocs",
+  {
+    householdId: text("household_id").notNull(),
+    goalId: text("goal_id").notNull(),
+    accountId: text("account_id").notNull(),
+    amount: money("amount").notNull(),
+    version: integer("version").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.householdId, t.goalId, t.accountId] }),
+    index("goal_allocs_account").on(t.householdId, t.accountId),
+    check("goal_allocs_amount", sql`${t.amount} >= 0`),
+    foreignKey({ name: "goal_allocs_goal", columns: [t.householdId, t.goalId], foreignColumns: [goals.householdId, goals.id] }).onDelete("cascade").onUpdate("cascade"),
+  ],
 );
 
 /** План месяца: семейная часть (owner_id NULL, с income_override) и личные части участников */

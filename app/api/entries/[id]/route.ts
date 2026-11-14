@@ -3,6 +3,7 @@ import { requireUser, unauthorized } from "@/lib/auth";
 import { getRepos } from "@/lib/data";
 import { MONTH, prepareEntry } from "@/lib/store";
 import type { Expense, Income } from "@/lib/types";
+import { ledgerCtx } from "@/lib/ledger-server";
 
 /**
  * Удаление: ?kind=expense|income&scope=family|personal&month=YYYY-MM.
@@ -50,9 +51,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const next = prepareEntry(kind, { ...(b?.entry as object), id }, ctx.userId) as Expense | Income | null;
   if (!seen || !next || seen.id !== id) return NextResponse.json({ error: "Некорректная запись." }, { status: 400 });
   try {
+    // Счёт меняет только автор (на свой); у остальных сумма пересчитывается на прежнем счёте
+    const { bind } = await ledgerCtx(ctx);
     const r = kind === "income"
-      ? await getRepos().incomes.update(ctx, month, seen as Income, next as Income)
-      : await getRepos().expenses.update(ctx, b?.scope === "personal" ? "personal" : "family", month, seen as Expense, next as Expense);
+      ? await getRepos().incomes.update(ctx, month, seen as Income, next as Income, bind)
+      : await getRepos().expenses.update(ctx, b?.scope === "personal" ? "personal" : "family", month, seen as Expense, next as Expense, bind);
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
     return NextResponse.json({ entry: r.entry });
   } catch (e) {

@@ -2,7 +2,8 @@
  * Сбережения: итоги по счетам, сверка, динамика, распределение по копилкам. Чистые функции без Redis —
  * их вызывают route handlers, клиент и тесты (lib/savings.test.mjs). Только type-импорты и относительные .ts.
  */
-import type { Account, Expense, Goal, Income, Recon, ReconView, SavingsView, Totals, User } from "./types.ts";
+import { accountBalance, convert, goalProgress, ledgerAccount, reserved, type GoalAlloc, type LedgerEntry } from "./ledger.ts";
+import type { Account, Expense, Goal, Income, LedgerMove, Recon, ReconView, SavingsView, Totals, User } from "./types.ts";
 
 export type Rates = Record<string, number | null | undefined>;
 
@@ -160,16 +161,19 @@ const isCode = (v: unknown): v is string => typeof v === "string" && /^[A-Z]{3,5
 const name40 = (v: unknown) => (typeof v === "string" ? v.trim().slice(0, 40) : "");
 const finite = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
-/** Новый счёт из тела POST /api/accounts; ownerId и автор — из сессии. null — неверные данные */
-export function prepareAccount(body: unknown, userId: string, currencies: string[], id: string, now: string): Account | null {
+/**
+ * Новый счёт из тела POST /api/accounts; ownerId и автор — из сессии. null — неверные данные.
+ * Общих счетов нет: счёт всегда личный. initialAt — бюджет на журнале: остаток считается с этого дня
+ */
+export function prepareAccount(body: unknown, userId: string, currencies: string[], id: string, now: string, initialAt?: string): Account | null {
   const b = (body ?? {}) as Record<string, unknown>;
   const name = name40(b.name);
   const balance = b.balance === undefined ? 0 : b.balance;
   if (!name || !isCode(b.currency) || !currencies.includes(b.currency) || !finite(balance)) return null;
-  const scope = b.scope === "personal" ? "personal" : "family";
   return {
-    id, name, currency: b.currency, scope, ...(scope === "personal" && { ownerId: userId }),
-    balance: r2(balance), initial: r2(balance), updatedAt: now, updatedBy: userId, version: 1,
+    id, name, currency: b.currency, scope: "personal", ownerId: userId,
+    balance: r2(balance), initial: r2(balance), ...(initialAt && { initialAt }), ...(b.primary === true && { primary: true }),
+    updatedAt: now, updatedBy: userId, version: 1,
   };
 }
 
@@ -190,6 +194,12 @@ export type RawSavings = {
   goals: Record<string, Goal>;
   userGoals: Record<string, Record<string, Goal>>;
   recons: Recon[];
+  /** Переводы и корректировки бюджета */
+  moves?: LedgerMove[];
+  /** Части целей на счетах */
+  allocs?: GoalAlloc[];
+  /** День перехода на журнал; null — ещё не переведён */
+  ledgerSince?: string | null;
 };
 
 export const allAccounts = (s: RawSavings) => [...Object.values(s.accounts), ...Object.values(s.userAccounts).flatMap((h) => Object.values(h ?? {}))];
@@ -205,8 +215,14 @@ export function reconView(r: Recon, me: string, partner: string): ReconView {
   };
 }
 
-/** Сбережения, видимые me: свои и семейные счета и копилки целиком, у партнёра — только суммы */
-export function buildSavings(raw: RawSavings, me: User, partner: User, base: string, rates: Rates): SavingsView {
+/**
+ * Сбережения, видимые me: свои и семейные счета и копилки целиком, у партнёра — только суммы.
+ * Остатки счетов, переведённых на журнал, считаются из записей на день today
+ */
+export function buildSavings(raw0: RawSavings, me: User, partner: User, base: string, rates: Rates, entries: LedgerEntry[] = [], today = new Date().toISOString().slice(0, 10)): SavingsView {
+  const allocs = raw0.allocs ?? [];
+  const live = (h: Record<string, Account>) => Object.fromEntries(Object.entries(h).map(([id, a]) => [id, { ...a, balance: accountBalance(a, entries, today) }]));
+  const raw: RawSavings = { ...raw0, accounts: live(raw0.accounts), userAccounts: Object.fromEntries(Object.entries(raw0.userAccounts).map(([u, h]) => [u, live(h ?? {})])) };
   const partnerAccounts = Object.values(raw.userAccounts[partner.id] ?? {}).filter((a) => !a.archived);
   const partnerGoals = Object.values(raw.userGoals[partner.id] ?? {});
   const last = partnerAccounts.map((a) => a.updatedAt).sort().at(-1) ?? null;
@@ -219,6 +235,41 @@ export function buildSavings(raw: RawSavings, me: User, partner: User, base: str
       lastUpdatedAt: last,
     },
     recons: [...raw.recons].sort((a, b) => a.at.localeCompare(b.at)).map((r) => reconView(r, me.id, partner.id)),
+    ledger: ledgerView(raw, allocs, me.id, base, rates),
+  };
+}
+
+function ledgerView(raw: RawSavings, allocs: GoalAlloc[], me: string, base: string, rates: Rates): NonNullable<SavingsView["ledger"]> {
+  const every = allAccounts(raw);
+  const mine = [...Object.values(raw.accounts), ...Object.values(raw.userAccounts[me] ?? {})];
+  const mineIds = new Set(mine.map((a) => a.id));
+  const accounts: NonNullable<SavingsView["ledger"]>["accounts"] = {};
+  for (const a of mine) {
+    const res = reserved(a.id, allocs);
+    accounts[a.id] = { balance: a.balance, reserved: res, free: Math.round((a.balance - res) * 100) / 100 };
+  }
+  let familyTotal = 0;
+  const missing = new Set<string>();
+  for (const a of every) {
+    if (a.archived) continue;
+    const v = convert(a.balance, a.currency, base, base, rates);
+    if (v === null) missing.add(a.currency);
+    else familyTotal += v;
+  }
+  const visible = [...Object.values(raw.goals), ...Object.values(raw.userGoals[me] ?? {})];
+  const ledgerAccounts = every.map(ledgerAccount);
+  const goals = Object.fromEntries(visible.map((g) => {
+    const p = goalProgress({ id: g.id, name: g.name, scope: g.scope, ownerId: g.ownerId, target: g.target, currency: g.currency }, allocs, ledgerAccounts, base, rates);
+    return [g.id, { total: p.total, byUser: p.byUser, missing: p.missing }];
+  }));
+  const moves = (raw.moves ?? [])
+    .filter((m) => m.userId === me || (m.toAccountId && mineIds.has(m.toAccountId)))
+    // Входящий перевод от партнёра: видна сумма, его счёт — нет
+    .map((m) => (m.userId === me ? m : { ...m, accountId: "" }))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.ts - b.ts);
+  return {
+    since: raw.ledgerSince ?? null, accounts, allocs: allocs.filter((x) => mineIds.has(x.accountId)), goals,
+    familyTotal: Math.round(familyTotal * 100) / 100, missing: [...missing], moves,
   };
 }
 

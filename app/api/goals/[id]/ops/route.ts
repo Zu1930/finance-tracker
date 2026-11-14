@@ -7,7 +7,8 @@ const DAY = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
 /**
  * { scope, amount, date }: + выделить, − вернуть (не больше отведённого). Без версии клиента — операции
- * складываются, одновременные «выделить» у двоих не конфликтуют; сервер повторяет на свежих данных
+ * складываются, одновременные «выделить» у двоих не конфликтуют; сервер повторяет на свежих данных.
+ * Только до перехода на журнал
  */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await requireUser(req);
@@ -17,6 +18,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!b || typeof b.amount !== "number" || typeof b.date !== "string" || !DAY.test(b.date)) return fail(400, "Неверные данные.");
   const opId = crypto.randomUUID();
   try {
+    // После перехода на журнал откладывают со счёта: PUT /api/goals/:id/alloc
+    if ((await getRepos().settings.get(ctx))?.ledgerSince) return fail(409, "Откладывайте со счёта.");
     const r = await getRepos().goals.update(
       ctx,
       b.scope === "personal" ? "personal" : "family",

@@ -4,6 +4,7 @@
  */
 import type { Expense, GoalsDoc, Income, MonthKey, RecurringPayment, Reminders, Scope, Settings, TrackerData, User, UserSettings } from "./types.ts";
 import { buildSavings, type RawSavings } from "./savings.ts";
+import { entriesOf } from "./ledger.ts";
 import { EMPTY_PLANS, buildPlans, plannedDaily, type RawPlans } from "./plan.ts";
 import { occurrences, recurringTotal } from "./recurring.ts";
 
@@ -99,7 +100,11 @@ export function prepareEntry(kind: Kind, body: unknown, authorId: string): Expen
   const currency = str(b.currency, 5);
   if (!/^[\w-]{1,64}$/.test(id) || !DATE.test(date) || !/^[A-Z]{3,5}$/.test(currency)) return null;
   if (!(amount > 0) || !(rate > 0) || !(base >= 0) || !(ts > 0)) return null;
-  const common = { id, amount, currency, rate, base, note: str(b.note, 140), date, ts, authorId };
+  // Счёт и сумма в его валюте; проверяет их сервер (lib/ledger.ts bindAccount)
+  const accountId = str(b.accountId, 64);
+  const accountAmount = num(b.accountAmount);
+  const account = { ...(accountId && { accountId }), ...(accountAmount > 0 && { accountAmount }) };
+  const common = { id, amount, currency, rate, base, note: str(b.note, 140), date, ts, authorId, ...account };
   if (kind === "income") {
     const sourceId = str(b.sourceId, 64);
     return sourceId ? { ...common, sourceId } : null;
@@ -109,8 +114,9 @@ export function prepareEntry(kind: Kind, body: unknown, authorId: string): Expen
     const planItemId = str(b.planItemId, 64);
   const recurringId = str(b.recurringId, 64);
   const recurringMonth = str(b.recurringMonth, 7);
+  const goalId = str(b.goalId, 64);
   if (recurringId && !MONTH.test(recurringMonth)) return null;
-  return catId ? { ...common, catId, scope, ...(planItemId && { planItemId }), ...(recurringId && { recurringId, recurringMonth }) } : null;
+  return catId ? { ...common, catId, scope, ...(planItemId && { planItemId }), ...(recurringId && { recurringId, recurringMonth }), ...(goalId && { goalId }) } : null;
 }
 
 // ---------- Сборка ответа GET /api/data ----------
@@ -140,7 +146,9 @@ const NOBODY: User = { id: "", name: "" };
  * Данные для пользователя me. Личные записи и категории партнёра не попадают в ответ ни в каком виде:
  * от них остаются только суммы за месяц и по дням
  */
-export function buildView(raw: RawStore, me: User, partnerOrNull: User | null, curMonth = new Date().toISOString().slice(0, 7)): TrackerData {
+export function buildView(
+  raw: RawStore, me: User, partnerOrNull: User | null, curMonth = new Date().toISOString().slice(0, 7), today = new Date().toISOString().slice(0, 10),
+): TrackerData {
   // Бюджет одного человека: партнёра нет — подставляется никто (id "" не совпадает ни с одной записью)
   const partner = partnerOrNull ?? NOBODY;
   const view: TrackerData = {
@@ -149,7 +157,7 @@ export function buildView(raw: RawStore, me: User, partnerOrNull: User | null, c
     ...(!partnerOrNull && { solo: true as const }),
     settings: raw.settings,
     mySettings: raw.userSettings[me.id] ?? EMPTY_USER,
-    savings: buildSavings(raw.savings ?? EMPTY_SAVINGS, me, partner, raw.settings?.base ?? "", raw.settings?.rates ?? {}),
+    savings: buildSavings(raw.savings ?? EMPTY_SAVINGS, me, partner, raw.settings?.base ?? "", raw.settings?.rates ?? {}, ledgerEntries(raw), today),
     familyExpenses: {},
     myExpenses: {},
     incomes: {},
@@ -170,7 +178,8 @@ export function buildView(raw: RawStore, me: User, partnerOrNull: User | null, c
     const k = parseMonthKey(key);
     if (!k) continue;
     const items = Object.values(hash ?? {});
-    if (k.kind === "family") view.familyExpenses[k.month] = (items as Expense[]).sort(byDate);
+    // Семейная трата партнёра — без его счёта: счета партнёра видны только общей суммой
+    if (k.kind === "family") view.familyExpenses[k.month] = (items as Expense[]).map((e) => (e.authorId === me.id ? e : withoutAccount(e))).sort(byDate);
     else if (k.kind === "incomes") {
       // Доходы личные: записи — только мои; остальным — суммы по людям за месяц и по дням
       const totals: Record<string, number> = {};
@@ -230,6 +239,19 @@ export function buildView(raw: RawStore, me: User, partnerOrNull: User | null, c
   }
   return view;
 }
+
+/** Все записи журнала бюджета: траты и доходы из хешей месяцев, переводы и корректировки */
+export function ledgerEntries(raw: RawStore) {
+  const expenses: Expense[] = [], incomes: Income[] = [];
+  for (const [key, hash] of Object.entries(raw.hashes)) {
+    const k = parseMonthKey(key);
+    if (!k) continue;
+    for (const x of Object.values(hash ?? {})) (k.kind === "incomes" ? incomes : expenses).push(x as never);
+  }
+  return entriesOf(expenses, incomes, raw.savings?.moves ?? []);
+}
+
+const withoutAccount = ({ accountId: _a, accountAmount: _m, ...e }: Expense): Expense => e;
 
 // ---------- Проверка документов, которые клиент пишет целиком ----------
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);

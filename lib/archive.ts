@@ -6,7 +6,8 @@
  */
 import { and, asc, eq, inArray, isNotNull, isNull, lt, ne } from "drizzle-orm";
 import * as s from "./data/postgres/schema.ts";
-import { postgresRepos, type Db } from "./data/postgres/repos.ts";
+import { balancesBefore, postgresRepos, reanchor, type Db } from "./data/postgres/repos.ts";
+import { todayStr } from "./utils.ts";
 import type { Ctx } from "./data/types.ts";
 import { OWNED, householdNames } from "./family.ts";
 import { buildView, parseMonthKey, type RawStore } from "./store.ts";
@@ -25,7 +26,7 @@ async function newSolo(tx: Db, userId: string, from: Household): Promise<string>
   const id = crypto.randomUUID();
   await tx.insert(s.households).values({
     id, name: "Личный бюджет", kind: "solo", baseCurrency: from.baseCurrency, currencies: from.currencies, rates: from.rates,
-    ratesUpdatedAt: from.ratesUpdatedAt, schemaVersion: from.schemaVersion, incomeSourcesSet: from.incomeSourcesSet,
+    ratesUpdatedAt: from.ratesUpdatedAt, schemaVersion: from.schemaVersion, incomeSourcesSet: from.incomeSourcesSet, ledgerSince: from.ledgerSince,
   });
   // Источники дохода — копией: доходы уезжают вместе с автором и ссылаются на них
   const sources = await tx.select().from(s.incomeSources).where(eq(s.incomeSources.householdId, from.id));
@@ -39,10 +40,15 @@ async function newSolo(tx: Db, userId: string, from: Household): Promise<string>
  * регулярные (с оплатами — ON UPDATE CASCADE), личные части планов, личные настройки
  */
 async function moveOwn(tx: Db, from: string, to: string, userId: string) {
+  // Балансы счетов — на день переезда: записи, которые остаются в прежнем бюджете, их больше не двигают
+  const today = todayStr();
+  const before = await balancesBefore(tx, from, userId, today);
+  await tx.update(s.ledgerMoves).set({ householdId: to }).where(and(eq(s.ledgerMoves.householdId, from), eq(s.ledgerMoves.userId, userId)));
   await tx.update(s.userSettings).set({ householdId: to }).where(and(eq(s.userSettings.householdId, from), eq(s.userSettings.userId, userId)));
   for (const t of [...OWNED, s.monthPlans] as const) await tx.update(t).set({ householdId: to }).where(and(eq(t.householdId, from), eq(t.ownerId, userId)));
   await tx.update(s.incomes).set({ householdId: to }).where(and(eq(s.incomes.householdId, from), eq(s.incomes.authorId, userId)));
   await tx.delete(s.deletedEntries).where(and(eq(s.deletedEntries.householdId, from), eq(s.deletedEntries.ownerId, userId)));
+  await reanchor(tx, to, before, today);
 }
 
 async function activeOf(tx: Db, userId: string, forUpdate = false) {

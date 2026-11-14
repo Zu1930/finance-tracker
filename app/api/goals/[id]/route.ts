@@ -31,8 +31,11 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (!ctx) return unauthorized();
   const { id } = await params;
   try {
+    // На журнале деньги цели — части на счетах: удалить можно, когда все вернули
+    const allocs = (await getRepos().store.snapshot(ctx)).savings?.allocs ?? [];
+    const held = allocs.some((x) => x.goalId === id && x.amount > 0);
     return updated(await getRepos().goals.update(ctx, scopeOf(new URL(req.url).searchParams.get("scope")), id, undefined, (g) => {
-      const err = goalDeleteError(g);
+      const err = held ? "СНАЧАЛА ВЕРНИТЕ ДЕНЬГИ" : goalDeleteError(g);
       return err ? { status: 409, error: err } : null;
     }), CONFLICT);
   } catch (e) {

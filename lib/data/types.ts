@@ -7,8 +7,9 @@ import type { EditResult } from "../entry-edit.ts";
 import type { RawStore } from "../store.ts";
 import type { TokenRecord } from "../quick-entry/api.ts";
 import type { PlanBulk } from "../plan.ts";
+import type { Bound, GoalAlloc } from "../ledger.ts";
 import type {
-  Account, Category, Expense, Goal, Income, MonthPlan, MyMonthPlan, PlanItem, Recon, RecurringPayment, Scope, Settings, UserSettings,
+  Account, Category, Expense, Goal, Income, LedgerMove, MonthPlan, MyMonthPlan, PlanItem, Recon, RecurringPayment, Scope, Settings, UserSettings,
 } from "../types.ts";
 
 export type Ctx = { userId: string; householdId: string };
@@ -20,6 +21,11 @@ export type Fail = { status: number; error: string };
 export type Updated<T> = { ok: true; item: T | null } | { ok: false; status: number; error?: string };
 /** change: новая запись, null — удалить, { status, error } — отказ */
 export type Change<T> = (cur: T) => T | null | Fail;
+/**
+ * Привязка правленой записи к счёту (lib/ledger.ts bindAccount): ownerId — чей должен быть счёт (автор записи),
+ * accountAmount — сумма в валюте счёта от автора. Без bind счёт и сумма в нём остаются прежними
+ */
+export type Bind = (e: Expense | Income, accountId: string, ownerId: string, accountAmount: number | undefined) => Bound;
 export type CasResult = { ok: boolean; version: number };
 export type Done = { ok: true } | { ok: false; status: number; error?: string };
 
@@ -59,7 +65,7 @@ export interface ExpensesRepo {
    * Правка на месте одной транзакцией: seen — запись, как её видел клиент (иначе 409), перенос между бюджетами
    * и месяцами; смена категории или бюджета отвязывает план и регулярный (lib/entry-edit.ts)
    */
-  update(ctx: Ctx, scope: Scope, month: string, seen: Expense, next: Expense): Promise<EditResult<Expense>>;
+  update(ctx: Ctx, scope: Scope, month: string, seen: Expense, next: Expense, bind?: Bind): Promise<EditResult<Expense>>;
 }
 
 /** Доход личный: добавить, изменить и удалить может только автор (403 — чужой) */
@@ -67,7 +73,7 @@ export interface IncomesRepo {
   /** false — запись с таким id уже есть у другого участника */
   add(ctx: Ctx, i: Income): Promise<boolean>;
   remove(ctx: Ctx, month: string, id: string): Promise<{ ok: true; entry: Income } | { ok: false; status: 403 | 404 }>;
-  update(ctx: Ctx, month: string, seen: Income, next: Income): Promise<EditResult<Income>>;
+  update(ctx: Ctx, month: string, seen: Income, next: Income, bind?: Bind): Promise<EditResult<Income>>;
 }
 
 export interface TrashRepo {
@@ -76,9 +82,34 @@ export interface TrashRepo {
 }
 
 export interface AccountsRepo {
+  /** Все счета бюджета, включая счета партнёра: только для проверок на сервере, клиенту — не отдавать */
+  list(ctx: Ctx): Promise<Account[]>;
+  /**
+   * Корректировка своего счёта: фактический остаток actual на день move.date → adjustment = actual − баланс.
+   * Счёт блокируется на время расчёта. Разница 0 — ничего не пишется (move: null)
+   */
+  adjust(ctx: Ctx, id: string, actual: number, move: Pick<LedgerMove, "id" | "date" | "note" | "ts">):
+    Promise<{ ok: true; move: LedgerMove | null; balance: number } | { ok: false; status: number; error: string }>;
   /** false — запись с таким id уже есть */
   create(ctx: Ctx, a: Account): Promise<boolean>;
   update(ctx: Ctx, scope: Scope, id: string, version: number | undefined, change: Change<Account>): Promise<Updated<Account>>;
+}
+
+/** Переводы и корректировки (ledger_moves): пишет и удаляет только автор */
+export interface MovesRepo {
+  /** false — id уже занят */
+  add(ctx: Ctx, m: LedgerMove): Promise<boolean>;
+  remove(ctx: Ctx, id: string): Promise<LedgerMove | null>;
+}
+
+/** Части целей на счетах: строка на пару (цель, счёт) */
+export interface AllocsRepo {
+  /**
+   * Новая часть цели goalId на своём счёте accountId (в валюте счёта): ≤ free + текущая часть, иначе 409;
+   * чужой счёт — 403. version — версия части, как её видел клиент (0 — части не было); undefined — без проверки
+   */
+  set(ctx: Ctx, goalId: string, accountId: string, amount: number, version: number | undefined, today: string):
+    Promise<{ ok: true; alloc: GoalAlloc } | { ok: false; status: number; error: string }>;
 }
 
 export interface GoalsRepo {
@@ -183,6 +214,8 @@ export type Repos = {
   trash: TrashRepo;
   accounts: AccountsRepo;
   goals: GoalsRepo;
+  moves: MovesRepo;
+  allocs: AllocsRepo;
   recons: ReconsRepo;
   plans: PlansRepo;
   planItems: PlanItemsRepo;
